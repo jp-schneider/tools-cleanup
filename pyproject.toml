@@ -1,12 +1,14 @@
 [tool.poetry]
 name = "tools"
 version = "0.1.0"
-description = ""
+description = "A semi-structured collection of general tools and functions that I have implemented for my research projects."
 authors = ["Jan Philipp Schneider <jp-schneider@users.noreply.github.com>"]
 readme = "README.md"
 
 [tool.poetry.dependencies]
 python = "^3.9"
+numpy = "^1.26.4"
+pandas = "^2.2.1"
 
 
 [build-system]
