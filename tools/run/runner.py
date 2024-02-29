@@ -1,20 +1,21 @@
-import logging
 import os
 from abc import abstractmethod
 from typing import Any, Dict, List, Tuple, Type, Optional, TypeVar, Union, get_type_hints
 
 from tools.agent.agent import Agent
-from tools.agent.util import MetricEntry
+from tools.config.experiment_config import ExperimentConfig
+from tools.metric.metric_entry import MetricEntry
 from tools.util.format import to_snake_case
 from tools.util.path_tools import numerated_file_name
 
 from tools.dataset import BaseDataset
-from tools.run.config import Config
+
 from tools.error import ArgumentNoneError
 from tools.util.reflection import class_name
 import random
 import numpy as np
 import sys
+from tools.util.logging import logger
 
 def seed_all(seed: int) -> None:
     random.seed(seed)
@@ -36,7 +37,7 @@ class Runner():
     dataloader: BaseDataset
     """Data loader which is used to train the agent."""
 
-    config: Config
+    config: ExperimentConfig
     """Configuration of the runner."""
 
     diff_config: Optional[Dict[str, Any]]
@@ -63,7 +64,7 @@ class Runner():
         hints = cls.__hints__[cls]
         return name in hints
 
-    def __init__(self, config: Config, **kwargs) -> None:
+    def __init__(self, config: ExperimentConfig, **kwargs) -> None:
         super().__init__(**kwargs)
         if config is None:
             raise ArgumentNoneError("config")
@@ -103,7 +104,7 @@ class Runner():
         """
         if self.__saved_config__ is None:
             self.store_config()
-        logging.info(f"Using Config:\n{self.__saved_config__}")
+        logger.info(f"Using Config:\n{self.__saved_config__}")
         
     @abstractmethod
     def patch_agent(self, agent: Agent) -> None:

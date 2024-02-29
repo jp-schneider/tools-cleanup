@@ -61,8 +61,8 @@ class Tracker():
             cpy.metrics = dict()
         return cpy
 
-    @staticmethod
-    def get_metric_name(metric: Callable[[Any], Any]) -> str:
+    @classmethod
+    def get_metric_name(cls, metric: Callable[[Any], Any]) -> str:
         """Gets a name for the metric. Checks whether metric has
         a get_name method and calls it or uses its instance name.
 
@@ -330,8 +330,8 @@ class Tracker():
                 summary = self.metrics[tag]
         return summary
 
-    @staticmethod
-    def assemble_tag(metric_name: str, in_training: bool, is_epoch: bool) -> str:
+    @classmethod
+    def assemble_tag(cls, metric_name: str, in_training: bool, is_epoch: bool) -> str:
         """Gets the tag for a given metric.
         Will have the form e.g.:
         "train/epoch/MSE"
