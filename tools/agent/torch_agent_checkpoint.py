@@ -3,11 +3,14 @@ from dataclasses import dataclass, field
 from os import PathLike
 from typing import Any, BinaryIO, Dict, Optional, Set, Type, Union
 
+
+from tools.util.reflection import class_name
 import torch
 from tools.agent.agent import Agent
 
 from .base_agent_checkpoint import BaseAgentCheckpoint
 from tools.mixin import FastReprMixin
+from tools.util.format import parse_type
 
 @dataclass(repr=False)
 class TorchAgentCheckpoint(BaseAgentCheckpoint, FastReprMixin):
@@ -24,6 +27,12 @@ class TorchAgentCheckpoint(BaseAgentCheckpoint, FastReprMixin):
     optimizer_args: Dict[str, Any] = field(default=None)
     """Optimizer keyword arguments for recreating."""
     
+    agent_type: str = field(default="tools.agent.torch_agent.TorchAgent")
+    """Agent Type for recreating."""
+
+    additional_agent_args: Dict[str, Any] = field(default_factory=dict)
+    """Additional arguments for the agent, can be used to save state information for agent subclasses."""
+
     @classmethod
     def ignore_on_repr(cls) -> Set[str]:
         return {"model_state", "model_args", "tracker", "criterion", "dataset_config", "optimizer_state_dict", "model_state_dict"}
@@ -63,5 +72,6 @@ class TorchAgentCheckpoint(BaseAgentCheckpoint, FastReprMixin):
 
     def to_agent(self) -> Agent:
         from tools.agent.torch_agent import TorchAgent
-        agent = TorchAgent.from_acc(self)
+        obj_type = parse_type(self.agent_type, parent_type=TorchAgent, handle_invalid="set_default", default=TorchAgent)
+        agent = obj_type.from_acc(self)
         return agent

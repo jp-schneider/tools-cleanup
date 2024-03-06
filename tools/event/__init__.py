@@ -8,3 +8,4 @@ from tools.event.torch_optimizer_created_event_args import TorchOptimizerCreated
 from tools.event.watchdog import Watchdog
 from tools.event.training_finished_event_args import TrainingFinishedEventArgs
 from tools.event.torch_training_started_event_args import TorchTrainingStartedEventArgs
+from tools.event.training_started_event_args import TrainingStartedEventArgs

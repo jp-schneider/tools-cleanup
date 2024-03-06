@@ -95,7 +95,28 @@ def inverse_fourier(x: torch.Tensor) -> torch.Tensor:
     """
     return torch.fft.ifft2(torch.fft.ifftshift(x), norm='forward')
 
+def complex_dtype(float_dtype: torch.dtype = torch.float32) -> torch.dtype:
+    """Returns the corresponding precision complex dtype for a given float dtype.
 
+    Parameters
+    ----------
+    float_dtype : torch.dtype, optional
+        Float dtype to convert, by default torch.float32
+
+    Returns
+    -------
+    torch.dtype
+        The complex equivalent
+    """
+    if float_dtype == torch.float64:
+        return torch.complex128
+    elif float_dtype == torch.float32:
+        return torch.complex64
+    elif float_dtype == torch.float16:
+        return torch.complex32
+    else:
+        raise ValueError(f"Float dtype {float_dtype} is not supported.")
+    
 class TensorUtil():
     """Static class for using complex tensor calculations and tensor related utilities"""
 

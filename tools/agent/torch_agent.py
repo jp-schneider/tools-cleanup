@@ -2,7 +2,6 @@ from collections import OrderedDict
 from datetime import datetime
 import inspect
 import io
-import logger
 import os.path
 from typing import Any, Callable, Dict, List, Literal, Optional, Tuple, Type, Union
 
@@ -14,15 +13,18 @@ from tools.event.agent_save_event_args import SaveStage
 from tools.event.torch_agent_save_event_args import TorchAgentSaveEventArgs
 from tools.event.torch_training_started_event_args import TorchTrainingStartedEventArgs
 from tools.event.training_finished_event_args import TrainingFinishedEventArgs
+from tools.util.object_factory import ObjectFactory
+from tools.util.path_tools import format_os_independent
 import torch
 from torch.utils.data import DataLoader, Dataset, Subset
 from tqdm.auto import tqdm
 
 from tools.agent.agent import Agent
 from tools.agent.util import (DataTracker, LearningMode, LearningScope,
-                                MetricMode, Tracker)
+                                Tracker)
 from tools.metric.metric_scope import MetricScope
 from tools.metric.metric_summary import MetricSummary
+from tools.metric.metric_mode import MetricMode
 from tools.event import Event, TorchModelStepEventArgs
 from tools.event.torch_optimizer_created_event_args import \
     TorchOptimizerCreatedEventArgs
@@ -31,7 +33,7 @@ from tools.model.pretrainable_module import PretrainableModule
 from tools.util.format import strfdelta
 from tools.util.timer import Timer
 from tools.util.torch import TensorUtil
-from tools.util.logging import logger
+from tools.logger.logging import logger
 
 class TorchAgent(Agent):
 
@@ -127,6 +129,9 @@ class TorchAgent(Agent):
         self.__batch_progress_bar__ = None
         """Batch progress bar to reuse it."""
 
+        self.log_epoch_progress = False
+        """If epoch progress should be logged. Default is False."""
+
         self.should_validate_on_epoch: Callable[[int], bool] = lambda x: True
         """Executes whether a validation epoch should be performed for the given epoch."""
 
@@ -140,6 +145,22 @@ class TorchAgent(Agent):
         self.pretrain_only = pretrain_only
         self.force_pretrain = force_pretrain
 
+    def get_additional_state_args(self) -> Dict[str, Any]:
+        """Gathers additional state arguments for the agent.
+        Which should preserved when saving and loading the agent
+
+        Returns
+        -------
+        Dict[str, Any]
+            The gathered arguments. And their values.
+        """
+        return dict(do_pretraining=self.do_pretraining,
+                    pretrain_args=self.pretrain_args,
+                    pretrain_state_path=format_os_independent(self.pretrain_state_path) if self.pretrain_state_path is not None else None,
+                    pretrain_only=self.pretrain_only,
+                    force_pretrain=self.force_pretrain,
+                    log_epoch_progress=self.log_epoch_progress,
+                    )
 
     @property
     def forward_additional_loss_args(self) -> bool:
@@ -323,8 +344,8 @@ class TorchAgent(Agent):
             raise
         finally:
             # Ending epoch timing
-            logger.info(
-                f'Epoch {epoch + 1} / {num_epochs} time {strfdelta(epoch_timer.duration, "%H:%M:%S")}')
+            if self.log_epoch_progress:
+                logger.info(f'Epoch {epoch + 1} / {num_epochs} time {strfdelta(epoch_timer.duration, "%H:%M:%S")}')
 
             # Compare validation result with best and save model if current is better.
             if (epoch_output_event_args is not None
@@ -339,7 +360,7 @@ class TorchAgent(Agent):
                                  keep_device=keep_device,
                                  stage=SaveStage.BEST,
                                  )
-                logger.info(f'Accuracy: {best.value}')
+                logger.info(f'Accuracy: {best.value:.3e}')
 
                 if not keep_device and self.device != "cpu":
                     # Remove reference model optimizer, because its invalid now
@@ -365,12 +386,12 @@ class TorchAgent(Agent):
             3. The indices
             4. The prior state
         """
-        return type(self).decompose_training_item(item, training_dataset=self.training_dataset, use_prior_collate_fn=self.use_prior_collate_fn)
+        return type(self).decompose_training_item(item, training_dataset=self.training_dataset)
 
     @classmethod
-    def decompose_training_item(cls, item: Any, 
-                                training_dataset: TorchDataSource,
-                                use_prior_collate_fn: bool = False
+    def decompose_training_item(cls, 
+                                item: Any, 
+                                training_dataset: TorchDataSource
                                 ) -> Tuple[Any, Any, torch.Tensor, Optional[Any]]:
         """Unpacks the item from the training dataset.
 
@@ -390,31 +411,9 @@ class TorchAgent(Agent):
             3. The indices
             4. The prior state
         """
-        prior_state = None
-        # Extraxct prior of attached
-        if isinstance(training_dataset, PriorDataset) and training_dataset.has_prior:
-            # If its a prior dataset the return will be a tuple (prior, usual_return) of the dataset
-            prior_state = item[0]
-            key, state = prior_state
-            key = key.item()  # Converting it to int again
-
-            if not use_prior_collate_fn:
-                # In older versions we using single batch for our priors
-                # Removing batch dimension for each entry in state
-                new_state = TensorUtil.apply_deep(state, lambda x: x[0] if isinstance(
-                    x, torch.Tensor) and x.shape[0] == 1 else x)
-            else:
-                # In newer versions we using the prior collate function which is already a list of states.
-                new_state = state
-            
-            prior_state = (key, new_state)
-            
-            item = item[1]
-
         inputs, labels = item[0], item[1]
         indices = item[2] if training_dataset.returns_index else None
-
-        return inputs, labels, indices, prior_state
+        return inputs, labels, indices
 
     def _perform_step(self,
                       item: Tuple[torch.Tensor, ...],
@@ -430,7 +429,7 @@ class TorchAgent(Agent):
                       epoch_progress_bar: Optional[tqdm] = None,
                       index_in_item: bool = False, **kwargs):
         # Getting the inputs and labels unpacked from what training dataset returns
-        inputs, labels, indices, prior_state = self._decompose_training_item(
+        inputs, labels, indices = self._decompose_training_item(
             item)
 
         device_inputs: torch.Tensor = TensorUtil.to(inputs, device=self.device)
@@ -760,7 +759,7 @@ class TorchAgent(Agent):
             best = tracker.get_best_performance()
             if best:
                 logger.info(
-                    f'Best model: {self.name}_Epoch_{best.step} Accuracy: {best.value} Tag: {best.tag}')
+                    f'Best model: {self.name}_Epoch_{best.step} Accuracy: {best.value:.3e} Tag: {best.tag}')
             self.training_finished.notify(TrainingFinishedEventArgs(
                 training_error_occurred=training_err))
 
@@ -1005,6 +1004,7 @@ class TorchAgent(Agent):
             agent_directory=self.agent_directory,
             created_at=self.created_at,
             execution_context=execution_context,
+            additional_agent_args=self.get_additional_state_args()
         )
         return clk
 
@@ -1081,8 +1081,8 @@ class TorchAgent(Agent):
         torch.save(targets, targets_path)
         logger.info(f"Emergency save to {base_dir}")
 
-    @staticmethod
-    def from_acc(ckp: TorchAgentCheckpoint) -> 'TorchAgent':
+    @classmethod
+    def from_acc(cls, ckp: TorchAgentCheckpoint) -> 'TorchAgent':
         """Creates the torch agent from a checkpoint instance.
 
         Parameters
@@ -1095,7 +1095,7 @@ class TorchAgent(Agent):
         TorchAgent
             The created agent.
         """
-        agent = TorchAgent(
+        args = dict(
             name=ckp.name,
             model_state_dict=ckp.model_state_dict,
             model_args=ckp.model_args,
@@ -1110,7 +1110,8 @@ class TorchAgent(Agent):
             agent_directory=ckp.agent_directory,
             created_at=ckp.created_at,
         )
-
+        args.update(ckp.additional_agent_args)
+        agent = ObjectFactory.create_from_kwargs(cls, args)
         return agent
 
     @classmethod

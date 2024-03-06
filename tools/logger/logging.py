@@ -21,7 +21,11 @@ def get_logger(package_name: Optional[str] = None) -> logging.Logger:
         The logger for the given package name.
     """
     if package_name is None:
-        package_name = get_invoked_package_name()
+        try:
+            package_name = get_invoked_package_name()
+        except Exception as error:
+            print(f"Error while getting the package name: {error}")
+            package_name = "tools"
     if package_name not in _loggers:
         _loggers[package_name] = logging.getLogger(package_name)
     return _loggers[package_name]

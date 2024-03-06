@@ -23,8 +23,7 @@ def get_module_path() -> str:
     global EXECUTED_MODULE_PATH
     if EXECUTED_MODULE_PATH is None:
         EXECUTED_MODULE_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-    else:
-        return EXECUTED_MODULE_PATH
+    return EXECUTED_MODULE_PATH
 
 def get_project_root_path() -> str:
     """Gets the root path of the current project.
@@ -61,23 +60,23 @@ def get_invoked_package_name() -> str:
         The package name of the package which invoked this function.
     """
     path = get_module_path()
-    package_name = get_package_name(project_root_path=path)
+    root_path = os.path.abspath(os.path.join(path, ".."))
+    package_name = get_package_name(project_root_path=root_path)
     return package_name
 
 
-def set_module_path(function: Callable[[Any], Any]) -> None:
+def set_module_path(module_path: str) -> None:
     """Sets the module path of the currently executable package.
 
     Parameters
     ----------
-    function : Callable[[Any], Any]
-        A function of the package to set the module path for, usually the main function.
+    module_path : str
+        The path of the primary module root, which contains all implementations for a certain package. Parent folder should contain the the pyproject.toml file is located.
     """
     global EXECUTED_MODULE_PATH
-    if function is None:
-        return
-    EXECUTED_MODULE_PATH = os.path.abspath(inspect.getsourcefile(function))
+    EXECUTED_MODULE_PATH = os.path.normpath(module_path)
     
+
 
 
 def is_project_root(path: str) -> bool:

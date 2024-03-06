@@ -2,7 +2,7 @@ from typing import Any, Dict, Union
 from tools.event import Watchdog
 from tools.error.stop_training import StopTraining
 from tools.event import TorchModelStepEventArgs
-from tools.util.logging import logger
+from tools.logger.logging import logger
 from enum import Enum
 from tools.util.format import parse_enum
 

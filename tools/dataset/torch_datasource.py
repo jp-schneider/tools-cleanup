@@ -1,12 +1,8 @@
 
 from typing import Any, Dict, Optional, Tuple, Union
 
-try:
-    import torch
-    from torch.utils.data import Dataset as TorchDataset
-except (ModuleNotFoundError, ImportError):
-    torch = object
-    TorchDataset = object
+import torch
+from torch.utils.data import Dataset as TorchDataset
 from tools.dataset.base_dataset import BaseDataset
 from tools.dataset.batched_dataset import BatchedDataset
 from tools.dataset.separable_dataset import SeparableDataset
@@ -25,8 +21,8 @@ class TorchDataSource(BaseDataset, TorchDataset, SeparableDataset, BatchedDatase
     def __len__(self) -> int:
         raise NotImplementedError()
 
-    def __getitem__(self, index) -> Union[Tuple[torch.Tensor, torch.Tensor], # type: ignore
-                                          Tuple[torch.Tensor, torch.Tensor, torch.Tensor]]: # type: ignore
+    def __getitem__(self, index) -> Union[Tuple[torch.Tensor, torch.Tensor],
+                                          Tuple[torch.Tensor, torch.Tensor, torch.Tensor]]:
         """Returns the item at the given index.
 
         Parameters

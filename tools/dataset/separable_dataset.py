@@ -1,15 +1,12 @@
+import logging
 from typing import List, Tuple
 import random
 from abc import ABC
-try:
-    from sklearn.model_selection import train_test_split
-except (ModuleNotFoundError, ImportError):
-    train_test_split = None
-    pass
+from sklearn.model_selection import train_test_split
 import numpy as np
 import os
 from tools.serialization.json_convertible import JsonConvertible
-from tools.util.logging import logger
+
 class SeparableDataset(ABC):
 
     def __init__(self, 
@@ -49,14 +46,13 @@ class SeparableDataset(ABC):
             Array with train and test indices. 
         """
         if self.training_indices is None or self.validation_indices is None:
-            logger.debug(f"Split indices with seed {self.split_seed} and ratio {self.split_ratio}.")
+            logging.debug(f"Split indices with seed {self.split_seed} and ratio {self.split_ratio}.")
             self.training_indices, self.validation_indices = self._split_indices()
         return self.training_indices, self.validation_indices
 
     def _split_indices(self) -> Tuple[List[int], List[int]]:
         # If indices file is given, load indices from file if exists, else generate new indices
-        if train_test_split is None:
-            raise ModuleNotFoundError("scikit-learn is not installed. Please install scikit-learn to use this method.")
+        
         loaded_indices = False
         train_idx = None
         test_idx = None
@@ -69,7 +65,7 @@ class SeparableDataset(ABC):
                 train_idx = np.sort(train_idx)
                 test_idx = np.sort(test_idx)
                 loaded_indices = True
-                logger.info(f"Loaded splitted indices from {self.indices_file}.")
+                logging.info(f"Loaded splitted indices from {self.indices_file}.")
             else:
                 pass
        
@@ -104,6 +100,6 @@ class SeparableDataset(ABC):
                 "validation_indices": test_idx.tolist()
             }
             JsonConvertible.convert_to_file(index_obj, self.indices_file)
-            logger.info(f"Saved splitted indices to {self.indices_file}.")
+            logging.info(f"Saved splitted indices to {self.indices_file}.")
 
         return train_idx, test_idx

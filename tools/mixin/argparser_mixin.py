@@ -3,6 +3,7 @@ import inspect
 import logging
 from argparse import ArgumentParser
 from dataclasses import MISSING, Field
+import os
 from typing import Any, Dict, List, Optional, Type, get_args, ClassVar
 
 from simple_parsing.docstring import get_attribute_docstring
@@ -10,6 +11,9 @@ from typing_inspect import is_literal_type, is_optional_type, is_tuple_type, is_
 
 from tools.error import UnsupportedTypeError, IgnoreTypeError
 from enum import Enum
+
+from tools.serialization.json_convertible import JsonConvertible
+from tools.util.path_tools import format_os_independent, relpath
 
 WARNING_ON_UNSUPPORTED_TYPE = True
 """If true, a warning will be printed if a type is not supported."""
@@ -273,3 +277,31 @@ class ArgparserMixin:
                         (field.default_factory != MISSING and (value is not None and value != field.default_factory()))
                         or (field.default == MISSING and field.default_factory == MISSING)):
                     setattr(self, field.name, self._get_parser_arg_value(field, value))
+
+    @classmethod
+    def parse_with_config_path(cls, parser: ArgumentParser) -> 'ArgparserMixin':
+        """Parses the arguments from the command line and applies them to a new instance of the class.
+        The class must be a dataclass to get annotations and fields.
+
+        Parameters
+        ----------
+        parser : ArgumentParser
+        
+                The argument parser.
+        Returns
+        -------
+        ArgparserMixin
+            The instance of the object filled with cli data.
+        """
+        
+        parser = cls.get_parser(parser)
+        args = parser.parse_args()
+
+        config = None
+        if args.config_path:
+            args.config_path = args.config_path.strip("\"").strip("\'")
+            config = JsonConvertible.load_from_file(args.config_path)
+            config.apply_parsed_args(args)
+        else:
+            config = cls.from_parsed_args(args)
+        return config

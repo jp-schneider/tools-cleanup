@@ -1,10 +1,12 @@
 
 # Class for functions
 # File for useful functions when using matplotlib
-from typing import Any, Callable, List, Literal, Optional, Union, Tuple
+from typing import Any, Callable, Dict, List, Literal, Optional, Union, Tuple
 
+from matplotlib.colors import ListedColormap
 from matplotlib.image import AxesImage
 
+from tools.util.numpy import numpyify_image
 from tools.util.torch import VEC_TYPE
 
 try:
@@ -440,50 +442,91 @@ def register_alpha_colormap(color: np.ndarray,
     plt.register_cmap(cmap=map_object)
     return name
 
-
 @saveable()
 def plot_as_image(data: VEC_TYPE,
-                    size: float = 5,
-                    variable_name: str = "Image",
-                    cscale: Optional[Union[List[str], str]] = None,
-                    ticks: bool = True,
-                    title: Optional[str] = None,
-                    colorbar: bool = False,
-                    colorbar_tick_format: str = None,
-                    axes: Optional[np.ndarray] = None) -> AxesImage:
+                  size: float = 5,
+                  variable_name: str = "Image",
+                  cscale: Optional[Union[List[str], str]] = None,
+                  ticks: bool = True,
+                  title: Optional[str] = None,
+                  colorbar: bool = False,
+                  colorbar_tick_format: str = None,
+                  value_legend: bool = False,
+                  cmap: Optional[str] = None,
+                  axes: Optional[np.ndarray] = None,
+                  interpolation: Optional[str] = None,
+                  tight: bool = False,
+                  ) -> AxesImage:
+    """Plots a 2D (complex) image with matplotib. Supports numpy arrays and torch tensors.
+
+    Parameters
+    ----------
+    data : VEC_TYPE
+        Data to be plotted
+    size : float, optional
+        The size of the plot in inches, by default 5
+    variable_name : str, optional
+        Variable name for the title, by default "Image"
+    cscale : Optional[Union[List[str], str]], optional
+        Colorscaling can be log, auto, count, by default None
+    ticks : bool, optional
+        If ticks should be visible, by default True
+    title : Optional[str], optional
+        Title, by default None
+    colorbar : bool, optional
+        If a colorbar should be plotted, by default False
+    colorbar_tick_format : str, optional
+        The colorbar tick format, by default None
+    value_legend : bool, optional
+        If there should be a legend for individual values within the image, by default False
+    cmap : Optional[str], optional
+        Colormap to use for plotting, by default None
+    axes : Optional[np.ndarray], optional
+        Preexisting axis to embed the image into, by default None
+    interpolation : Optional[str], optional
+        Iterpolation mode for imshow, by default None
+    tight : bool, optional
+        If the image should be plotted tight, only supported if axes is not provided, by default False
+
+    Returns
+    -------
+    AxesImage
+        The axes image object.
+    """
     import itertools
     from matplotlib.axes import Subplot
+    import matplotlib as mpl
+    from mpl_toolkits.axes_grid1 import make_axes_locatable
 
-    if data.device != torch.device("cpu"):
-        data = data.detach().cpu()
+    data = numpyify_image(data)
 
     rows = 1
     cols = 1
 
     images = []
     _img_title = []
-    cmap = []
+    cmaps = []
 
     if 'complex' in str(data.dtype):
         cols = 2
-        if data.shape[0] in [1, 3]:
-            data = data.permute(1, 2, 0)
         _img_title.append(f"|{variable_name}|")
-        images.append(torch.abs(data))
-        cmap.append("gray")
+        images.append(np.abs(data))
+        cmaps.append("gray")
 
         _img_title.append(f"angle({variable_name})")
-        images.append(torch.angle(data))
-        cmap.append("twilight")
+        images.append(np.angle(data))
+        cmaps.append("twilight")
     else:
-        _img_title.append("Image")
-        if data.shape[0] in [1, 3]:
-            data = data.permute(1, 2, 0)
+        _img_title.append(variable_name)
         images.append(data)
-        cmap.append("gray")
+        if cmaps is None:
+            cmaps.append("gray")
+        else:
+            cmaps.append(cmap)
+
 
     if axes is None:
-        fig, axes = plt.subplots(rows, cols, figsize=(size * cols, size * rows))
+        fig, axes = get_mpl_figure(rows=rows, cols=cols, size=size, tight=tight, ratio_or_img=images[0])
     else:
         fig = plt.gcf()
 
@@ -493,30 +536,68 @@ def plot_as_image(data: VEC_TYPE,
     for i, ax in enumerate(itertools.chain(axes)):
         _image = images[i]
         _title = _img_title[i]
+        
+        color_mapping = None
+
+        vmin = _image.min()
+        vmax = _image.max()
+        _cmap = cmaps[i]
+        if isinstance(_cmap, str):
+            _cmap = plt.get_cmap(_cmap)
+
         if cscale is not None:
             _cscale = cscale
             if isinstance(cscale, list):
                 _cscale = cscale[i]
             if _cscale == 'auto':
-                _cscale = 'log' if should_use_logarithm(_image) else None
+                _cscale = 'log' if should_use_logarithm(_image.numpy()) else None
             if _cscale is not None:
                 if _cscale == 'log':
                     _image = np.log(_image)
                     _title = f"log({_title})"
-        ax.imshow(_image, cmap=cmap[i])
-        ax.set_title(_title)
+            if _cscale == "count":
+                color_mapping = dict()
+                for j, value in enumerate(np.unique(_image)):
+                    color_mapping[j] = value
+                    _image = np.where(_image == value, j, _image)
+
+        if isinstance(_cmap, ListedColormap):
+            vmax = len(_cmap.colors) - 1
+            vmin = 0
+        
+        ax.imshow(_image, vmin=vmin, vmax=vmax, cmap=_cmap, interpolation=interpolation)
+        
+        if not tight:
+            ax.set_title(_title)
         if colorbar:
             _cbar_format = None
             if colorbar_tick_format is not None:
                 cft = ('{:' + colorbar_tick_format + '}')
+
                 def _cbar_format(x, pos):
                     return cft.format(x)
             divider = make_axes_locatable(ax)
             cax = divider.append_axes('right', size='5%', pad=0.05)
             fig.colorbar(ax.get_images()[0], cax=cax, format=_cbar_format, orientation='vertical')
+        
         if not ticks:
             ax.get_xaxis().set_ticks([])
             ax.get_yaxis().set_ticks([])
+
+        if value_legend:
+            unique_vals = np.unique(_image)
+            patches = []
+            if isinstance(_cmap, str):
+                _cmap = plt.get_cmap(_cmap)
+
+            norm = mpl.colors.Normalize(vmin=vmin, vmax=vmax)
+            for i, value in enumerate(unique_vals): 
+                c = _cmap(norm(value))
+                if color_mapping is not None:
+                    value = color_mapping[value]
+                patches.append(Patch(color=c, label=f"{value:n}"))
+            ax.legend(handles=patches)
+
     if title is not None:
         fig.suptitle(title)
     return fig

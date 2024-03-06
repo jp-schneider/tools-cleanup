@@ -1,7 +1,7 @@
 from dataclasses import dataclass, field
 from typing import Any, List, Optional, Union
 from decimal import Decimal
-from tools.util.series_convertible_mixin import SeriesConvertibleMixin
+from tools.mixin.series_convertible_mixin import SeriesConvertibleMixin
 from tools.util.reflection import class_name, dynamic_import
 import inspect
 

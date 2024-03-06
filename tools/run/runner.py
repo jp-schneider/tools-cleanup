@@ -15,7 +15,7 @@ from tools.util.reflection import class_name
 import random
 import numpy as np
 import sys
-from tools.util.logging import logger
+from tools.logger.logging import logger
 
 def seed_all(seed: int) -> None:
     random.seed(seed)

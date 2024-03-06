@@ -6,9 +6,10 @@ from torch import Tensor
 
 from tools.agent.util.tracker import Tracker
 from tools.event.event_args import EventArgs
+from tools.event.training_started_event_args import TrainingStartedEventArgs
 
 @dataclass
-class TorchTrainingStartedEventArgs(EventArgs):
+class TorchTrainingStartedEventArgs(TrainingStartedEventArgs):
     """Specialized training started event for a torch model."""
 
     model: torch.nn.Module = None
@@ -17,19 +18,5 @@ class TorchTrainingStartedEventArgs(EventArgs):
     optimizer: torch.optim.Optimizer = None
     """The optimizer which is currently used to train the model."""
 
-    model_args: Dict[str, Any] = None
-    """The init arguments of the model which is trained."""
-
-    loss_name: str = None
-    """The name of the actual loss."""
-
-    tracker: Tracker = None
-    """The current tracker of the agent, so its model state and loss information."""
-
     remaining_iterations: Optional[int] = None
     """The number of remaining iterations if predefined."""
-
-    dataset_config: Dict[str, Any] = None
-    """The dataset / dataloader configuration."""
-
-
