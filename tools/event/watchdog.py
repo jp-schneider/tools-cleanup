@@ -1,5 +1,5 @@
 from typing import Any, Optional, Dict
-from awesome.event import Event, EventArgs
+from tools.event import Event, EventArgs
 from abc import abstractmethod
 
 

@@ -4,8 +4,8 @@ from typing import Dict, Optional, Any
 import torch
 from torch import Tensor
 
-from awesome.agent.util.tracker import Tracker
-from awesome.event.event_args import EventArgs
+from tools.agent.util.tracker import Tracker
+from tools.event.event_args import EventArgs
 
 @dataclass
 class TorchTrainingStartedEventArgs(EventArgs):

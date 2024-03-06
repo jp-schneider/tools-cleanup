@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from typing import Any, Dict
 
 
-from awesome.event.agent_save_event_args import AgentSaveEventArgs
+from tools.event.agent_save_event_args import AgentSaveEventArgs
 
 
 @dataclass

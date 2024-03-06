@@ -2,7 +2,7 @@
 from dataclasses import dataclass
 from typing import Any, Dict, Optional
 
-from awesome.event import EventArgs
+from tools.event import EventArgs
 
 
 @dataclass

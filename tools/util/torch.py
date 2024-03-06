@@ -7,14 +7,7 @@ from decimal import Decimal
 import numpy as np
 from tools.error import NoIterationTypeError, NoSimpleTypeError, ArgumentNoneError
 import hashlib
-
-VEC_TYPE = TypeVar("VEC_TYPE", bound=Union[torch.Tensor, np.ndarray])
-"""Vector type, like torch.Tensor or numpy.ndarray."""
-
-NUMERICAL_TYPE = TypeVar(
-    "NUMERICAL_TYPE", bound=Union[torch.Tensor, np.generic, int, float, complex, Decimal])
-"""Numerical type which can be converted to a tensor."""
-
+from tools.util.typing import NUMERICAL_TYPE, VEC_TYPE
 
 def get_weight_normalized_param_groups(network: torch.nn.Module, 
                                        weight_decay: float, 

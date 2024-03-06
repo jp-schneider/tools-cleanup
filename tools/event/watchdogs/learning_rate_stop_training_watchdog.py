@@ -1,11 +1,10 @@
 from typing import Any, Dict, Union
-from awesome.event import EventArgs, Watchdog
-from awesome.error.stop_training import StopTraining
-from torch.optim.optimizer import Optimizer
-from awesome.event import TorchModelStepEventArgs
-import logging
+from tools.event import Watchdog
+from tools.error.stop_training import StopTraining
+from tools.event import TorchModelStepEventArgs
+from tools.util.logging import logger
 from enum import Enum
-
+from tools.util.format import parse_enum
 
 class MODE(Enum):
     """Mode for the learning rate stop training watchdog."""
@@ -49,10 +48,8 @@ class LearningRateStopTrainingWatchdog(Watchdog):
             If true, the watchdog will print a message if the training is stopped, by default True
         """
         super().__init__()
-        if isinstance(mode, str):
-            mode = MODE(mode)
         self.learning_rate = learning_rate
-        self.mode = mode
+        self.mode = parse_enum(MODE, mode)
         self.verbose = verbose
 
     def _eval(self, lr: float) -> bool:
@@ -67,6 +64,6 @@ class LearningRateStopTrainingWatchdog(Watchdog):
                 if 'lr' in group:
                     if self._eval(group['lr']):
                         if self.verbose:
-                            logging.info(
+                            logger.info(
                                 f"Stopping training because learning rate {group['lr']} {self.mode.value} than {self.learning_rate}!")
                         raise StopTraining()

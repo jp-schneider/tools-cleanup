@@ -4,7 +4,7 @@ from typing import Optional
 import torch
 from torch import Tensor
 
-from awesome.event.model_step_event_args import ModelStepEventArgs
+from tools.event.model_step_event_args import ModelStepEventArgs
 
 @dataclass
 class TorchModelStepEventArgs(ModelStepEventArgs):

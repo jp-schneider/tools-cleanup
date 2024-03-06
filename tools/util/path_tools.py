@@ -3,18 +3,48 @@ import re
 import subprocess
 
 
-def relpath(_from: str, _to: str, is_from_file: bool = True, is_to_file: bool = True) -> None:
-    """Creates a relative path from _from to _to."""
-    _to_dir = os.path.dirname(_to) if is_to_file else _to
-    _from_dir = os.path.dirname(_from) if is_from_file else _from
+def relpath(from_: str, to: str, is_from_file: bool = True, is_to_file: bool = True) -> str:
+    """Returns a relative path from from_ to to. Where _from and _to can be either a file or a directory.
+    Simple wrapper around os.path.relpath which also handles files.
+
+    Parameters
+    ----------
+    from_ : str
+        From path which is a file or directory.
+    to : str
+        To path which is a file or directory.
+    is_from_file : bool, optional
+        Boolean argument specifying if from_ is a file (True) or directory (False), by default True
+    is_to_file : bool, optional
+        Boolean argument specifying if to is a file (True) or directory (False), by default True
+
+    Returns
+    -------
+    str
+        The relative path from from_ to to.
+    """
+    _to_dir = os.path.dirname(to) if is_to_file else to
+    _from_dir = os.path.dirname(from_) if is_from_file else from_
     path = os.path.relpath(_to_dir, _from_dir)
     if is_to_file:
-        return os.path.join(path, os.path.basename(_to))
+        return os.path.join(path, os.path.basename(to))
     else:
         return path
 
 def format_os_independent(path: str) -> str:
-    """Formats a path to be os independent."""
+    """Formats a path to be os independent.
+    Replaces all backslashes with forward slashes.
+
+    Parameters
+    ----------
+    path : str
+        The resulting os invariant path.
+
+    Returns
+    -------
+    str
+        The os invariant path.
+    """
     return path.replace("\\", "/")
 
 

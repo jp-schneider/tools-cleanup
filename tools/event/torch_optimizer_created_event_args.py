@@ -2,7 +2,7 @@ from dataclasses import dataclass, field
 from typing import Any, Dict
 
 import torch
-from awesome.event import EventArgs
+from tools.event import EventArgs
 
 
 @dataclass

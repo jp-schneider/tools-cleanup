@@ -2,8 +2,8 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, Set
 
 import torch
-from awesome.event import EventArgs
-from awesome.mixin import FastReprMixin
+from tools.event import EventArgs
+from tools.mixin import FastReprMixin
 
 @dataclass(repr=False)
 class TorchParamAlteredEventArgs(EventArgs, FastReprMixin):
