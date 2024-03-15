@@ -18,7 +18,7 @@ def minmax(v: torch.Tensor,
         v_max = torch.max(v)
     return (v - v_min)/(v_max - v_min)*(new_max - new_min) + new_min
 
-class MinMax(torch.nn.Module, InvertableTransform, FittableTransform):
+class MinMax(InvertableTransform, FittableTransform, torch.nn.Module):
     """MinMax normalization."""
     def __init__(self, 
                  new_min: torch.Tensor = -1, 

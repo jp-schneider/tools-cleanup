@@ -456,7 +456,7 @@ def plot_as_image(data: VEC_TYPE,
                   axes: Optional[np.ndarray] = None,
                   interpolation: Optional[str] = None,
                   tight: bool = False,
-                  ) -> AxesImage:
+                  imshow_kw: Optional[Dict[str, Any]] = None) -> AxesImage:
     """Plots a 2D (complex) image with matplotib. Supports numpy arrays and torch tensors.
 
     Parameters
@@ -487,7 +487,8 @@ def plot_as_image(data: VEC_TYPE,
         Iterpolation mode for imshow, by default None
     tight : bool, optional
         If the image should be plotted tight, only supported if axes is not provided, by default False
-
+    imshow_kw : Optional[Dict[str, Any]], optional
+        Additional kwargs for the imshow function, by default None
     Returns
     -------
     AxesImage
@@ -497,6 +498,8 @@ def plot_as_image(data: VEC_TYPE,
     from matplotlib.axes import Subplot
     import matplotlib as mpl
     from mpl_toolkits.axes_grid1 import make_axes_locatable
+
+    imshow_kw = imshow_kw or dict()
 
     data = numpyify_image(data)
 
@@ -565,7 +568,16 @@ def plot_as_image(data: VEC_TYPE,
             vmax = len(_cmap.colors) - 1
             vmin = 0
         
-        ax.imshow(_image, vmin=vmin, vmax=vmax, cmap=_cmap, interpolation=interpolation)
+        if "vmin" in imshow_kw:
+            vmin = imshow_kw.pop("vmin")
+        if "vmax" in imshow_kw:
+            vmax = imshow_kw.pop("vmax")
+        if "cmap" in imshow_kw:
+            _cmap = imshow_kw.pop("cmap")
+        if "interpolation" in imshow_kw:
+            interpolation = imshow_kw.pop("interpolation")
+        
+        ax.imshow(_image, vmin=vmin, vmax=vmax, cmap=_cmap, interpolation=interpolation, **imshow_kw)
         
         if not tight:
             ax.set_title(_title)

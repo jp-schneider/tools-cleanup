@@ -1,6 +1,6 @@
 import decimal
 import logging
-from typing import Any, Callable, Dict, Optional, Set, TypeVar, Union
+from typing import Any, Callable, Dict, List, Optional, Set, TypeVar, Union
 from collections import OrderedDict
 import torch
 from decimal import Decimal
@@ -27,6 +27,31 @@ def get_weight_normalized_param_groups(network: torch.nn.Module,
                     {'name': f'{prefix}unnormalized', 'params': unnorm_params}]
     return param_groups
 
+
+def count_parameters(model: torch.nn.Module) -> List[Dict[str, Any]]:
+    """Counts the number of parameters in the given model.
+
+    Parameters
+    ----------
+    model : torch.nn.Module
+        Pytorch module to count the parameters of.
+
+    Returns
+    -------
+    List[Dict[str, Any]]
+        List of dictionaries containing the name, number of learnable parameters and id of the parameter.
+        Name is the "path" to the parameter in the model.
+    """
+    param_list = []
+    total_params = 0
+    for i, (name, parameter) in enumerate(model.named_parameters()):
+        if not parameter.requires_grad:
+            continue
+        params = parameter.numel()
+        total_params += params
+        param_list.append(dict(name=name, learnable_params=params, id=i))
+    param_list.append(dict(name="total", learnable_params=total_params, id=len(param_list)))
+    return param_list
 
 def tensorify(input: NUMERICAL_TYPE,
               dtype: Optional[torch.dtype] = None,
