@@ -25,6 +25,18 @@ def get_module_path() -> str:
         EXECUTED_MODULE_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
     return EXECUTED_MODULE_PATH
 
+
+def get_executed_module_root_path() -> str:
+    """Gets the root path of the currently executed module.
+    The root path is defined as the directory where the module is located.
+
+    Returns
+    -------
+    str
+        The root path of the currently executed module.
+    """
+    return os.path.abspath(os.path.join(get_module_path(), ".."))
+
 def get_project_root_path() -> str:
     """Gets the root path of the current project.
     A project root path is defined as the directory where the 
