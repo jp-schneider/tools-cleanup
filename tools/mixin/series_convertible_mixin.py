@@ -13,10 +13,29 @@ from tools.util.format import to_snake_case
 from tools.util.object_factory import ObjectFactory
 
 
+class _Default():
+    pass
+
+
+DEFAULT = _Default()
+
+
 class SeriesConvertibleMixin:
     """Mixin to indicate that the object can be converted to a pandas series and vice versa."""
 
-    def to_series(self) -> Series: # type: ignore
+    @classmethod
+    def default_key_mapping(cls) -> Dict[str, str]:
+        """Default key mapping for the object.
+        Can be used to convert key names.
+
+        Returns
+        -------
+        Dict[str, str]
+            Mapping of keys.
+        """
+        return None
+
+    def to_series(self) -> Series:  # type: ignore
         """Converts the object to a series.
         Uses by default all entries in __dict__
 
@@ -28,9 +47,10 @@ class SeriesConvertibleMixin:
         return Series(dict(vars(self)))
 
     @classmethod
-    def from_data_frame(cls, 
-                        df: DataFrame, # type: ignore
-                        allow_dynamic_args: bool = True) -> List[Any]:
+    def from_data_frame(cls,
+                        df: DataFrame,  # type: ignore
+                        key_mapping: Optional[Dict[str, str]] = DEFAULT,
+                        allow_dynamic_args: bool = True, **kwargs) -> List[Any]:
         """Generates a list of instances from a dataframe.
 
         Parameters
@@ -47,14 +67,22 @@ class SeriesConvertibleMixin:
         """
         if df is None:
             return []
-        return [cls.from_series(x, allow_dynamic_args=allow_dynamic_args) for x in df.iloc]
+        if key_mapping is DEFAULT:
+            key_mapping = cls.default_key_mapping()
+        return [cls.from_series(x,
+                                key_mapping=key_mapping,
+                                allow_dynamic_args=allow_dynamic_args, **kwargs) for x in df.iloc]
 
     @classmethod
     def from_dict(
-            cls, _dict: Dict[str, Any],
+            cls,
+            _dict: Dict[str, Any],
             snake_case_conversion: bool = False,
             allow_dynamic_args: bool = True,
-            additional_data: Optional[Dict[str, Any]] = None) -> Any:
+            key_mapping: Optional[Dict[str, str]] = DEFAULT,
+            additional_data: Optional[Dict[str, Any]] = None,
+            **kwargs
+        ) -> Any:
         """Creates the current class from a dict.
         Will also convert keys to snake case and additional data can be inserted.
 
@@ -66,6 +94,8 @@ class SeriesConvertibleMixin:
             If keys should be converted to snake case, by default False
         allow_dynamic_args : bool, optional
             If the cls should also accept dynamic arguments, by default True
+        key_mapping : Optional[Dict[str, str]], optional
+            Mapping of keys to convert will be applied before any other technique, by default None
         additional_data : Optional[Dict[str, Any]], optional
             Additional data to insert in the dict, by default None
 
@@ -76,6 +106,16 @@ class SeriesConvertibleMixin:
         """
         if additional_data is not None:
             _dict.update(additional_data)
+        if key_mapping is DEFAULT:
+            key_mapping = cls.default_key_mapping()
+        if key_mapping is not None:
+            converted = {}
+            for key, value in _dict.items():
+                if key in key_mapping:
+                    converted[key_mapping[key]] = value
+                else:
+                    converted[key] = value
+            _dict = converted
         if snake_case_conversion:
             converted = {}
             for key, value in _dict.items():
@@ -85,10 +125,13 @@ class SeriesConvertibleMixin:
 
     @classmethod
     def from_series(
-            cls, series: Series, # type: ignore
+            cls, series: Series,  # type: ignore
             snake_case_conversion: bool = False,
             allow_dynamic_args: bool = True,
-            additional_data: Optional[Dict[str, Any]] = None) -> Any:
+            key_mapping: Optional[Dict[str, str]] = DEFAULT,
+            additional_data: Optional[Dict[str, Any]] = None,
+            **kwargs
+        ) -> Any:
         """Create the object from a series. "Inverts" the to_series operation.
 
         Parameters
@@ -99,6 +142,8 @@ class SeriesConvertibleMixin:
             If names or keys should be converted to snake case, by default False
         allow_dynamic_args : bool, optional
             If dynamic arguments should be allowed, by default True
+        key_mapping : Optional[Dict[str, str]], optional
+            Mapping of keys to convert will be applied before any other technique, by default None
         additional_data : Optional[Dict[str, Any]], optional
             Additional data to create the object, by default None
 
@@ -115,4 +160,6 @@ class SeriesConvertibleMixin:
         return cls.from_dict(d,
                              snake_case_conversion=snake_case_conversion,
                              allow_dynamic_args=allow_dynamic_args,
-                             additional_data=additional_data)
+                             key_mapping=key_mapping,
+                             additional_data=additional_data,
+                             **kwargs)
