@@ -570,8 +570,12 @@ def plot_as_image(data: VEC_TYPE,
         
         if "vmin" in imshow_kw:
             vmin = imshow_kw.pop("vmin")
+        else:
+            vmin = _image.min()
         if "vmax" in imshow_kw:
             vmax = imshow_kw.pop("vmax")
+        else:
+            vmax = _image.max()
         if "cmap" in imshow_kw:
             _cmap = imshow_kw.pop("cmap")
         if "interpolation" in imshow_kw:
