@@ -8,6 +8,7 @@ from matplotlib.image import AxesImage
 
 from tools.util.numpy import numpyify_image
 from tools.util.torch import VEC_TYPE
+from tools.transforms.numpy.min_max import MinMax
 
 try:
     import matplotlib.pyplot as plt
@@ -456,7 +457,9 @@ def plot_as_image(data: VEC_TYPE,
                   axes: Optional[np.ndarray] = None,
                   interpolation: Optional[str] = None,
                   tight: bool = False,
-                  imshow_kw: Optional[Dict[str, Any]] = None) -> AxesImage:
+                  imshow_kw: Optional[Dict[str, Any]] = None,
+                  norm: bool = False,
+                  ) -> AxesImage:
     """Plots a 2D (complex) image with matplotib. Supports numpy arrays and torch tensors.
 
     Parameters
@@ -489,6 +492,10 @@ def plot_as_image(data: VEC_TYPE,
         If the image should be plotted tight, only supported if axes is not provided, by default False
     imshow_kw : Optional[Dict[str, Any]], optional
         Additional kwargs for the imshow function, by default None
+    norm : bool, optional
+        If the data should be normalized, by default False
+        If True, the data will be normalized to [0, 1] using MinMax normalization.
+    
     Returns
     -------
     AxesImage
@@ -581,6 +588,15 @@ def plot_as_image(data: VEC_TYPE,
         if "interpolation" in imshow_kw:
             interpolation = imshow_kw.pop("interpolation")
         
+        if norm:
+            _norm = MinMax(new_min=0, new_max=1)
+            _norm.min = vmin
+            _norm.max = vmax
+            _norm.fitted = True
+            _image = _norm.transform(_image)
+            vmin = _norm.new_min
+            vmax = _norm.new_max
+
         ax.imshow(_image, vmin=vmin, vmax=vmax, cmap=_cmap, interpolation=interpolation, **imshow_kw)
         
         if not tight:

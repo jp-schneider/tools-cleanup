@@ -19,7 +19,7 @@ scikit-learn = {version = "*", optional = true}
 jsonpickle = {version = "*", optional = true}
 tqdm = "*"
 matplotlib = {version = "^3.8.3", optional = true}
-
+tools = {path = "../tools", develop = true}
 
 [build-system]
 requires = ["poetry-core"]
