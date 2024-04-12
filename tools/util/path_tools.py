@@ -1,6 +1,7 @@
 import os
 import re
 import subprocess
+from typing import Any, Dict, List, Optional
 
 
 def relpath(from_: str, to: str, is_from_file: bool = True, is_to_file: bool = True) -> str:
@@ -69,6 +70,48 @@ def open_folder(path: str) -> None:
             # Windows...
             subprocess.run(f"explorer {path}")
 
+
+def read_directory( 
+                    path: str,
+                    pattern: str,
+                    parser: Optional[Dict[str, callable]] = None,
+                    path_key: str = "path"
+                    ) -> List[Dict[str, Any]]:
+    """Reads a directory for files matching a regex pattern and returns a list of dictionaries with the readed groups and full filepath.
+
+    Parameters
+    ----------
+    path : str
+        The path to read the files from.
+    
+    pattern : str
+        The regex pattern to match the files.
+        Specify named groups to extract the values.
+
+    parser : Optional[Dict[str, callable]], optional
+        A parser dictionary which can contain keys which should correspond to named groups in the pattern,
+        the value should be a callable which is invoked by the parsed value. The result is then written to the result dictionary, by default None
+
+    Returns
+    -------
+    List[Dict[str, Any]]
+        List of dictionaries with the readed groups and full filepath.
+
+    """
+    res = list()
+    regex = re.compile(pattern)
+    for file in os.listdir(path):
+        match = regex.fullmatch(file)
+        if match:
+            item = dict(match.groupdict())
+            if parser is not None:
+                for key, value in item.items():
+                    if key in parser:
+                        item[key] = parser[key](value)
+            _p = os.path.join(path, file)
+            item[path_key] = _p
+            res.append(item)
+    return res
 
 def open_in_default_program(path_to_file: str) -> None:
     """Opens the given file in the systems default program.

@@ -16,17 +16,7 @@ import random
 import numpy as np
 import sys
 from tools.logger.logging import logger
-
-def seed_all(seed: int) -> None:
-    random.seed(seed)
-    np.random.seed(seed)
-
-    if "torch" in sys.modules:
-        import torch
-        torch.manual_seed(seed)
-        torch.cuda.manual_seed_all(seed)
-        torch.cuda.manual_seed(seed)
-        torch.backends.cudnn.deterministic = True
+from tools.util.seed import seed_all
 
 class Runner():
     """Runner which is used to run the experiment."""

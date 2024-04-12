@@ -24,6 +24,35 @@ class SeriesConvertibleMixin:
     """Mixin to indicate that the object can be converted to a pandas series and vice versa."""
 
     @classmethod
+    def get_properties(cls) -> List[str]:
+        """Get the properties of the class.
+
+        Returns
+        -------
+        List[str]
+            The list of properties.
+        """
+        import dataclasses
+        import inspect
+        if dataclasses.is_dataclass(cls):
+            return list((x.name for x in dataclasses.fields(cls)))
+        else:
+            if hasattr(cls, '__annotations__'):
+                return list(cls.__annotations__.keys())
+            return [x for x, y in inspect.getmembers(cls) if not x.startswith('_') and not inspect.isfunction(y)]
+
+    @classmethod
+    def get_empty_data_frame(cls) -> DataFrame: # type: ignore
+        """Get an empty data frame with the properties of the object.
+
+        Returns
+        -------
+        DataFrame
+            The empty data frame.
+        """
+        return DataFrame(columns=cls.get_properties())
+
+    @classmethod
     def default_key_mapping(cls) -> Dict[str, str]:
         """Default key mapping for the object.
         Can be used to convert key names.
