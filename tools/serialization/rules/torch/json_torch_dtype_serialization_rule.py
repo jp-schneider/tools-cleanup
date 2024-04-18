@@ -6,6 +6,8 @@ from tools.util.reflection import dynamic_import
 
 class TorchDtypeValueWrapper(JsonConvertible):
 
+    __type_alias__ = "torch/dtype"
+
     def __init__(self,
                  value: torch.dtype = None,
                  decoding: bool = False,

@@ -49,6 +49,8 @@ def get_callable_source(fnc: Callable) -> str:
 
 class FunctionValueWrapper(JsonConvertible):
 
+    __type_alias__ = "function"
+
     @staticmethod
     def get_source_code_name(name: str):
         return f'__{name}_source__'
@@ -83,6 +85,17 @@ class FunctionValueWrapper(JsonConvertible):
                     as_dict['source_code_error'] = "Exception occured, see log for details."
 
         as_dict['__class__'] = class_name(self)
+
+        # Purge memo in current object and dict
+        def _purge_temp_property(_property: str):
+            if hasattr(self, _property):
+                delattr(self, _property)
+            if _property in as_dict:
+                as_dict.pop(_property)
+                
+        for _property in type(self).TEMP_PROPERTIES:
+            _purge_temp_property(_property)
+            
         return as_dict
 
     def after_decoding(self):

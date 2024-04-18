@@ -5,6 +5,8 @@ import torch
 
 class TorchDeviceValueWrapper(JsonConvertible):
 
+    __type_alias__ = "torch/Device"
+
     def __init__(self,
                  value: torch.device = None,
                  decoding: bool = False,

@@ -6,6 +6,8 @@ from .json_serialization_rule import JsonSerializationRule
 
 class SliceValueWrapper(JsonConvertible):
 
+    __type_alias__ = "slice"
+
     def __init__(self,
                  value: slice = None,
                  decoding: bool = False,

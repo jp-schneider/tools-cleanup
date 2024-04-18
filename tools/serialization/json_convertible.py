@@ -46,6 +46,9 @@ class JsonConvertible:
     __serializer_args__: Dict[str, Any]
     """Parameters of kwargs from the to_json_dict to pass in the convert function."""
 
+    TEMP_PROPERTIES = ['__to_json_handle_unmatched__', '__memo__', '__serializer_args__']
+
+
     def __init__(self, decoding: bool = False, **kwargs):
         """Constructor of component base class.
         The decoding arguments is used to indicate, 
@@ -90,7 +93,7 @@ class JsonConvertible:
         Set[str]
             A set of property names to ignore.
         """
-        return set({"__to_json_handle_unmatched__", "__memo__", "__serializer_args__"})
+        return set(type(self).TEMP_PROPERTIES)
 
     def to_dict(self) -> Dict[str, Any]:
         """Will convert the current instance to a dict,
@@ -211,6 +214,10 @@ class JsonConvertible:
         # Override it so it corresponds to the value in memo
         if uid is not None and res is not None and not no_uuid:
             res['__uuid__'] = str(uid)
+
+        for _property in cls.TEMP_PROPERTIES:
+            res.pop(_property, None)
+
         return res
 
     @classmethod
@@ -443,10 +450,11 @@ class JsonConvertible:
             if _property in as_dict:
                 as_dict.pop(_property)
                 
-        for _property in ['__memo__', '__to_json_handle_unmatched__', '__serializer_args__']:
+        for _property in type(self).TEMP_PROPERTIES:
             _purge_temp_property(_property)
 
         return as_dict
+        
 
     def after_decoding(self):
         """Special function which will be invoked after decoding of an object.

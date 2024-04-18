@@ -6,6 +6,8 @@ from .json_serialization_rule import JsonSerializationRule
 
 class ComplexValueWrapper(JsonConvertible):
 
+    __type_alias__ = "complex"
+
     def __init__(self,
                  value: complex = None,
                  decoding: bool = False,

@@ -142,6 +142,80 @@ def complex_dtype(float_dtype: torch.dtype = torch.float32) -> torch.dtype:
     else:
         raise ValueError(f"Float dtype {float_dtype} is not supported.")
     
+def numpy_to_torch_dtype(dtype: Union[str, np.dtype]) -> torch.dtype:
+    """Converts a numpy dtype to a torch dtype.
+
+    Parameters
+    ----------
+    dtype : Union[str, np.dtype]
+        Numpy dtype to convert or string representation.
+
+    Returns
+    -------
+    torch.dtype
+        The corresponding torch dtype.
+
+    Raises
+    ------
+    ValueError
+        If the dtype is not supported.
+    """
+    numpy_to_torch_dtype_dict = {
+        np.bool       : torch.bool,
+        np.uint8      : torch.uint8,
+        np.int8       : torch.int8,
+        np.int16      : torch.int16,
+        np.int32      : torch.int32,
+        np.int64      : torch.int64,
+        np.float16    : torch.float16,
+        np.float32    : torch.float32,
+        np.float64    : torch.float64,
+        np.complex64  : torch.complex64,
+        np.complex128 : torch.complex128
+    }
+    if isinstance(dtype, str):
+        dtype = np.dtype(dtype)
+    if dtype in numpy_to_torch_dtype_dict:
+        return numpy_to_torch_dtype_dict[dtype]
+    else:
+        raise ValueError(f"Unsupported dtype {dtype}")
+
+def torch_to_numpy_dtype(dtype: torch.dtype) -> np.dtype:
+    """Takes a torch dtype and returns the corresponding numpy dtype.
+
+    Parameters
+    ----------
+    dtype : torch.dtype
+        The torch dtype to convert.
+
+    Returns
+    -------
+    np.dtype
+        Numpy dtype.
+
+    Raises
+    ------
+    ValueError
+        If the dtype is not supported.
+    """
+    torch_to_numpy_dtype_dict = {
+        torch.bool       : np.bool,
+        torch.uint8      : np.uint8,
+        torch.int8       : np.int8,
+        torch.int16      : np.int16,
+        torch.int32      : np.int32,
+        torch.int64      : np.int64,
+        torch.float16    : np.float16,
+        torch.float32    : np.float32,
+        torch.float64    : np.float64,
+        torch.complex64  : np.complex64,
+        torch.complex128 : np.complex128
+    }
+    if dtype in torch_to_numpy_dtype_dict:
+        return torch_to_numpy_dtype_dict[dtype]
+    else:
+        raise ValueError(f"Unsupported dtype {dtype}")
+
 class TensorUtil():
     """Static class for using complex tensor calculations and tensor related utilities"""
 

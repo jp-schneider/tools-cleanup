@@ -12,6 +12,8 @@ from torch.nn import ModuleList
 
 class ModuleListValueWrapper(JsonConvertible):
 
+    __type_alias__ = "torch/ModuleList"
+
     def __init__(self,
                  value: torch.dtype = None,
                  decoding: bool = False,

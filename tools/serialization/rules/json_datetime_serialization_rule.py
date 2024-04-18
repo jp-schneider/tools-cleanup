@@ -6,6 +6,9 @@ from datetime import datetime
 
 class DatetimeValueWrapper(JsonConvertible):
 
+    __type_alias__ = "datetime"
+
+
     def __init__(self,
                  value: datetime = None,
                  decoding: bool = False,

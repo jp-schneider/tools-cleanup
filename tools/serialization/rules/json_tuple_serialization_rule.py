@@ -8,6 +8,8 @@ from .json_serialization_rule import JsonSerializationRule
 
 class TupleValueWrapper(JsonConvertible):
 
+    __type_alias__ = "tuple"
+
     def __init__(self,
                  value: list = None,
                  decoding: bool = False,

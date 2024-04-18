@@ -6,6 +6,8 @@ import decimal
 from tools.util.reflection import class_name, dynamic_import
 
 class TypeValueWrapper(JsonConvertible):
+    
+    __type_alias__ = "type"
 
     def __init__(self,
                  value: type = None,

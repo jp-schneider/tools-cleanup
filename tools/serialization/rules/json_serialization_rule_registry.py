@@ -1,9 +1,10 @@
 from typing import Any, Dict, List, Literal, Optional, Type
 
 from tools.error.argument_none_error import ArgumentNoneError
+from tools.util.reflection import class_name
 from .json_serialization_rule import JsonSerializationRule
 import sys
-
+from tools.util.reflection import get_alias
 
 class JsonSerializationRuleRegistry():
     """Defines the known rules for converting an object into a json convertible structure."""
@@ -193,6 +194,8 @@ class JsonSerializationRuleRegistry():
             for apt in rule_type.applicable_backward_types():
                 if apt not in ret_bk:
                     ret_bk[apt] = rule
+                # Register alias if available
+                _ = get_alias(apt)
         return ret_fwd, ret_bk
 
     def get_simple_rule_forward(self, value: Any) -> JsonSerializationRule:
@@ -340,4 +343,6 @@ class JsonSerializationRuleRegistry():
             for apt in rule_type.applicable_backward_types():
                 if apt not in ret_bk:
                     ret_bk[apt] = rule
+                # Register alias if available
+                _ = get_alias(apt)
         return ret_fwd, ret_bk

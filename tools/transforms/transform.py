@@ -3,10 +3,8 @@ from abc import ABC, abstractmethod
 
 
 class Transform():
-    
-    @abstractmethod
-    def fit(self, *args, **kwargs) -> None:
-        pass
+    """Base class for all transforms.
+    """
     
     @abstractmethod
     def transform(self, *args, **kwargs) -> Any:

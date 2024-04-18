@@ -10,6 +10,8 @@ except (ModuleNotFoundError, ImportError):
 
 class NDArrayValueWrapper(JsonConvertible):
 
+    __type_alias__ = "numpy/ndarray"
+
     def __init__(self,
                  value: np.ndarray = None,
                  decoding: bool = False,

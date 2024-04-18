@@ -7,6 +7,8 @@ import decimal
 
 class DecimalValueWrapper(JsonConvertible):
 
+    __type_alias__ = "decimal"
+
     def __init__(self,
                  value: decimal = None,
                  decoding: bool = False,

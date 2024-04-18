@@ -10,6 +10,8 @@ except (ModuleNotFoundError, ImportError):
 
 class NumpyGenericWrapper(JsonConvertible):
 
+    __type_alias__ = "numpy/generic"
+
     def __init__(self,
                  value: np.generic = None,
                  decoding: bool = False,

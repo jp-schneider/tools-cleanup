@@ -7,6 +7,8 @@ from tools.serialization.json_convertible import convert
 
 class SetValueWrapper(JsonConvertible):
 
+    __type_alias__ = "set"
+
     def __init__(self,
                  value: list = None,
                  decoding: bool = False,

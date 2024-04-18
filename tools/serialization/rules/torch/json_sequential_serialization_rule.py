@@ -22,6 +22,8 @@ def _decode_buffer(buf: str) -> bytes:
 
 class SequentialValueWrapper(JsonConvertible):
 
+    __type_alias__ = "torch/Sequential"
+    
     def __init__(self,
                  value: torch.nn.Sequential = None,
                  decoding: bool = False,

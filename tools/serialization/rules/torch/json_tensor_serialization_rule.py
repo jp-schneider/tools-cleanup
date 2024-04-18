@@ -21,6 +21,8 @@ def _decode_buffer(buf: str) -> bytes:
 
 class TensorValueWrapper(JsonConvertible):
 
+    __type_alias__ = "torch/Tensor"
+
     def __init__(self,
                  value: torch.Tensor = None,
                  decoding: bool = False,
