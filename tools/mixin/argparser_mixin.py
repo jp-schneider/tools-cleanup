@@ -192,7 +192,7 @@ class ArgparserMixin:
         ]
 
     @classmethod
-    def get_parser(cls, parser: Optional[ArgumentParser] = None) -> ArgumentParser:
+    def get_parser(cls, parser: Optional[ArgumentParser] = None, sep: str = "-") -> ArgumentParser:
         """Creates / fills an Argumentparser with the fields of the current class.
         Inheriting class must be a dataclass to get annotations and fields.
         By default only puplic field are used (=field with a leading underscore "_" are ignored.)
@@ -200,6 +200,10 @@ class ArgparserMixin:
         ----------
         parser : Optional[ArgumentParser]
             An existing argument parser. If not specified a new one will be created. Defaults to None.
+        
+        sep : str
+            Separator for the argument name, will replace the "_" of config classes. Defaults to "-".
+
         Returns
         -------
         ArgumentParser
@@ -214,7 +218,7 @@ class ArgparserMixin:
         fields = cls._get_parser_members()
 
         for field in fields:
-            name = field.name.replace("_", "-")
+            name = field.name.replace("_", sep)
             try:
                 args = cls._map_type_to_parser_arg(field)
             except IgnoreTypeError as ig:
@@ -278,27 +282,39 @@ class ArgparserMixin:
                         or (field.default == MISSING and field.default_factory == MISSING)):
                     setattr(self, field.name, self._get_parser_arg_value(field, value))
 
+    
     @classmethod
-    def parse_with_config_path(cls, parser: ArgumentParser) -> 'ArgparserMixin':
-        """Parses the arguments from the command line and applies them to a new instance of the class.
-        The class must be a dataclass to get annotations and fields.
+    def parse_args(cls, 
+                   parser: ArgumentParser,
+                   add_config_path: bool = True,
+                   sep: str = "-",
+                   ) -> "ArgparserMixin":
+        """Parses the arguments from the command line and returns a config object.
 
         Parameters
         ----------
         parser : ArgumentParser
-        
-                The argument parser.
+            Predefined parser object.
+
+        add_config_path : bool, optional
+            If the parse args method should consider a --config_path argument, by default True
+
+        sep : str
+            Separator for the argument name, will replace the "_" of config classes. Defaults to "-".
+
         Returns
         -------
         ArgparserMixin
             The instance of the object filled with cli data.
         """
+        if add_config_path:
+            parser.add_argument("--config-path", type=str, default=None, required=False)
         
-        parser = cls.get_parser(parser)
+        parser = cls.get_parser(parser, sep=sep)
         args = parser.parse_args()
 
-        config = None
-        if args.config_path:
+        config: ArgparserMixin = None
+        if add_config_path and args.config_path:
             args.config_path = args.config_path.strip("\"").strip("\'")
             config = JsonConvertible.load_from_file(args.config_path)
             config.apply_parsed_args(args)

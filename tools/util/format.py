@@ -4,7 +4,7 @@ import math
 import re
 from datetime import timedelta
 from string import Template
-from typing import Any, Dict, Literal, Optional, Tuple, Type, TypeVar, Union
+from typing import Any, Dict, List, Literal, Optional, Tuple, Type, TypeVar, Union
 from tools.logger.logging import logger
 import inspect
 from pandas import Series
@@ -346,3 +346,74 @@ def parse_type(_type_or_str: Union[Type, str],
         if not isinstance(_parsed_type, instance_type):
             return handle_error(f"Type: {_parsed_type.__name__} is not an instance of: {instance_type.__name__}")
     return _parsed_type
+
+def parse_format_string(format_string: str, 
+                        obj_list: List[Any], 
+                        index_variable: str = "index",
+                        allow_invocation: bool = False,
+                        additional_variables: Optional[Dict[str, Any]] = None
+                        ) -> List[str]:
+    """Formats content of a list of objects with a format string for each object.
+
+
+    Parameters
+    ----------
+    format_string : str, optional
+        A custom format string to create the string, whereby each variable is substitudet by the corresponding value of the object.
+
+        Every variable in the format string will be replaced by the corresponding value of the config.
+        Format specified as {variable:formatter} can be used the format the variable with normal string formatting.
+        
+        Every property of the obj can be used as a variable, in addition to `index_variable` which is the index of the obj in the provided list.
+
+    obj_list : List[Any]
+        List of objects to format.
+
+    index_variable : str, optional
+        The variable name for the index of the object in the list, by default "index"
+
+    allow_invocation : bool, optional
+        If a variable is a function, it can be invoked when set to True, by default False
+        Only supports functions without arguments.
+
+    Returns
+    -------
+    List[str]
+        Formatted strings.
+    """
+    pattern = r"\{(?P<variable>[A-z0-9\_]+)(?P<formatter>:[0-9A-z\.\,]+)?\}"
+    # Check which variables should included in the format string
+    variables = re.findall(pattern, format_string)
+    
+    keys = [variable[0] for variable in variables]
+    formats = [variable[1] if len(variable) > 1 else None for variable in variables]
+    key_formats = dict(zip(keys, formats))
+    
+    if additional_variables is None:
+        additional_variables = dict()
+
+    results = []
+    for i, obj in enumerate(obj_list):
+        name = format_string
+        for key, format in key_formats.items():
+            if index_variable is not None and key == index_variable:
+                value = i
+            else:
+                try:
+                    value = getattr(obj, key)
+                except AttributeError:
+                    if key in additional_variables:
+                        value = additional_variables[key]
+                    else:
+                        raise AttributeError(f"Object does not have a property: {key}")
+
+            if callable(value) and allow_invocation:
+                value = value()
+
+            if format is not None:
+                value = format.format(value)
+
+            name = name.replace("{" + key + "}", str(value))
+        results.append(name)
+
+    return results

@@ -1,5 +1,8 @@
+from abc import abstractmethod
+from argparse import ArgumentParser
 import os
 from dataclasses import dataclass, field
+from os.path import relpath
 
 from tools.mixin import ArgparserMixin
 from tools.serialization import JsonConvertible
@@ -7,6 +10,8 @@ from tools.util.diff import changes, NOCHANGE
 from typing import Any, Dict
 import logging
 
+from tools.logger.logging import logger
+from tools.util.path_tools import format_os_independent
 
 @dataclass
 class Config(JsonConvertible, ArgparserMixin):
@@ -58,4 +63,52 @@ class Config(JsonConvertible, ArgparserMixin):
                 try:
                     self.diff_config = JsonConvertible.load_from_file(self.diff_config)
                 except Exception as err:
-                    logging.exception(f"Could not load diff config from path {self.diff_config} for config name: {self.name_experiment}")
+                    logger.exception(f"Could not load diff config from path {self.diff_config}")
+
+    @classmethod
+    def parse_args(cls, 
+                   parser: ArgumentParser,
+                   add_config_path: bool = True,
+                   sep: str = "-",
+                   ) -> "Config":
+        """Parses the arguments from the command line and returns a config object.
+
+        Parameters
+        ----------
+        parser : ArgumentParser
+            Predefined parser object.
+        add_config_path : bool, optional
+            If the parse args method should consider a --config_path argument, by default True
+        sep : str, optional
+            Separator for the config path, by default "-"
+        
+        Returns
+        -------
+        Config
+            The parsed config object.
+        """
+        config = super().parse_args(parser,add_config_path=add_config_path, sep=sep)
+        config.prepare()
+        return config
+    
+    @abstractmethod
+    def get_name(self) -> str:
+        """Returns the name of the config object.
+
+        Returns
+        -------
+        str
+            The name of the config object.
+        """
+        raise NotImplementedError("Method not implemented")
+    
+    @abstractmethod
+    def get_runs_path(self) -> str:
+        """Returns the path where the runs are stored.
+
+        Returns
+        -------
+        str
+            Path to the runs.
+        """
+        raise NotImplementedError("Method not implemented")

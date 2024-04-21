@@ -3,17 +3,19 @@ import logging
 from typing import List, Type, Optional, Tuple
 
 from matplotlib import pyplot as plt
-from awesome.run.config import Config
-from awesome.run.runner import Runner
+from tools.config.config import Config
+from tools.run.runner import Runner
 import os
-from awesome.error import ArgumentNoneError
-from awesome.util.reflection import dynamic_import
-from awesome.run.multi_runner_config import MultiRunnerConfig
+from tools.error import ArgumentNoneError
+from tools.run.trainable_runner import TrainableRunner
+from tools.util.reflection import dynamic_import
+from tools.config.multi_runner_config import MultiRunnerConfig
 from datetime import datetime
-from awesome.serialization.json_convertible import JsonConvertible
-from awesome.util.path_tools import relpath
+from tools.serialization.json_convertible import JsonConvertible
+from tools.util.path_tools import relpath
 
-class MultiRunner(Runner):
+
+class MultiRunner(TrainableRunner):
     """A runner which can run multiple child runners. Typically used to find the best hyperparameters."""
 
     child_runners: List[Runner]
@@ -95,7 +97,8 @@ class MultiRunner(Runner):
         # Save configs
         num_digits = len(str(len(self.child_configs)))
         num_fmt = f"{{:0{num_digits}d}}"
-        fmt = (f"{prefix}_" if prefix is not None else "") + f"config_{num_fmt}.yaml"
+        fmt = (f"{prefix}_" if prefix is not None else "") + \
+            f"config_{num_fmt}.yaml"
         paths = []
         for i, config in enumerate(self.child_configs):
             path = os.path.join(directory, fmt.format(i))
@@ -131,7 +134,8 @@ class MultiRunner(Runner):
         if not os.path.exists(os.path.dirname(job_file_path)):
             os.makedirs(os.path.dirname(job_file_path))
 
-        items = [str(x) for x in self.create_jobs(preset_output_folder=preset_output_folder)]
+        items = [str(x) for x in self.create_jobs(
+            preset_output_folder=preset_output_folder)]
         formatted_items = (', ' + os.linesep + '\t').join(items)
         content = (f"from typing import List, Tuple" + os.linesep +
                    "JOBS: List[Tuple[str, List[str]]] = [" +
@@ -172,7 +176,7 @@ class MultiRunner(Runner):
         for i, p in enumerate(rel_paths):
             # exec_file = relpath(self.__jobsrefdir__, runner_script_path, is_from_file=is_from_file)
             # args = [
-            #     f"--config-path", p, 
+            #     f"--config-path", p,
             #     "--name-experiment", f"{self.base_config.name_experiment}_#{i}"
             #   ]
             # if preset_output_folder:
@@ -189,13 +193,14 @@ class MultiRunner(Runner):
                 if self.base_config.output_folder is not None:
                     output_folder = self.base_config.output_folder
                 else:
-                    path = os.path.join(self.base_config.runs_path, experiment_name + "_" + created_at)
+                    path = os.path.join(
+                        self.base_config.runs_path, experiment_name + "_" + created_at)
                     output_folder = path
 
             item = self._generate_single_job(
                 runner_script_path=runner_script_path,
                 is_ref_dir_from_file=is_from_file,
-                experiment_name=experiment_name,
+                name=experiment_name,
                 config_path=p,
                 output_folder=output_folder
             )
@@ -203,19 +208,21 @@ class MultiRunner(Runner):
 
         self.__jobs__ = items
         return items
-    
-    def _generate_single_job(self, 
-            runner_script_path: str,
-            is_ref_dir_from_file: bool,
-            experiment_name: str,
-            config_path: str,
-            output_folder: Optional[str] = None,
-    ) -> Tuple[str, List[str]]:
-        exec_file = relpath(self.__jobsrefdir__, runner_script_path, is_from_file=is_ref_dir_from_file)
+
+    def _generate_single_job(self,
+                             runner_script_path: str,
+                             is_ref_dir_from_file: bool,
+                             name: str,
+                             config_path: str,
+                             output_folder: Optional[str] = None,
+                             name_argument: str = "--name-experiment",
+                             ) -> Tuple[str, List[str]]:
+        exec_file = relpath(
+            self.__jobsrefdir__, runner_script_path, is_from_file=is_ref_dir_from_file)
         args = [
-            f"--config-path", config_path, 
-            "--name-experiment", experiment_name
-            ]
+            f"--config-path", config_path,
+            name_argument, name
+        ]
         if output_folder is not None:
             args += [
                 "--output-folder", os.path.normpath(output_folder)
@@ -249,6 +256,8 @@ class MultiRunner(Runner):
                     f"Training with child runner #{i} {cfg.name_experiment} with diff-config: \n{JsonConvertible.convert_to_yaml_str(child_runner.diff_config, no_large_data=True, no_uuid=True)}")
                 with plt.ioff():
                     child_runner.train()
-                logging.info(f"Training done with child runner #{i} {cfg.name_experiment}")  
+                logging.info(
+                    f"Training done with child runner #{i} {cfg.name_experiment}")
             except Exception as err:
-                logging.exception(f"Raised {type(err).__name__} in training child runner #{i}")
+                logging.exception(
+                    f"Raised {type(err).__name__} in training child runner #{i}")

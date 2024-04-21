@@ -2,10 +2,11 @@ import os
 from dataclasses import dataclass, field
 from typing import Any, Dict
 from tools.config.config import Config
+from tools.config.output_config import OutputConfig
 
 
 @dataclass
-class ExperimentConfig(Config):
+class ExperimentConfig(OutputConfig):
     """Experiment base config for executable learning experiments."""
 
     name_experiment: str = field(default="Test")
@@ -14,8 +15,11 @@ class ExperimentConfig(Config):
     runs_path: str = field(default=os.path.abspath("./runs/"))
     """Base directory where the runs are stored. Agent will create a subdirectory for each run. Default is ./runs/."""
 
-    output_folder: str = field(default=None)
-    """Folder where all outputs are stored overrides runs_path. Default is None."""
-
     run_script_path: str = field(default=None)
     """Path to the run script. Saves the executable path of the script where the run was started with."""
+
+    def get_name(self) -> str:
+        return self.name_experiment
+    
+    def get_runs_path(self) -> str:
+        return self.runs_path

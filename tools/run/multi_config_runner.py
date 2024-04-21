@@ -6,13 +6,13 @@ from tools.error import ArgumentNoneError
 from tools.serialization.json_convertible import JsonConvertible
 import os
 import re
-
+from tools.util.format import parse_format_string
 from tools.util.path_tools import relpath
 
 
 class MultiConfigRunner(MultiRunner):
     """Creates multiple runner based on multiple given configs."""
-    
+
     config: MultiConfigConfig
 
     def __init__(self,
@@ -24,7 +24,8 @@ class MultiConfigRunner(MultiRunner):
     def scan_dir(self, directory, pattern, recursive: bool = False, depth: int = 100) -> List[str]:
         res = []
         if not os.path.exists(directory):
-                raise FileNotFoundError(f"Config directory {directory} does not exist.")
+            raise FileNotFoundError(
+                f"Config directory {directory} does not exist.")
         for file in os.listdir(directory):
             path = os.path.join(directory, file)
             if os.path.isfile(path):
@@ -33,7 +34,8 @@ class MultiConfigRunner(MultiRunner):
                     res.append(path)
             elif os.path.isdir(path):
                 if recursive and depth >= 0:
-                    results = self.scan_dir(path, pattern, recursive=recursive, depth=depth-1)
+                    results = self.scan_dir(
+                        path, pattern, recursive=recursive, depth=depth-1)
                     res.extend(results)
         return res
 
@@ -44,11 +46,13 @@ class MultiConfigRunner(MultiRunner):
             ret = []
             directory = self.config.scan_config_directory
             pattern = re.compile(self.config.config_pattern)
-            ret = self.scan_dir(directory, pattern, recursive=(self.config.mode == "scan_dir_recursive"))
+            ret = self.scan_dir(directory, pattern, recursive=(
+                self.config.mode == "scan_dir_recursive"))
             return ret
         else:
-            raise ValueError(f"mode must be either 'plain' or 'scan_dir' but is {self.config.mode}")
-        
+            raise ValueError(
+                f"mode must be either 'plain' or 'scan_dir' but is {self.config.mode}")
+
     def save_child_configs(self, directory: str) -> List[str]:
         """Saves the configs of the child runners to a directory.
 
@@ -70,14 +74,16 @@ class MultiConfigRunner(MultiRunner):
         num_fmt = f"{{:0{num_digits}d}}"
         paths = []
         for i, config in enumerate(self.child_configs):
-            fmt = f"#{num_fmt}_{config.name_experiment}.yaml"
+            fmt = f"#{num_fmt}_{config.get_name()}.yaml"
             path = os.path.join(directory, fmt.format(i))
-            path = config.save_to_file(path, no_uuid=True, no_large_data=True, override=True)
+            path = config.save_to_file(
+                path, no_uuid=True, no_large_data=True, override=True)
             paths.append(path)
         return paths
 
     def create_jobs(self, ref_dir: Optional[str] = None, preset_output_folder: bool = False) -> List[Tuple[str, List[str]]]:
-        created_at = datetime.now().strftime("%y_%m_%d_%H_%M_%S")
+        created_date = datetime.now()
+        created_at = created_date.strftime("%y_%m_%d_%H_%M_%S")
         is_from_file = ref_dir is not None
         if ref_dir is None:
             ref_dir = os.getcwd()
@@ -89,6 +95,7 @@ class MultiConfigRunner(MultiRunner):
             return self.__jobs__
         if self.config.config_directory is None:
             raise ArgumentNoneError("config_directory")
+
         config_directory = os.path.abspath(self.config.config_directory)
         runner_script_path = os.path.abspath(self.config.runner_script_path)
         if not os.path.exists(runner_script_path):
@@ -99,34 +106,45 @@ class MultiConfigRunner(MultiRunner):
         runner_script_path = os.path.abspath(runner_script_path)
 
         rel_child_config_paths = [relpath(self.__jobsrefdir__, p,
-                             is_from_file=is_from_file) for p in child_config_paths]
+                                          is_from_file=is_from_file) for p in child_config_paths]
 
         num_digits = len(str(len(self.child_configs)))
         num_fmt = f"{{:0{num_digits}d}}"
 
-        items = [
-            (relpath(self.__jobsrefdir__, runner_script_path, is_from_file=is_from_file),
-             [f"--config-path", config_path, "--name-experiment", f"{num_fmt.format(i)}_{_name}"]) for i,
-            (_name, config_path) in enumerate(zip([x.name_experiment for x in self.child_configs], rel_child_config_paths))]
-        
         items = []
-        for i, (_name, config_path) in enumerate(zip([x.name_experiment for x in self.child_configs], rel_child_config_paths)):
+
+        date_args = dict(
+            year=created_date.year,
+            month=created_date.month,
+            day=created_date.day,
+            hour=created_date.hour,
+            minute=created_date.minute,
+            second=created_date.second
+        )
+        for i, (_name, config_path) in enumerate(zip([x.get_name() for x in self.child_configs], rel_child_config_paths)):
             name_experiment = f"#{num_fmt.format(i)}_{_name}"
             output_folder = None
             if preset_output_folder:
                 if self.child_configs[i].output_folder is not None:
                     output_folder = self.child_configs[i].output_folder
                 else:
-                    path = os.path.join(self.child_configs[i].runs_path, name_experiment + "_" + created_at)
+                    path = os.path.join(
+                        self.child_configs[i].runs_path, name_experiment + "_" + created_at)
+                    path = parse_format_string(
+                        self.config.preset_output_folder_format_string,
+                        [self.child_configs[i]],
+                        allow_invocation=True,
+                        additional_variables=date_args
+                    )[0]
                     output_folder = path
-            
+
             item = self._generate_single_job(
-               runner_script_path=runner_script_path,
-               is_ref_dir_from_file=is_from_file,
-               experiment_name=_name,
+                runner_script_path=runner_script_path,
+                is_ref_dir_from_file=is_from_file,
+                name=_name,
                 config_path=config_path,
                 output_folder=output_folder
-               )
+            )
             items.append(item)
 
         self.__jobs__ = items
