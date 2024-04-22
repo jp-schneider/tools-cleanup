@@ -5,7 +5,6 @@ import asyncio
 import logging  # noqa
 import os
 
-from tools.serialization.json_convertible import JsonConvertible
 from tools.logger.logging import basic_config
 
 from tools.config.multi_config_config import MultiConfigConfig
@@ -32,27 +31,29 @@ def get_config() -> MultiConfigConfig:
 
 
 async def main(config: MultiConfigConfig):
+    from tools.logger.logging import logger
     runner = MultiConfigRunner(config)
     runner.build(build_children=False)
 
     # Training
     if config.create_job_file:
-        logging.info(f"Creating job file...")
+        logger.info(f"Creating job file...")
         file = runner.create_job_file()
-        logging.info(f"Created job file at: {file}")
+        logger.info(f"Created job file at: {file}")
 
     if not config.dry_run:
-        logging.info(f"Start training of: {config.name_experiment}")
+        logger.info(f"Start training of: {config.name_experiment}")
         runner.train()
 
 if __name__ == "__main__":
     config()
     cfg = get_config()
+    from tools.logger.logging import logger
     try:
         loop = asyncio.get_event_loop()
         loop.run_until_complete(main(cfg))
         loop.close()
     except Exception as err:
-        logging.exception(f"Raised {type(err).__name__} in {current_filename()}, exiting...")
+        logger.exception(f"Raised {type(err).__name__} in {current_filename()}, exiting...")
         exit(1)
     exit(0)

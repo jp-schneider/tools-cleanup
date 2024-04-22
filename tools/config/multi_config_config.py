@@ -13,7 +13,7 @@ class MultiConfigConfig(MultiRunnerConfig):
     scan_config_directory: str = field(default="./config")
     """Directory used for config scanning."""
 
-    config_pattern: str = field(default=r".*.yaml")
+    config_pattern: str = field(default=r".*\.(ya?ml)")
     """The regex pattern of config files when in scan_dir mode."""
 
     name_experiment: str = field(default="MultiConfig")

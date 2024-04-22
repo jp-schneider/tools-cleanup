@@ -1,0 +1,66 @@
+{
+    // See https://go.microsoft.com/fwlink/?LinkId=733558
+    // for the documentation about the tasks.json format
+    "version": "2.0.0",
+    "tasks": [
+      {
+        "label": "Run Multi Config (Windows)",
+        "type": "shell",
+        "command": "${command:python.interpreterPath}",
+        "args": [
+            "${workspaceFolder}/scripts/run_multi_config.py",
+            "--config-path",
+            "${input:pick_config_file_windows}",
+        ],
+        "presentation": {
+            "echo": true,
+            "reveal": "always",
+            "focus": false,
+            "panel": "shared",
+            "showReuseMessage": false,
+            "clear": true
+        },
+        "problemMatcher": []
+      },
+      {
+        "label": "Run Multi Config (Linux)",
+        "type": "shell",
+        "command": "${command:python.interpreterPath}",
+        "args": [
+            "${workspaceFolder}/scripts/run_multi_config.py",
+            "--config-path",
+            "${input:pick_config_file_linux}",
+        ],
+        "presentation": {
+            "echo": true,
+            "reveal": "always",
+            "focus": false,
+            "panel": "shared",
+            "showReuseMessage": false,
+            "clear": true
+        },
+        "problemMatcher": []
+      },
+    ],
+    "inputs":[
+        {
+            "id": "pick_config_file_windows",
+            "type": "command",
+            "command": "shellCommand.execute",
+            "args": {
+                "command": "dir /A-D /S /B",
+                "cwd": "${workspaceFolder}/config"
+            }
+        },
+        {
+          "id": "pick_config_file_linux",
+          "type": "command",
+          // type specific configuration attributes
+          "command": "shellCommand.execute",
+          "args": {
+            "command": "find ./config -type f",
+            "cwd": "${workspaceFolder}"
+          }
+        }
+    ]
+}

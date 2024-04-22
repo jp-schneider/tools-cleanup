@@ -11,13 +11,7 @@ except (NameError, ImportError, ModuleNotFoundError):
 
 from tools.util.format import to_snake_case
 from tools.util.object_factory import ObjectFactory
-
-
-class _Default():
-    pass
-
-
-DEFAULT = _Default()
+from tools.util.typing import DEFAULT
 
 
 class SeriesConvertibleMixin:

@@ -7,7 +7,7 @@ from tools.serialization.json_convertible import JsonConvertible
 import os
 import re
 from tools.util.format import parse_format_string
-from tools.util.path_tools import relpath
+from tools.util.path_tools import format_os_independent, relpath, replace_file_unallowed_chars, replace_unallowed_chars
 
 
 class MultiConfigRunner(MultiRunner):
@@ -74,8 +74,10 @@ class MultiConfigRunner(MultiRunner):
         num_fmt = f"{{:0{num_digits}d}}"
         paths = []
         for i, config in enumerate(self.child_configs):
-            fmt = f"#{num_fmt}_{config.get_name()}.yaml"
-            path = os.path.join(directory, fmt.format(i))
+            fmt = f"{num_fmt}_{config.get_name()}.yaml"
+            base_name = fmt.format(i)
+            base_name = replace_file_unallowed_chars(base_name)
+            path = os.path.join(directory, base_name)
             path = config.save_to_file(
                 path, no_uuid=True, no_large_data=True, override=True)
             paths.append(path)
@@ -122,28 +124,32 @@ class MultiConfigRunner(MultiRunner):
             second=created_date.second
         )
         for i, (_name, config_path) in enumerate(zip([x.get_name() for x in self.child_configs], rel_child_config_paths)):
-            name_experiment = f"#{num_fmt.format(i)}_{_name}"
             output_folder = None
             if preset_output_folder:
                 if self.child_configs[i].output_folder is not None:
                     output_folder = self.child_configs[i].output_folder
                 else:
-                    path = os.path.join(
-                        self.child_configs[i].runs_path, name_experiment + "_" + created_at)
+                    # name_experiment = f"#{num_fmt.format(i)}_{_name}"
+                    #path = os.path.join(
+                    #    self.child_configs[i].runs_path, name_experiment + "_" + created_at)
                     path = parse_format_string(
                         self.config.preset_output_folder_format_string,
                         [self.child_configs[i]],
                         allow_invocation=True,
-                        additional_variables=date_args
+                        additional_variables=date_args,
+                        index_offset=i
                     )[0]
-                    output_folder = path
+                    directory = os.path.dirname(path)
+                    base_name = replace_unallowed_chars(os.path.basename(path), allow_dot=False)
+                    output_folder = format_os_independent(os.path.join(directory, base_name))
 
             item = self._generate_single_job(
                 runner_script_path=runner_script_path,
                 is_ref_dir_from_file=is_from_file,
                 name=_name,
                 config_path=config_path,
-                output_folder=output_folder
+                output_folder=output_folder,
+                name_argument=self.config.name_cli_argument
             )
             items.append(item)
 

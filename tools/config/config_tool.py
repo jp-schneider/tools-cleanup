@@ -6,6 +6,7 @@ import os
 from tools.error.argument_none_error import ArgumentNoneError
 from tools.logger.logging import logger
 from tools.util.format import parse_format_string
+from tools.util.path_tools import replace_unallowed_chars, replace_file_unallowed_chars
 
 class ConfigTool():
     """Tool to create and save multiple configurations."""
@@ -16,7 +17,9 @@ class ConfigTool():
 
 
     @classmethod
-    def from_iterables(cls, base_config: Config, **kwargs) -> 'ConfigTool':
+    def from_iterables(cls, 
+                       base_config: Config, 
+                       **kwargs) -> 'ConfigTool':
         """Creates a ConfigTool from iterables.
 
         Parameters
@@ -97,9 +100,12 @@ class ConfigTool():
         values = kwargs.values()
 
         for args in zip(*values):
-            config = deepcopy(self.base_config)
+            config = deepcopy(self.base_config)#
+            diff_config = dict()
             for i, key in enumerate(keys):
                 setattr(config, key, args[i])
+                diff_config[key] = args[i]
+            config.diff_config = diff_config
             self.child_configs.append(config)
 
     
@@ -134,7 +140,9 @@ class ConfigTool():
         file_names = parse_format_string(format_string, self.child_configs, index_variable="index")
         results = []
         for (file_name, config) in zip(file_names, self.child_configs):
-            path = os.path.join(path, file_name)
-            results.append(path)
-            config.save_to_file(path, **kwargs)
+            file_name = replace_file_unallowed_chars(file_name)
+
+            _joined_path = os.path.join(path, file_name)
+            results.append(_joined_path)
+            config.save_to_file(_joined_path, **kwargs)
         return results

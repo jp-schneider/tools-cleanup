@@ -24,3 +24,9 @@ else:
         "NUMERICAL_TYPE", bound=Union[np.generic, int, float, complex, decimal.Decimal])
     """Numerical type which can be converted to a tensor."""
 
+
+class _DEFAULT():
+    pass
+
+DEFAULT = _DEFAULT()
+"""Default value singleton."""

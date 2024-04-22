@@ -39,7 +39,7 @@ class MultiRunnerConfig(ExperimentConfig):
     preset_output_folder: bool = field(default=False)
     """If True, the output folder for child agents will be preset with a --output-folder argument."""
 
-    preset_output_folder_format_string: str = field(default="{get_runs_path}/{index}_{get_name}_{year}_{month}_{day}_{hour}_{minute}_{second}")
+    preset_output_folder_format_string: str = field(default="{get_runs_path}/{index:02d}_{get_name}_{year}_{month}_{day}_{hour}_{minute}_{second}")
     """The format string for the preset output folder."""
 
     name_cli_argument: str = field(default="--name-experiment")

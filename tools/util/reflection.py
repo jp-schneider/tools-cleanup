@@ -26,6 +26,7 @@ def _get_alias(cls_or_obj: Union[object, Type]) -> Union[str, List[str], _NOALIA
     return NOALIAS
 
 def _register_alias(cls_or_obj: Union[object, Type]) -> None:
+    # Make sure rule registry is loaded
     alias = _get_alias(cls_or_obj)
     if alias != NOALIAS and isinstance(alias, str):
         alias = {alias}
@@ -88,6 +89,8 @@ def get_alias_type(alias: str) -> Optional[Type]:
     Optional[Type]
         Type which is registered for the alias or None if not found.
     """
+    from tools.serialization.rules.json_serialization_rule_registry import JsonSerializationRuleRegistry
+    _ = JsonSerializationRuleRegistry.instance()
     return ALIAS_TYPE_CACHE.get(alias, None)
 
 def dynamic_import(class_or_method: str) -> Any:

@@ -4,12 +4,13 @@ import math
 import re
 from datetime import timedelta
 from string import Template
-from typing import Any, Dict, List, Literal, Optional, Tuple, Type, TypeVar, Union
+from typing import Any, Callable, Dict, List, Literal, Optional, Tuple, Type, TypeVar, Union
 from tools.logger.logging import logger
 import inspect
 from pandas import Series
 
 from tools.error import ArgumentNoneError
+from tools.util.typing import DEFAULT
 from tools.util.reflection import dynamic_import
 
 CAMEL_SEPERATOR_PATTERN = re.compile(r'((?<!^)(?<!_))((?=[A-Z][a-z])|((?<=[a-z])(?=[A-Z])))')
@@ -347,11 +348,41 @@ def parse_type(_type_or_str: Union[Type, str],
             return handle_error(f"Type: {_parsed_type.__name__} is not an instance of: {instance_type.__name__}")
     return _parsed_type
 
+
+def _format_value(
+                value: Any, 
+                format: Optional[str] = None,
+                default_formatters: Optional[Dict[Type, Callable[[Any], str]]] = None) -> str:
+    if format is not None and len(format) > 0:
+        if "{" in format and "}" in format:
+            return format.format(value)
+        else:
+            return f"{{{format}}}".format(value)
+    if default_formatters is None:
+        default_formatters = _get_default_formatters()
+    fmt = default_formatters.get(type(value), str)
+    return fmt(value)
+
+def _get_default_formatters() -> Dict[Type, Callable[[Any], str]]:
+    return {
+        int: lambda x: f"{x:d}",
+        float: lambda x: f"{x:.3f}",
+        bool: lambda x: f"{x}",
+        timedelta: lambda x: strfdelta(x, "%D days %H:%M:%S") if x.days > 0 else strfdelta(x, "%H:%M:%S"),
+        Series: lambda x: f"{x.to_string()}",
+        dict: lambda x: ", ".join([f"{_format_value(k)}: {_format_value(v)}" for k, v in x.items()]),
+        list: lambda x: ", ".join([_format_value(v) for v in x]),
+        tuple: lambda x: ", ".join([_format_value(v) for v in x]),
+        type(None): lambda x: "None"
+    }
+
 def parse_format_string(format_string: str, 
                         obj_list: List[Any], 
                         index_variable: str = "index",
                         allow_invocation: bool = False,
-                        additional_variables: Optional[Dict[str, Any]] = None
+                        additional_variables: Optional[Dict[str, Any]] = None,
+                        default_formatters: Optional[Dict[Type, Callable[[Any], str]]] = DEFAULT,
+                        index_offset: int = 0
                         ) -> List[str]:
     """Formats content of a list of objects with a format string for each object.
 
@@ -376,6 +407,10 @@ def parse_format_string(format_string: str,
         If a variable is a function, it can be invoked when set to True, by default False
         Only supports functions without arguments.
 
+    index_offset : int, optional
+        Offset for the index, by default 0
+        If obj_list is a subset of a larger list, the offset can be used to adjust the index.
+
     Returns
     -------
     List[str]
@@ -392,12 +427,19 @@ def parse_format_string(format_string: str,
     if additional_variables is None:
         additional_variables = dict()
 
+    if default_formatters is None:
+        default_formatters = dict()
+    elif default_formatters == DEFAULT:
+        default_formatters = _get_default_formatters()
+    else:
+        pass
+
     results = []
     for i, obj in enumerate(obj_list):
         name = format_string
         for key, format in key_formats.items():
             if index_variable is not None and key == index_variable:
-                value = i
+                value = i + index_offset
             else:
                 try:
                     value = getattr(obj, key)
@@ -410,10 +452,9 @@ def parse_format_string(format_string: str,
             if callable(value) and allow_invocation:
                 value = value()
 
-            if format is not None:
-                value = format.format(value)
+            _formatted_value = _format_value(value, format=format, default_formatters=default_formatters)
 
-            name = name.replace("{" + key + "}", str(value))
+            name = name.replace("{" + key + format + "}", _formatted_value)
         results.append(name)
 
     return results

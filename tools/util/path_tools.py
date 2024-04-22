@@ -219,3 +219,52 @@ def numerated_folder_name(path: str, max_check: int = 1000) -> str:
         else:
             return path
     raise ValueError(f"Could not find free path within max checks of: {max_check}!")
+
+def replace_unallowed_chars(path: str, 
+                            allow_dot: bool = True,
+                            replace_with: str = "_") -> str:
+    """Replaces unallowed characters in a path with a given character.
+
+    Parameters
+    ----------
+    path : str
+        The path to replace the characters.
+
+    allow_dot : bool, optional
+        If dots should be allowed, by default True
+
+    replace_with : str, optional
+        The character to replace the unallowed characters, by default "_"
+
+    Returns
+    -------
+    str
+        The path with replaced characters.
+    """
+    unallowed = ["<", ">", ":", "\"", "/", "\\", "|", "?", "*"]
+    if not allow_dot:
+        unallowed.append(".")
+    for char in unallowed:
+        path = path.replace(char, replace_with)
+    return path
+
+def replace_file_unallowed_chars(file_name: str, replace_with: str = "_") -> str:
+    """Replaces unallowed characters in a file name with a given character.
+
+    Parameters
+    ----------
+    file_name : str
+        File name to replace the characters.
+
+    replace_with : str, optional
+        The character to replace the unallowed characters, by default "_"
+
+    Returns
+    -------
+    str
+        The file name with replaced characters.
+    """
+    base_name, ext = file_name.split(".")[:-1], file_name.split(".")[-1]
+    base_name = replace_unallowed_chars(replace_with.join(base_name), replace_with=replace_with)
+    file_name = f"{base_name}.{ext}"
+    return file_name
