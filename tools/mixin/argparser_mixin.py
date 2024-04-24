@@ -307,6 +307,7 @@ class ArgparserMixin:
         ArgparserMixin
             The instance of the object filled with cli data.
         """
+        from tools.logger.logging import logger
         if add_config_path:
             parser.add_argument("--config-path", type=str, default=None, required=False)
         
@@ -317,6 +318,8 @@ class ArgparserMixin:
         if add_config_path and args.config_path:
             args.config_path = args.config_path.strip("\"").strip("\'")
             config = JsonConvertible.load_from_file(args.config_path)
+            if not isinstance(config, cls):
+                logger.warning(f"Loaded config from file is not of type {cls.__name__}. But {type(config).__name__}.")
             config.apply_parsed_args(args)
         else:
             config = cls.from_parsed_args(args)
