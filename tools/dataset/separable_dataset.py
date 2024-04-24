@@ -1,8 +1,14 @@
-import logging
+
 from typing import List, Tuple
 import random
 from abc import ABC
-from sklearn.model_selection import train_test_split
+from tools.logger.logging import logger
+try:
+    from sklearn.model_selection import train_test_split
+except ModuleNotFoundError:
+    logger.warning("Scikit-learn not installed, using custom implementation.")
+    def train_test_split(*args, **kwargs):
+        raise ModuleNotFoundError("Scikit-learn not installed.")
 import numpy as np
 import os
 from tools.serialization.json_convertible import JsonConvertible
@@ -46,7 +52,7 @@ class SeparableDataset(ABC):
             Array with train and test indices. 
         """
         if self.training_indices is None or self.validation_indices is None:
-            logging.debug(f"Split indices with seed {self.split_seed} and ratio {self.split_ratio}.")
+            logger.debug(f"Split indices with seed {self.split_seed} and ratio {self.split_ratio}.")
             self.training_indices, self.validation_indices = self._split_indices()
         return self.training_indices, self.validation_indices
 
@@ -65,7 +71,7 @@ class SeparableDataset(ABC):
                 train_idx = np.sort(train_idx)
                 test_idx = np.sort(test_idx)
                 loaded_indices = True
-                logging.info(f"Loaded splitted indices from {self.indices_file}.")
+                logger.info(f"Loaded splitted indices from {self.indices_file}.")
             else:
                 pass
        
@@ -100,6 +106,6 @@ class SeparableDataset(ABC):
                 "validation_indices": test_idx.tolist()
             }
             JsonConvertible.convert_to_file(index_obj, self.indices_file)
-            logging.info(f"Saved splitted indices to {self.indices_file}.")
+            logger.info(f"Saved splitted indices to {self.indices_file}.")
 
         return train_idx, test_idx

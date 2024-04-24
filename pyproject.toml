@@ -16,7 +16,7 @@ dill = {version = "^0.3.8", optional = true}
 simple-parsing = "^0.1.5"
 typing-inspect = "^0.9.0"
 scikit-learn = {version = "*", optional = true}
-jsonpickle = {version = "*", optional = true}
+jsonpickle = {version = "*"}
 tqdm = "*"
 matplotlib = {version = "^3.8.3", optional = true}
 toml = "^0.10.2"
