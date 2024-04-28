@@ -48,6 +48,7 @@ class MultiConfigRunner(MultiRunner):
             pattern = re.compile(self.config.config_pattern)
             ret = self.scan_dir(directory, pattern, recursive=(
                 self.config.mode == "scan_dir_recursive"))
+            ret.sort()
             return ret
         else:
             raise ValueError(

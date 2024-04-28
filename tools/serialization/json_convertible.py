@@ -2,7 +2,7 @@ import decimal
 import os
 import sys
 from datetime import datetime
-from typing import Any, Dict, Literal, Optional, Set, Union
+from typing import Any, Dict, Literal, Optional, Set, Type, TypeVar, Union
 
 from tools.error.argument_none_error import ArgumentNoneError
 
@@ -29,6 +29,8 @@ from tools.util.reflection import class_name, dynamic_import
 from tools.error import NoSimpleTypeError, NoIterationTypeError, NoSerializationRuleFoundError
 from uuid import UUID, uuid4
 
+
+AnyJsonConvertible = TypeVar("AnyJsonConvertible", bound="JsonConvertible")
 
 class JsonConvertible:
     """Adding functionality to make a object convertable to json 
@@ -584,7 +586,7 @@ class JsonConvertible:
         return self.convert_to_yaml_str(self, ensure_ascii=ensure_ascii, **kwargs)
 
     @classmethod
-    def from_json(cls, json_str: str, on_error: Literal['raise', 'ignore', 'warning'] = 'raise') -> 'JsonConvertible':
+    def from_json(cls: Type[AnyJsonConvertible], json_str: str, on_error: Literal['raise', 'ignore', 'warning'] = 'raise') -> AnyJsonConvertible:
         """Tries to recreate the object from a json string.
 
         Parameters
@@ -599,7 +601,7 @@ class JsonConvertible:
 
         Returns
         -------
-        JsonConvertible
+        AnyJsonConvertible
             The recreated instance.
 
         Raises
@@ -637,7 +639,7 @@ class JsonConvertible:
         return path
 
     @classmethod
-    def load_from_file(cls, path: str, on_error: Literal['raise', 'ignore', 'warning'] = 'raise') -> Any:
+    def load_from_file(cls: Type[AnyJsonConvertible], path: str, on_error: Literal['raise', 'ignore', 'warning'] = 'raise') -> AnyJsonConvertible:
         """Loads a json convertible like object from a file.
 
         Parameters
@@ -652,7 +654,7 @@ class JsonConvertible:
 
         Returns
         -------
-        Any
+        AnyJsonConvertible
             The loaded object instance. Will create the original object
             when json has a __class__ attribute, which is automatically created
             when serialized with the json convertible toolset.
@@ -670,7 +672,7 @@ class JsonConvertible:
                 f"Unsupported file extension: {ext} Only json and yaml / yml are supported!")
 
     @classmethod
-    def _load_from_file_yaml(cls, path: str, on_error: Literal['raise', 'ignore', 'warning'] = 'raise') -> Any:
+    def _load_from_file_yaml(cls: Type[AnyJsonConvertible], path: str, on_error: Literal['raise', 'ignore', 'warning'] = 'raise') -> AnyJsonConvertible:
         """Loads a json convertible like object from a file which is in yaml format.
 
         Parameters
@@ -685,7 +687,7 @@ class JsonConvertible:
 
         Returns
         -------
-        Any
+        AnyJsonConvertible
             The loaded object instance. Will create the original object
             when entries have a __class__ attribute, which is automatically created
             when serialized with the json convertible toolset.
@@ -709,7 +711,7 @@ class JsonConvertible:
         return decoded
 
     @classmethod
-    def _load_from_file_json(cls, path: str, on_error: Literal['raise', 'ignore', 'warning'] = 'raise') -> Any:
+    def _load_from_file_json(cls: Type[AnyJsonConvertible], path: str, on_error: Literal['raise', 'ignore', 'warning'] = 'raise') -> AnyJsonConvertible:
         """Loads a json convertible like object from a file.
 
         Parameters
@@ -724,7 +726,7 @@ class JsonConvertible:
 
         Returns
         -------
-        Any
+        AnyJsonConvertible
             The loaded object instance. Will create the original object
             when json has a __class__ attribute, which is automatically created
             when serialized with the json convertible toolset.
