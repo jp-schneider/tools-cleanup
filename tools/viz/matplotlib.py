@@ -1,6 +1,7 @@
 
 # Class for functions
 # File for useful functions when using matplotlib
+import io
 from typing import Any, Callable, Dict, List, Literal, Optional, Union, Tuple
 
 from matplotlib.colors import ListedColormap
@@ -28,6 +29,24 @@ from tools.util.path_tools import numerated_file_name, open_in_default_program
 import numpy as np
 import math
 import sys
+import matplotlib.text as mtext
+
+class WrapText(mtext.Text):
+    def __init__(self,
+                 x: float=0, y: float=0, text='',
+                 width: Optional[int] = None,
+                 **kwargs):
+        mtext.Text.__init__(self,
+                 x=x, y=y, text=text,
+                 wrap=True,
+                 **kwargs)
+        if width is None:
+            width = sys.maxsize
+        self.width = width  # in screen pixels. You could do scaling first
+
+    def _get_wrap_line_width(self):
+        return self.width
+
 
 def saveable(
     default_ext: Union[str, List[str]] = "png",
@@ -177,12 +196,43 @@ def saveable(
         return wrapper
     return decorator
 
+def render_text(text: str, 
+                ax: Optional[Axes],
+                width: Optional[int] = None
+                ) -> Figure:
+    """Renders a text in a matplotlib figure within an axes.
+
+
+    Parameters
+    ----------
+    text : str
+        The text to render.
+    ax : Optional[Axes]
+        Axes to render the text in, by default None
+    width : Optional[int], optional
+        Wrap width of the should be wrapped, by default None
+
+    Returns
+    -------
+    Figure
+        The figure with the text.
+    """
+    if ax is None:
+        fig, ax = get_mpl_figure(1, 1)
+    else:
+        fig = ax.figure
+    ax.axis('off')
+    wtxt = WrapText(0, 1, text, width=width if width != None else 0, ha="left", va='top', clip_on=False,
+                    family='monospace')
+    # Add artist to the axes
+    ax.add_artist(wtxt)
+    return fig
 
 def get_mpl_figure(
         rows: int = 1, 
         cols: int = 1, 
         size: float = 5,
-        ratio_or_img: Union[float,np.ndarray]= 1.0,
+        ratio_or_img: Optional[Union[float,np.ndarray]] = None,
         tight: bool = False,
         subplot_kw: Optional[Dict[str, Any]] = None,
         ax_mode: Literal["1d", "2d"] = "1d",
@@ -198,7 +248,7 @@ def get_mpl_figure(
     size : float, optional
         Size of the axes in inches, by default 5
     ratio_or_img : float | np.ndarray, optional
-        Ratio of Y w.r.t X can also be an Image / np.ndarray which will compute it from the axis, by default 1.0
+        Ratio of Y w.r.t X  (Height / Width) can also be an Image / np.ndarray which will compute it from the axis, by default 1.0
     tight : bool, optional
         If the figure should be tight => No axis spacing and borders, by default False
     subplot_kw : Optional[Dict[str, Any]], optional
@@ -210,6 +260,8 @@ def get_mpl_figure(
     Tuple[Figure, Axes | List[Axes]]
         Figure and axes.
     """
+    if ratio_or_img is None:
+        ratio_or_img = 1.0
     if "torch" in sys.modules:
         from torch import Tensor
         if isinstance(ratio_or_img, Tensor):
@@ -633,3 +685,99 @@ def plot_as_image(data: VEC_TYPE,
     if title is not None:
         fig.suptitle(title)
     return fig
+
+def figure_to_numpy(fig: Figure, dpi: int = 300, transparent: bool = True) -> np.ndarray:
+    """Converts a matplotlib figure to a numpy array.
+
+    Parameters
+    ----------
+    fig : Figure
+        The figure to convert
+
+    dpi : int, optional
+        Dots per inch, by default 72
+
+    Returns
+    -------
+    np.ndarray
+        The figure as a numpy array
+    """
+
+    arr = None
+    if fig.dpi != dpi:
+        fig.set_dpi(dpi)
+    with io.BytesIO() as io_buf:
+        fig.savefig(io_buf, format='raw', transparent=transparent, dpi=fig.dpi)
+        io_buf.seek(0)
+        arr = np.reshape(np.frombuffer(io_buf.getvalue(), dtype=np.uint8),
+                            newshape=(int(fig.bbox.bounds[3]), int(fig.bbox.bounds[2]), -1))
+    return arr
+
+
+def align_marker(marker: Any, ha: Union[str, float]='center', va: Union[str, float]='center'):
+    """
+    create markers with specified alignment.
+
+    Parameters
+    ----------
+
+    marker : a valid marker specification.
+      See mpl.markers
+
+    ha : string, float {'left', 'center', 'right'}
+      Specifies the horizontal alignment of the marker. *float* values
+      specify the alignment in units of the markersize/2 (0 is 'center',
+      -1 is 'right', 1 is 'left').
+
+    va : string, float {'top', 'middle', 'bottom'}
+      Specifies the vertical alignment of the marker. *float* values
+      specify the alignment in units of the markersize/2 (0 is 'middle',
+      -1 is 'top', 1 is 'bottom').
+
+    Returns
+    -------
+
+    marker_array : numpy.ndarray
+      A Nx2 array that specifies the marker path relative to the
+      plot target point at (0, 0).
+
+    Notes
+    -----
+    The mark_array can be passed directly to ax.plot and ax.scatter, e.g.::
+
+        ax.plot(1, 1, marker=align_marker('>', 'left'))
+
+    Credit:
+    https://stackoverflow.com/questions/26686722/align-matplotlib-scatter-marker-left-and-or-right
+
+    """
+    
+    from matplotlib import markers
+    from matplotlib.path import Path
+    if isinstance(ha, str):
+        ha = {'right': -1.,
+                  'middle': 0.,
+                  'center': 0.,
+                  'left': 1.,
+                  }[ha]
+
+    if isinstance(va, str):
+        va = {'top': -1.,
+                  'middle': 0.,
+                  'center': 0.,
+                  'bottom': 1.,
+                  }[va]
+
+    # Define the base marker
+    bm = markers.MarkerStyle(marker)
+
+    # Get the marker path and apply the marker transform to get the
+    # actual marker vertices (they should all be in a unit-square
+    # centered at (0, 0))
+    m_arr = bm.get_path().transformed(bm.get_transform()).vertices
+
+    # Shift the marker vertices for the specified alignment.
+    m_arr[:, 0] += ha / 2
+    m_arr[:, 1] += va / 2
+
+    return Path(m_arr, bm.get_path().codes)

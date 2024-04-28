@@ -101,7 +101,10 @@ def read_directory(
     res = list()
     regex = re.compile(pattern)
     for file in os.listdir(path):
-        match = regex.fullmatch(file)
+        if pattern[0] == "^" and pattern[-1] == "$":
+            match = regex.fullmatch(file)
+        else:
+            match = regex.search(file)
         if match:
             item = dict(match.groupdict())
             if parser is not None:
