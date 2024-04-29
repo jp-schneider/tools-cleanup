@@ -303,15 +303,19 @@ def get_mpl_figure(
         fig, ax = plt.subplots(rows, cols, figsize=(size * ratio_x * cols, 
             size * ratio_y * rows), subplot_kw=subplot_kw)
         axes.append(ax)
+    axes = np.array(axes)
+    if ax_mode == "2d" and len(axes.shape) == 1:
+        axes = axes[None, ...]
 
     if ax_mode == "2d" and tight:
-        axes = np.reshape(np.array(axes), (rows, cols), order="F")[::-1]
+        axes = np.reshape(axes, (rows, cols), order="F")[::-1]
     elif ax_mode == "2d" and not tight:
-        axes = np.reshape(np.array(axes), (rows, cols), order="C")#[::-1]
+        axes = np.reshape(axes, (rows, cols), order="C")#[::-1]
     elif ax_mode == "1d" and not tight:
-        axes = np.reshape(np.array(axes), (rows * cols), order="C")
+        axes = np.reshape(axes, (rows * cols), order="C")
 
-    if len(axes) == 1:
+    if ((ax_mode == "2d" and np.multiply(*axes.shape) == 1)
+        or (ax_mode == "1d" and len(axes) == 1)):
         return fig, axes[0]
     return fig, axes
 
