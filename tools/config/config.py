@@ -2,16 +2,15 @@ from abc import abstractmethod
 from argparse import ArgumentParser
 import os
 from dataclasses import dataclass, field
-from os.path import relpath
 
 from tools.mixin import ArgparserMixin
 from tools.serialization import JsonConvertible
 from tools.util.diff import changes, NOCHANGE
-from typing import Any, Dict
+from typing import Any, Dict, List, Optional
 import logging
 
 from tools.logger.logging import logger
-from tools.util.path_tools import format_os_independent
+from tools.util.path_tools import format_os_independent, relpath
 
 @dataclass
 class Config(JsonConvertible, ArgparserMixin):
@@ -112,3 +111,27 @@ class Config(JsonConvertible, ArgparserMixin):
             Path to the runs.
         """
         raise NotImplementedError("Method not implemented")
+    
+    def convert_relpaths(self, keys: List[str], base_dir: Optional[str] = None):
+        """Convert paths specified by keys / properties to a relative path depending on base_dir.
+
+        Parameters
+        ----------
+        keys : List[str]
+            Keys / Properties of config containing path entries to convert.
+        base_dir : Optional[str], optional
+            Base directory, by default None
+            If none, it will use the current cwd.
+        """
+        if base_dir is None:
+            base_dir = os.getcwd()
+        for key in keys:
+            tp = getattr(self, key)
+            if tp is None:
+                continue
+            if tp is not None:
+                tp = format_os_independent(tp)
+            has_ext = len(os.path.splitext(tp)[-1]) > 0
+            rp = relpath(base_dir, tp, is_from_file=False, is_to_file=has_ext)
+            rp = format_os_independent(rp)
+            setattr(self, key, rp)

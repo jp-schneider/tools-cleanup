@@ -10,3 +10,10 @@ class TrainableRunner(ConfigRunner):
     @abstractmethod
     def train(self, *args, **kwargs) -> None:
         pass
+
+    def load(self, *args, **kwargs) -> None:
+        """Loading a trainable runner by a given state.
+        """
+        pass
+
+    
