@@ -4,4 +4,4 @@
   stages: [commit]
   language: system
   verbose: true
-  entry: bash ./script/hooks/jupyter_nb_clear_output.sh
+  entry: bash scripts/hooks/jupyter_nb_clear_output.sh
