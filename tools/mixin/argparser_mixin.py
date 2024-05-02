@@ -3,8 +3,7 @@ import inspect
 import logging
 from argparse import ArgumentParser
 from dataclasses import MISSING, Field
-import os
-from typing import Any, Dict, List, Optional, Type, get_args, ClassVar
+from typing import Any, Dict, List, Optional, Type, get_args
 
 from simple_parsing.docstring import get_attribute_docstring
 from typing_inspect import is_literal_type, is_optional_type, is_tuple_type, is_classvar
@@ -13,7 +12,6 @@ from tools.error import UnsupportedTypeError, IgnoreTypeError
 from enum import Enum
 
 from tools.serialization.json_convertible import JsonConvertible
-from tools.util.path_tools import format_os_independent, relpath
 
 WARNING_ON_UNSUPPORTED_TYPE = True
 """If true, a warning will be printed if a type is not supported."""
