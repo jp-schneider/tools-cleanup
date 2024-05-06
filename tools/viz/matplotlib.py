@@ -7,6 +7,7 @@ from typing import Any, Callable, Dict, List, Literal, Optional, Union, Tuple
 from matplotlib.colors import ListedColormap
 from matplotlib.image import AxesImage
 
+from tools.util.format import parse_format_string
 from tools.util.numpy import numpyify_image
 from tools.util.torch import VEC_TYPE
 from tools.transforms.numpy.min_max import MinMax
@@ -31,15 +32,16 @@ import math
 import sys
 import matplotlib.text as mtext
 
+
 class WrapText(mtext.Text):
     def __init__(self,
-                 x: float=0, y: float=0, text='',
+                 x: float = 0, y: float = 0, text='',
                  width: Optional[int] = None,
                  **kwargs):
         mtext.Text.__init__(self,
-                 x=x, y=y, text=text,
-                 wrap=True,
-                 **kwargs)
+                            x=x, y=y, text=text,
+                            wrap=True,
+                            **kwargs)
         if width is None:
             width = sys.maxsize
         self.width = width  # in screen pixels. You could do scaling first
@@ -66,7 +68,7 @@ def saveable(
 
     save: bool, optional
        Triggers saving of the output, Default False.
-    
+
     open: bool, optional
         Opens the saved figure in the default program, Default False.
 
@@ -74,12 +76,12 @@ def saveable(
         Path where the figure should be saved. Can be a path to a directory, or just a filename.
         If it is a filename, the figure will be saved in a default folder.
         Default default_output_dir + uuid4()
-    
+
     ext: str, optional
         File extension of the path. If path already contains an extension, this is ignored.
         Otherwise it can be a str or a list to save the figure in different formats, like ["pdf", "png"]
         Default see: default_ext
-        
+
     transparent: bool, optional
         If the generated plot should be with transparent background. Default see: default_transparent
 
@@ -94,7 +96,7 @@ def saveable(
     tight_layout: bool, optional
         If the function should call tight_layout on the figure before saving.
         Default see: default_tight_layout
-    
+
     set_interactive_mode: bool, optional
         If the function should set the interactive mode of matplotlib before calling the function.
         Default None
@@ -109,7 +111,7 @@ def saveable(
     default_ext : Union[str, List[str]], optional
         [List of] Extension[s] to save the figure, by default "png"
     default_output_dir : Optional[str], optional
-        Output directory of figures when path did not contain directory information, 
+        Output directory of figures when path did not contain directory information,
         If the Environment Variable "PLOT_OUTPUT_DIR" is set, it will be used as destination.
         by default "./temp"
     default_transparent : bool, optional
@@ -123,7 +125,8 @@ def saveable(
     """
     from uuid import uuid4
 
-    def decorator(function: Callable[[Any], Figure]) -> Callable[[Any], Figure]: # type: ignore
+    # type: ignore
+    def decorator(function: Callable[[Any], Figure]) -> Callable[[Any], Figure]:
         @wraps(function)
         def wrapper(*args, **kwargs):
             nonlocal default_output_dir
@@ -159,8 +162,10 @@ def saveable(
                     # Treat path as abspath
                     path = os.path.abspath(path)
                 else:
-                    default_output_dir = os.environ.get("PLOT_OUTPUT_DIR", default_output_dir)
-                    path = os.path.join(os.path.abspath(default_output_dir), path)
+                    default_output_dir = os.environ.get(
+                        "PLOT_OUTPUT_DIR", default_output_dir)
+                    path = os.path.join(
+                        os.path.abspath(default_output_dir), path)
                 # Check if path has extension
                 _, has_ext = os.path.splitext(path)
                 if len(has_ext) == 0:
@@ -196,7 +201,8 @@ def saveable(
         return wrapper
     return decorator
 
-def render_text(text: str, 
+
+def render_text(text: str,
                 ax: Optional[Axes],
                 width: Optional[int] = None
                 ) -> Figure:
@@ -228,15 +234,16 @@ def render_text(text: str,
     ax.add_artist(wtxt)
     return fig
 
+
 def get_mpl_figure(
-        rows: int = 1, 
-        cols: int = 1, 
+        rows: int = 1,
+        cols: int = 1,
         size: float = 5,
-        ratio_or_img: Optional[Union[float,np.ndarray]] = None,
+        ratio_or_img: Optional[Union[float, np.ndarray]] = None,
         tight: bool = False,
         subplot_kw: Optional[Dict[str, Any]] = None,
         ax_mode: Literal["1d", "2d"] = "1d",
-        ) -> Tuple[Figure, Union[Axes, List[Axes]]]:# type: ignore
+) -> Tuple[Figure, Union[Axes, List[Axes]]]:  # type: ignore
     """Create a eventually tight matplotlib figure with axes.
 
     Parameters
@@ -287,21 +294,22 @@ def get_mpl_figure(
     if tight:
         fig = plt.figure()
         fig.set_size_inches(
-            size * ratio_x * cols, 
-            size * ratio_y * rows, 
-            forward=False)  
+            size * ratio_x * cols,
+            size * ratio_y * rows,
+            forward=False)
         # (left, bottom, width, height)
         rel_width = 1 / cols
         rel_height = 1 / rows
         for i in range(rows * cols):
             col, row = divmod(i, rows)
-            ax = plt.Axes(fig, [col * rel_width, row * rel_height, rel_width, rel_height])
+            ax = plt.Axes(fig, [col * rel_width, row *
+                          rel_height, rel_width, rel_height])
             ax.set_axis_off()
             fig.add_axes(ax)
             axes.append(ax)
     else:
-        fig, ax = plt.subplots(rows, cols, figsize=(size * ratio_x * cols, 
-            size * ratio_y * rows), subplot_kw=subplot_kw)
+        fig, ax = plt.subplots(rows, cols, figsize=(size * ratio_x * cols,
+                                                    size * ratio_y * rows), subplot_kw=subplot_kw)
         axes.append(ax)
     axes = np.array(axes)
     if ax_mode == "2d" and len(axes.shape) == 1:
@@ -310,14 +318,15 @@ def get_mpl_figure(
     if ax_mode == "2d" and tight:
         axes = np.reshape(axes, (rows, cols), order="F")[::-1]
     elif ax_mode == "2d" and not tight:
-        axes = np.reshape(axes, (rows, cols), order="C")#[::-1]
+        axes = np.reshape(axes, (rows, cols), order="C")  # [::-1]
     elif ax_mode == "1d" and not tight:
         axes = np.reshape(axes, (rows * cols), order="C")
 
     if ((ax_mode == "2d" and np.multiply(*axes.shape) == 1)
-        or (ax_mode == "1d" and len(axes) == 1)):
+            or (ax_mode == "1d" and len(axes) == 1)):
         return fig, axes[0]
     return fig, axes
+
 
 def register_alpha_map(base_name: str = 'binary', renew: bool = False) -> str:
     """Registeres an alpha increasing colormap with matplotlib.
@@ -364,11 +373,13 @@ def register_alpha_map(base_name: str = 'binary', renew: bool = False) -> str:
     color_array[:, -1] = np.linspace(0, 1.0, ncolors)
 
     # create a colormap object
-    map_object = LinearSegmentedColormap.from_list(name=name, colors=color_array)
+    map_object = LinearSegmentedColormap.from_list(
+        name=name, colors=color_array)
 
     # register this new colormap with matplotlib
     plt.register_cmap(cmap=map_object)
     return name
+
 
 def should_use_logarithm(x: np.ndarray, magnitudes: int = 2, allow_zero: bool = True) -> bool:
     """Checks if the data should be plotted with logarithmic scale.
@@ -395,8 +406,9 @@ def should_use_logarithm(x: np.ndarray, magnitudes: int = 2, allow_zero: bool = 
             return False
     return np.max(x) / np.min(x) > math.pow(10, magnitudes)
 
-def preserve_legend(ax: Axes, # type: ignore
-                    patches: List[Patch], # type: ignore
+
+def preserve_legend(ax: Axes,  # type: ignore
+                    patches: List[Patch],  # type: ignore
                     **kwargs):
     """Checks if the axis has a legend and appends the patches to the legend.
     If not, it creates a new legend with the patches.
@@ -407,7 +419,7 @@ def preserve_legend(ax: Axes, # type: ignore
         The axis to check for the legend.
     """    """"""
     if ax.get_legend() is not None:
-        lgd = ax.get_legend() 
+        lgd = ax.get_legend()
         handles = list(lgd.legend_handles)
         labels = [x.get_label() for x in lgd.legend_handles]
         handles.extend(patches)
@@ -416,11 +428,12 @@ def preserve_legend(ax: Axes, # type: ignore
     else:
         ax.legend(handles=patches, **kwargs)
 
+
 def create_alpha_colormap(
         name: str,
-        color: np.ndarray, 
+        color: np.ndarray,
         ncolors: int = 256
-        ) -> LinearSegmentedColormap:
+) -> LinearSegmentedColormap:
     """Creates a linear alpha colormap with matplotlib.
     Colormap has static RGB values and linear alpha values from 0 to 1.
     Meaning 0 is transparent and 1 is opaque.
@@ -433,7 +446,7 @@ def create_alpha_colormap(
         Colorvalues of the colormap. Shape is (3, ).
     ncolors : int, optional
         Number of colors in the map, by default 256
-    
+
     Returns
     -------
     LinearSegmentedColormap
@@ -451,12 +464,14 @@ def create_alpha_colormap(
     color_array[:, -1] = np.linspace(0, 1.0, ncolors)
 
     # create a colormap object
-    map_object = LinearSegmentedColormap.from_list(name=name, colors=color_array)
+    map_object = LinearSegmentedColormap.from_list(
+        name=name, colors=color_array)
 
     return map_object
 
-def register_alpha_colormap(color: np.ndarray, 
-                            name: str, 
+
+def register_alpha_colormap(color: np.ndarray,
+                            name: str,
                             renew: bool = False,
                             ncolors: int = 256) -> str:
     """Registers a linear alpha colormap with matplotlib.
@@ -478,7 +493,7 @@ def register_alpha_colormap(color: np.ndarray,
     -------
     str
         Name of the colormap
-    """    
+    """
     import numpy as np
     import matplotlib.pyplot as plt
     from matplotlib.colors import LinearSegmentedColormap
@@ -498,6 +513,7 @@ def register_alpha_colormap(color: np.ndarray,
     # register this new colormap with matplotlib
     plt.register_cmap(cmap=map_object)
     return name
+
 
 @saveable()
 def plot_as_image(data: VEC_TYPE,
@@ -551,7 +567,7 @@ def plot_as_image(data: VEC_TYPE,
     norm : bool, optional
         If the data should be normalized, by default False
         If True, the data will be normalized to [0, 1] using MinMax normalization.
-    
+
     Returns
     -------
     AxesImage
@@ -590,9 +606,9 @@ def plot_as_image(data: VEC_TYPE,
         else:
             cmaps.append(cmap)
 
-
     if axes is None:
-        fig, axes = get_mpl_figure(rows=rows, cols=cols, size=size, tight=tight, ratio_or_img=images[0])
+        fig, axes = get_mpl_figure(
+            rows=rows, cols=cols, size=size, tight=tight, ratio_or_img=images[0])
     else:
         fig = plt.gcf()
 
@@ -602,7 +618,7 @@ def plot_as_image(data: VEC_TYPE,
     for i, ax in enumerate(itertools.chain(axes)):
         _image = images[i]
         _title = _img_title[i]
-        
+
         color_mapping = None
 
         vmin = _image.min()
@@ -616,7 +632,8 @@ def plot_as_image(data: VEC_TYPE,
             if isinstance(cscale, list):
                 _cscale = cscale[i]
             if _cscale == 'auto':
-                _cscale = 'log' if should_use_logarithm(_image.numpy()) else None
+                _cscale = 'log' if should_use_logarithm(
+                    _image.numpy()) else None
             if _cscale is not None:
                 if _cscale == 'log':
                     _image = np.log(_image)
@@ -630,7 +647,7 @@ def plot_as_image(data: VEC_TYPE,
         if isinstance(_cmap, ListedColormap):
             vmax = len(_cmap.colors) - 1
             vmin = 0
-        
+
         if "vmin" in imshow_kw:
             vmin = imshow_kw.pop("vmin")
         else:
@@ -643,7 +660,7 @@ def plot_as_image(data: VEC_TYPE,
             _cmap = imshow_kw.pop("cmap")
         if "interpolation" in imshow_kw:
             interpolation = imshow_kw.pop("interpolation")
-        
+
         if norm:
             _norm = MinMax(new_min=0, new_max=1)
             _norm.min = vmin
@@ -653,8 +670,9 @@ def plot_as_image(data: VEC_TYPE,
             vmin = _norm.new_min
             vmax = _norm.new_max
 
-        ax.imshow(_image, vmin=vmin, vmax=vmax, cmap=_cmap, interpolation=interpolation, **imshow_kw)
-        
+        ax.imshow(_image, vmin=vmin, vmax=vmax, cmap=_cmap,
+                  interpolation=interpolation, **imshow_kw)
+
         if not tight:
             ax.set_title(_title)
         if colorbar:
@@ -666,8 +684,9 @@ def plot_as_image(data: VEC_TYPE,
                     return cft.format(x)
             divider = make_axes_locatable(ax)
             cax = divider.append_axes('right', size='5%', pad=0.05)
-            fig.colorbar(ax.get_images()[0], cax=cax, format=_cbar_format, orientation='vertical')
-        
+            fig.colorbar(ax.get_images()[0], cax=cax,
+                         format=_cbar_format, orientation='vertical')
+
         if not ticks:
             ax.get_xaxis().set_ticks([])
             ax.get_yaxis().set_ticks([])
@@ -679,7 +698,7 @@ def plot_as_image(data: VEC_TYPE,
                 _cmap = plt.get_cmap(_cmap)
 
             norm = mpl.colors.Normalize(vmin=vmin, vmax=vmax)
-            for i, value in enumerate(unique_vals): 
+            for i, value in enumerate(unique_vals):
                 c = _cmap(norm(value))
                 if color_mapping is not None:
                     value = color_mapping[value]
@@ -689,6 +708,7 @@ def plot_as_image(data: VEC_TYPE,
     if title is not None:
         fig.suptitle(title)
     return fig
+
 
 def figure_to_numpy(fig: Figure, dpi: int = 300, transparent: bool = True) -> np.ndarray:
     """Converts a matplotlib figure to a numpy array.
@@ -714,11 +734,71 @@ def figure_to_numpy(fig: Figure, dpi: int = 300, transparent: bool = True) -> np
         fig.savefig(io_buf, format='raw', transparent=transparent, dpi=fig.dpi)
         io_buf.seek(0)
         arr = np.reshape(np.frombuffer(io_buf.getvalue(), dtype=np.uint8),
-                            newshape=(int(fig.bbox.bounds[3]), int(fig.bbox.bounds[2]), -1))
+                         newshape=(int(fig.bbox.bounds[3]), int(fig.bbox.bounds[2]), -1))
     return arr
 
 
-def align_marker(marker: Any, ha: Union[str, float]='center', va: Union[str, float]='center'):
+def save_as_image_stack(data: VEC_TYPE,
+                        folder_path: str,
+                        images_filename_format: str = "{index}.png",
+                        override: bool = False,
+                        mkdirs: bool = True,
+                        progress_bar: bool = False) -> List[str]:
+    from PIL import Image
+    data = numpyify_image(data)
+    filenames = parse_format_string(images_filename_format, [
+                                    dict(index=i) for i in range(data.shape[0])])
+    file_paths = [folder_path + "/" + f for f in filenames]
+    if not override:
+        file_paths = [numerated_file_name(f) for f in file_paths]
+    if mkdirs:
+        if not os.path.exists(folder_path):
+            os.makedirs(folder_path, exist_ok=True)
+    bar = None
+    if progress_bar:
+        from tqdm.auto import tqdm
+        bar = tqdm(total=data.shape[0], desc="Saving images")
+    for i in range(data.shape[0]):
+        minmax = MinMax(new_min=0, new_max=255)
+        img = minmax.fit_transform(data[i]).astype(np.uint8)
+        Image.fromarray(img).save(file_paths[i])
+        if bar is not None:
+            bar.update(1)
+
+
+def save_as_image(data: VEC_TYPE,
+                  path: str,
+                  override: bool = False,
+                  mkdirs: bool = True) -> str:
+    """Saves numpy array or torch tensor as an image.
+
+    Parameters
+    ----------
+    data : VEC_TYPE
+        Data to be saved as an image. Should be in the shape (H, W, C)
+        for numpy arrays or (C, H, W) torch tensors.
+    path : str
+        Path to save the image to.
+    override : bool, optional
+        If an existing image should be overriden, by default False
+    mkdirs : bool, optional
+        If the directories should be created if they do not exist, by default True
+    Returns
+    -------
+    str
+        The path where the image was saved.
+    """
+    img = numpyify_image(data)
+    if not override:
+        path = numerated_file_name(path)
+    if mkdirs:
+        if not os.path.exists(os.path.dirname(path)):
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+    plt.imsave(path, img)
+    return path
+
+
+def align_marker(marker: Any, ha: Union[str, float] = 'center', va: Union[str, float] = 'center'):
     """
     create markers with specified alignment.
 
@@ -755,22 +835,22 @@ def align_marker(marker: Any, ha: Union[str, float]='center', va: Union[str, flo
     https://stackoverflow.com/questions/26686722/align-matplotlib-scatter-marker-left-and-or-right
 
     """
-    
+
     from matplotlib import markers
     from matplotlib.path import Path
     if isinstance(ha, str):
         ha = {'right': -1.,
-                  'middle': 0.,
-                  'center': 0.,
-                  'left': 1.,
-                  }[ha]
+              'middle': 0.,
+              'center': 0.,
+              'left': 1.,
+              }[ha]
 
     if isinstance(va, str):
         va = {'top': -1.,
-                  'middle': 0.,
-                  'center': 0.,
-                  'bottom': 1.,
-                  }[va]
+              'middle': 0.,
+              'center': 0.,
+              'bottom': 1.,
+              }[va]
 
     # Define the base marker
     bm = markers.MarkerStyle(marker)
