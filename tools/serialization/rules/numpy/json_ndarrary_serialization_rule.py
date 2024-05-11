@@ -1,3 +1,5 @@
+import base64
+import io
 from typing import Any, Dict, List, Literal, Type
 from tools.error.argument_none_error import ArgumentNoneError
 from tools.serialization.json_convertible import JsonConvertible
@@ -7,6 +9,15 @@ try:
     import numpy as np
 except (ModuleNotFoundError, ImportError):
     pass
+
+
+def _encode_buffer(buf: bytes) -> str:
+    return base64.b64encode(buf).decode()
+
+
+def _decode_buffer(buf: str) -> bytes:
+    return base64.b64decode(buf.encode())
+
 
 class NDArrayValueWrapper(JsonConvertible):
 
@@ -20,10 +31,29 @@ class NDArrayValueWrapper(JsonConvertible):
         if decoding:
             return
         self.dtype = str(value.dtype)
-        self.value = value.tolist()
+        self.value = NDArrayValueWrapper.to_serialized_string(value)
+
+    @classmethod
+    def to_serialized_string(cls, value: np.ndarray) -> str:
+        with io.BytesIO() as buf:
+            np.save(buf, value)
+            buf.seek(0)
+            return _encode_buffer(buf.read())
+
+    @classmethod
+    def from_serialized_string(cls, value: str) -> np.ndarray:
+        with io.BytesIO() as buf:
+            buf.write(_decode_buffer(value))
+            buf.seek(0)
+            return np.load(buf)
 
     def to_python(self) -> np.ndarray:
-        return np.array(self.value).astype(np.dtype(self.dtype))
+        if isinstance(self.value, list):
+            return np.array(self.value).astype(np.dtype(self.dtype))
+        elif isinstance(self.value, str):
+            return NDArrayValueWrapper.from_serialized_string(self.value)
+        else:
+            raise ArgumentNoneError("value")
 
 
 class JsonNDArraySerializationRule(JsonSerializationRule):

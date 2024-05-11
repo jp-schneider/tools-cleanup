@@ -788,14 +788,33 @@ def save_as_image(data: VEC_TYPE,
     str
         The path where the image was saved.
     """
+    from PIL import Image
     img = numpyify_image(data)
     if not override:
         path = numerated_file_name(path)
     if mkdirs:
         if not os.path.exists(os.path.dirname(path)):
             os.makedirs(os.path.dirname(path), exist_ok=True)
-    plt.imsave(path, img)
+    Image.fromarray(img).save(path)
     return path
+
+
+def load_as_image(path: str) -> np.ndarray:
+    """Loads an image from a path.
+    Should give the same result as the data which was saved with save_as_image.
+
+    Parameters
+    ----------
+    path : str
+        Path to the image.
+
+    Returns
+    -------
+    np.ndarray
+        The loaded image.
+    """
+    from PIL import Image
+    return np.array(Image.open(path))
 
 
 def align_marker(marker: Any, ha: Union[str, float] = 'center', va: Union[str, float] = 'center'):

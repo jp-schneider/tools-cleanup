@@ -32,9 +32,10 @@ from uuid import UUID, uuid4
 
 AnyJsonConvertible = TypeVar("AnyJsonConvertible", bound="JsonConvertible")
 
+
 class JsonConvertible:
-    """Adding functionality to make a object convertable to json 
-    format by introducing an iter function over all properties and 
+    """Adding functionality to make a object convertable to json
+    format by introducing an iter function over all properties and
     specific handlers for complex types like numpy or pandas.
     Works together with the ObjectEncoder and object_hook. """
 
@@ -48,17 +49,17 @@ class JsonConvertible:
     __serializer_args__: Dict[str, Any]
     """Parameters of kwargs from the to_json_dict to pass in the convert function."""
 
-    TEMP_PROPERTIES = ['__to_json_handle_unmatched__', '__memo__', '__serializer_args__']
-
+    TEMP_PROPERTIES = ['__to_json_handle_unmatched__',
+                       '__memo__', '__serializer_args__']
 
     def __init__(self, decoding: bool = False, **kwargs):
         """Constructor of component base class.
-        The decoding arguments is used to indicate, 
-        that the class is constructed while decoding 
-        it and will be filled with values later. 
+        The decoding arguments is used to indicate,
+        that the class is constructed while decoding
+        it and will be filled with values later.
         Works in combination with the ObjectEncoder and object_hook.
         """
-        super(JsonConvertible, self).__init__()
+        super(JsonConvertible, self).__init__(**kwargs)
         self.__to_json_handle_unmatched__ = 'identity'
 
     def __iter__(self):
@@ -159,7 +160,7 @@ class JsonConvertible:
                     uid = uuid4()
                     memo[obj] = uid
         except TypeError as err:
-            pass # Ignoring error on non hashable objects like dataframes
+            pass  # Ignoring error on non hashable objects like dataframes
 
         # 1. test if method has to_json_dict, then use it
         if not (isinstance(obj, type)) and hasattr(obj, "to_json_dict"):
@@ -291,14 +292,14 @@ class JsonConvertible:
         ext = os.path.basename(path).split(os.path.extsep)[1]
         if ext == "json":
             json_str = cls.convert_to_json_str(obj,
-                                    ensure_ascii=ensure_ascii,
-                                    indent=indent, **kwargs)
+                                               ensure_ascii=ensure_ascii,
+                                               indent=indent, **kwargs)
             with open(path, "w") as f:
                 f.write(json_str)
         elif ext == "yaml" or ext == "yml":
             yaml_str = cls.convert_to_yaml_str(obj,
-                                    ensure_ascii=ensure_ascii,
-                                    indent=indent, **kwargs)
+                                               ensure_ascii=ensure_ascii,
+                                               indent=indent, **kwargs)
             with open(path, "w") as f:
                 f.write(yaml_str)
         return path
@@ -432,7 +433,7 @@ class JsonConvertible:
                 memo[self] = uid
 
         self.__memo__ = memo
-        
+
         self.__to_json_handle_unmatched__ = handle_unmatched
         # Adding a argument context to allow for parametrization of rules
         self.__serializer_args__ = kwargs
@@ -451,12 +452,11 @@ class JsonConvertible:
                 delattr(self, _property)
             if _property in as_dict:
                 as_dict.pop(_property)
-                
+
         for _property in type(self).TEMP_PROPERTIES:
             _purge_temp_property(_property)
 
         return as_dict
-        
 
     def after_decoding(self):
         """Special function which will be invoked after decoding of an object.
@@ -466,11 +466,11 @@ class JsonConvertible:
 
     # region IO
 
-    def save_to_file(self, 
-                     path: str, 
-                     override: bool = False, 
-                     ensure_ascii: bool = False, 
-                     indent: int = 4, 
+    def save_to_file(self,
+                     path: str,
+                     override: bool = False,
+                     ensure_ascii: bool = False,
+                     indent: int = 4,
                      make_dirs: bool = False,
                      **kwargs) -> str:
         """Function to save the current object as json or yaml to a file.
@@ -570,7 +570,7 @@ class JsonConvertible:
         return json_str
 
     def to_yaml(self, ensure_ascii: bool = False, **kwargs) -> str:
-        """Converts the current instance to yaml, by calling to_dict and 
+        """Converts the current instance to yaml, by calling to_dict and
         adding class name.
 
         Parameters
@@ -595,7 +595,7 @@ class JsonConvertible:
             The value of the json string.
 
         on_error : Literal['raise', 'ignore', 'warning']
-            How to behave if an error is raised on deserialization. 
+            How to behave if an error is raised on deserialization.
             raise will throw an exception, ignore just leaves object as dict and warning leaves them as dict and logs a warning.
             Default 'raise'
 
@@ -648,7 +648,7 @@ class JsonConvertible:
             The path of the file.
 
         on_error : Literal['raise', 'ignore', 'warning']
-            How to behave if an error is raised on deserialization. 
+            How to behave if an error is raised on deserialization.
             raise will throw an exception, ignore just leaves object as dict and warning leaves them as dict and logs a warning.
             Default 'raise'
 
@@ -681,7 +681,7 @@ class JsonConvertible:
             The path of the file.
 
         on_error : Literal['raise', 'ignore', 'warning']
-            How to behave if an error is raised on deserialization. 
+            How to behave if an error is raised on deserialization.
             raise will throw an exception, ignore just leaves object as dict and warning leaves them as dict and logs a warning.
             Default 'raise'
 
@@ -720,7 +720,7 @@ class JsonConvertible:
             The path of the file.
 
         on_error : Literal['raise', 'ignore', 'warning']
-            How to behave if an error is raised on deserialization. 
+            How to behave if an error is raised on deserialization.
             raise will throw an exception, ignore just leaves object as dict and warning leaves them as dict and logs a warning.
             Default 'raise'
 

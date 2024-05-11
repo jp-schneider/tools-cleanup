@@ -9,11 +9,12 @@ from tools.error import NoIterationTypeError, NoSimpleTypeError, ArgumentNoneErr
 import hashlib
 from tools.util.typing import NUMERICAL_TYPE, VEC_TYPE
 
-def get_weight_normalized_param_groups(network: torch.nn.Module, 
-                                       weight_decay: float, 
-                                       norm_suffix: str= 'weight_g', 
-                                       name_prefix: str=''):
-    
+
+def get_weight_normalized_param_groups(network: torch.nn.Module,
+                                       weight_decay: float,
+                                       norm_suffix: str = 'weight_g',
+                                       name_prefix: str = ''):
+
     norm_params = []
     unnorm_params = []
     for n, p in network.named_parameters():
@@ -22,7 +23,8 @@ def get_weight_normalized_param_groups(network: torch.nn.Module,
         else:
             unnorm_params.append(p)
 
-    prefix = (name_prefix.strip() + (" " if len(name_prefix.strip()) > 0 else ""))
+    prefix = (name_prefix.strip() +
+              (" " if len(name_prefix.strip()) > 0 else ""))
     param_groups = [{'name': f'{prefix}normalized', 'params': norm_params, 'weight_decay': weight_decay},
                     {'name': f'{prefix}unnormalized', 'params': unnorm_params}]
     return param_groups
@@ -50,8 +52,10 @@ def count_parameters(model: torch.nn.Module) -> List[Dict[str, Any]]:
         params = parameter.numel()
         total_params += params
         param_list.append(dict(name=name, learnable_params=params, id=i))
-    param_list.append(dict(name="total", learnable_params=total_params, id=len(param_list)))
+    param_list.append(
+        dict(name="total", learnable_params=total_params, id=len(param_list)))
     return param_list
+
 
 def tensorify(input: NUMERICAL_TYPE,
               dtype: Optional[torch.dtype] = None,
@@ -89,6 +93,47 @@ def tensorify(input: NUMERICAL_TYPE,
     return torch.tensor(input, dtype=dtype, device=device, requires_grad=requires_grad)
 
 
+def tensorify_image(image: VEC_TYPE,
+                    dtype: Optional[torch.dtype] = None,
+                    device: Optional[torch.device] = None,
+                    requires_grad: bool = False
+                    ) -> torch.Tensor:
+    """Converts an image to a torch tensor.
+    If its already a tensor, it will be returned as is, possibly with changed dtype, device or requires_grad.
+
+    If the image is a numpy array, it will be converted to a tensor with the shape ([B], C, H, W) or (C, H, W) depending on the shape of the input.
+    Assumes that the image is in the shape (H, W, C) or (B, H, W, C) for numpy arrays.
+
+    Parameters
+    ----------
+    image : VEC_TYPE
+        Image to convert to a tensor.
+    dtype : Optional[torch.dtype], optional
+        Dtype for the tensor, by default None
+    device : Optional[torch.device], optional
+        Device for the tensor, by default None
+    requires_grad : bool, optional
+        If tensor should require gradients, by default False
+
+    Returns
+    -------
+    torch.Tensor
+        The converted tensor.
+    """
+    is_tensor = isinstance(image, torch.Tensor)
+    image = tensorify(image, dtype=dtype, device=device,
+                      requires_grad=requires_grad)
+    if is_tensor:
+        return image
+    # Change the shape to ([B], C, H, W)
+    if len(image.shape) == 4:
+        return image.permute(0, 3, 1, 2)
+    # Change the shape to (C, H, W)
+    if len(image.shape) == 3:
+        return image.permute(2, 0, 1)
+    return image
+
+
 def fourier(x: torch.Tensor) -> torch.Tensor:
     """2D fourier transform with normalization and shift.
 
@@ -120,6 +165,7 @@ def inverse_fourier(x: torch.Tensor) -> torch.Tensor:
     """
     return torch.fft.ifft2(torch.fft.ifftshift(x), norm='forward')
 
+
 def complex_dtype(float_dtype: torch.dtype = torch.float32) -> torch.dtype:
     """Returns the corresponding precision complex dtype for a given float dtype.
 
@@ -141,7 +187,8 @@ def complex_dtype(float_dtype: torch.dtype = torch.float32) -> torch.dtype:
         return torch.complex32
     else:
         raise ValueError(f"Float dtype {float_dtype} is not supported.")
-    
+
+
 def numpy_to_torch_dtype(dtype: Union[str, np.dtype]) -> torch.dtype:
     """Converts a numpy dtype to a torch dtype.
 
@@ -161,17 +208,17 @@ def numpy_to_torch_dtype(dtype: Union[str, np.dtype]) -> torch.dtype:
         If the dtype is not supported.
     """
     numpy_to_torch_dtype_dict = {
-        np.bool       : torch.bool,
-        np.uint8      : torch.uint8,
-        np.int8       : torch.int8,
-        np.int16      : torch.int16,
-        np.int32      : torch.int32,
-        np.int64      : torch.int64,
-        np.float16    : torch.float16,
-        np.float32    : torch.float32,
-        np.float64    : torch.float64,
-        np.complex64  : torch.complex64,
-        np.complex128 : torch.complex128
+        np.bool: torch.bool,
+        np.uint8: torch.uint8,
+        np.int8: torch.int8,
+        np.int16: torch.int16,
+        np.int32: torch.int32,
+        np.int64: torch.int64,
+        np.float16: torch.float16,
+        np.float32: torch.float32,
+        np.float64: torch.float64,
+        np.complex64: torch.complex64,
+        np.complex128: torch.complex128
     }
     if isinstance(dtype, str):
         dtype = np.dtype(dtype)
@@ -179,6 +226,7 @@ def numpy_to_torch_dtype(dtype: Union[str, np.dtype]) -> torch.dtype:
         return numpy_to_torch_dtype_dict[dtype]
     else:
         raise ValueError(f"Unsupported dtype {dtype}")
+
 
 def torch_to_numpy_dtype(dtype: torch.dtype) -> np.dtype:
     """Takes a torch dtype and returns the corresponding numpy dtype.
@@ -199,22 +247,23 @@ def torch_to_numpy_dtype(dtype: torch.dtype) -> np.dtype:
         If the dtype is not supported.
     """
     torch_to_numpy_dtype_dict = {
-        torch.bool       : np.bool,
-        torch.uint8      : np.uint8,
-        torch.int8       : np.int8,
-        torch.int16      : np.int16,
-        torch.int32      : np.int32,
-        torch.int64      : np.int64,
-        torch.float16    : np.float16,
-        torch.float32    : np.float32,
-        torch.float64    : np.float64,
-        torch.complex64  : np.complex64,
-        torch.complex128 : np.complex128
+        torch.bool: np.bool,
+        torch.uint8: np.uint8,
+        torch.int8: np.int8,
+        torch.int16: np.int16,
+        torch.int32: np.int32,
+        torch.int64: np.int64,
+        torch.float16: np.float16,
+        torch.float32: np.float32,
+        torch.float64: np.float64,
+        torch.complex64: np.complex64,
+        torch.complex128: np.complex128
     }
     if dtype in torch_to_numpy_dtype_dict:
         return torch_to_numpy_dtype_dict[dtype]
     else:
         raise ValueError(f"Unsupported dtype {dtype}")
+
 
 class TensorUtil():
     """Static class for using complex tensor calculations and tensor related utilities"""
@@ -249,7 +298,6 @@ class TensorUtil():
             return object
         return TensorUtil._process_value(object, "", object, dtype=dtype, device=device)
 
-
     @staticmethod
     def to_hash(object: Any) -> Any:
         """Takes an object graph and hashes all tensors with sha256.
@@ -280,7 +328,7 @@ class TensorUtil():
             The object / module to reset.
         memo : Set[Any], optional
             Memo for already visited objects, by default None
-        """        
+        """
         if memo is None:
             memo = set()
         try:

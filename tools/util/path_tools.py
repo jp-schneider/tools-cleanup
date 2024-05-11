@@ -32,6 +32,28 @@ def relpath(from_: str, to: str, is_from_file: bool = True, is_to_file: bool = T
     else:
         return path
 
+
+def file_local(file_path: str, local_dir_path: str) -> str:
+    """Returns the local path of a file.
+    W.r.t. the local_dir_path in os independent format.
+
+    Parameters
+    ----------
+    file_path : str
+        The file path to get the local path.
+
+    Returns
+    -------
+    str
+        The local path of the file.
+    """
+    file_path = os.path.normpath(os.path.abspath(file_path))
+    local_dir_path = os.path.normpath(os.path.abspath(local_dir_path))
+    rel = relpath(local_dir_path, file_path,
+                  is_from_file=False, is_to_file=True)
+    return format_os_independent(rel)
+
+
 def format_os_independent(path: str) -> str:
     """Formats a path to be os independent.
     Replaces all backslashes with forward slashes.
@@ -71,19 +93,19 @@ def open_folder(path: str) -> None:
             subprocess.run(f"explorer {path}")
 
 
-def read_directory( 
-                    path: str,
-                    pattern: str,
-                    parser: Optional[Dict[str, callable]] = None,
-                    path_key: str = "path"
-                    ) -> List[Dict[str, Any]]:
+def read_directory(
+    path: str,
+    pattern: str,
+    parser: Optional[Dict[str, callable]] = None,
+    path_key: str = "path"
+) -> List[Dict[str, Any]]:
     """Reads a directory for files matching a regex pattern and returns a list of dictionaries with the readed groups and full filepath.
 
     Parameters
     ----------
     path : str
         The path to read the files from.
-    
+
     pattern : str
         The regex pattern to match the files.
         Specify named groups to extract the values.
@@ -120,6 +142,7 @@ def read_directory(
             res.append(item)
     return res
 
+
 def open_in_default_program(path_to_file: str) -> None:
     """Opens the given file in the systems default program.
 
@@ -143,7 +166,7 @@ def open_in_default_program(path_to_file: str) -> None:
 
 
 def numerated_file_name(path: str, max_check: int = 1000) -> str:
-    """Checks whether the given path exists, if so it will try 
+    """Checks whether the given path exists, if so it will try
     to evaluate a free path by appending a consecutive number.
 
     Parameters
@@ -182,12 +205,12 @@ def numerated_file_name(path: str, max_check: int = 1000) -> str:
             i += 1
         else:
             return path
-    raise ValueError(f"Could not find free path within max checks of: {max_check}!")
-
+    raise ValueError(
+        f"Could not find free path within max checks of: {max_check}!")
 
 
 def numerated_folder_name(path: str, max_check: int = 1000) -> str:
-    """Checks whether the given folder path exists, if so it will try 
+    """Checks whether the given folder path exists, if so it will try
     to evaluate a free path by appending a consecutive number.
 
     Parameters
@@ -225,9 +248,11 @@ def numerated_folder_name(path: str, max_check: int = 1000) -> str:
             i += 1
         else:
             return path
-    raise ValueError(f"Could not find free path within max checks of: {max_check}!")
+    raise ValueError(
+        f"Could not find free path within max checks of: {max_check}!")
 
-def replace_unallowed_chars(path: str, 
+
+def replace_unallowed_chars(path: str,
                             allow_dot: bool = True,
                             replace_with: str = "_") -> str:
     """Replaces unallowed characters in a path with a given character.
@@ -255,6 +280,7 @@ def replace_unallowed_chars(path: str,
         path = path.replace(char, replace_with)
     return path
 
+
 def replace_file_unallowed_chars(file_name: str, replace_with: str = "_") -> str:
     """Replaces unallowed characters in a file name with a given character.
 
@@ -272,6 +298,7 @@ def replace_file_unallowed_chars(file_name: str, replace_with: str = "_") -> str
         The file name with replaced characters.
     """
     base_name, ext = file_name.split(".")[:-1], file_name.split(".")[-1]
-    base_name = replace_unallowed_chars(replace_with.join(base_name), replace_with=replace_with)
+    base_name = replace_unallowed_chars(
+        replace_with.join(base_name), replace_with=replace_with)
     file_name = f"{base_name}.{ext}"
     return file_name
