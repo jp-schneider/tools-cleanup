@@ -2,7 +2,7 @@ import decimal
 import os
 import sys
 from datetime import datetime
-from typing import Any, Dict, Literal, Optional, Set, Type, TypeVar, Union
+from typing import Any, Dict, Literal, Optional, Set, Tuple, Type, TypeVar, Union
 
 from tools.error.argument_none_error import ArgumentNoneError
 
@@ -24,7 +24,7 @@ from enum import Enum
 from tools.serialization.object_reference import ObjectReference
 
 from tools.util.path_tools import numerated_file_name
-from tools.util.reflection import class_name, dynamic_import
+from tools.util.reflection import class_name, dynamic_import, propagate_init_kwargs
 
 from tools.error import NoSimpleTypeError, NoIterationTypeError, NoSerializationRuleFoundError
 from uuid import UUID, uuid4
@@ -59,8 +59,37 @@ class JsonConvertible:
         it and will be filled with values later.
         Works in combination with the ObjectEncoder and object_hook.
         """
-        super(JsonConvertible, self).__init__(**kwargs)
+        prop_kwargs, left_kwargs = propagate_init_kwargs(
+            self, JsonConvertible, kwargs)
+        super(JsonConvertible, self).__init__(**prop_kwargs)
         self.__to_json_handle_unmatched__ = 'identity'
+
+    def _set_magic_properties(self, **kwargs):
+        """Sets the magic properties of the class."""
+        left_args = dict(kwargs)
+        serializer_args = dict()
+        handle_unmatched = 'identity'
+        memo = dict()
+
+        if 'serializer_args' in left_args:
+            serializer_args = left_args.pop('serializer_args')
+        if 'to_json_handle_unmatched' in left_args:
+            handle_unmatched = left_args.pop('to_json_handle_unmatched')
+        if 'handle_unmatched' in left_args:
+            handle_unmatched = left_args.pop('handle_unmatched')
+        if 'memo' in left_args:
+            memo = left_args.pop('memo')
+
+        for key, value in left_args.items():
+            serializer_args[key] = left_args.pop(key)
+
+        if len(serializer_args) > 0:
+            self.__serializer_args__ = serializer_args
+
+        self.__to_json_handle_unmatched__ = handle_unmatched
+
+        if len(memo) > 0:
+            self.__memo__ = memo
 
     def __iter__(self):
         as_dict = {}
