@@ -5,7 +5,6 @@ from tools.transforms.fittable_transform import FittableTransform
 from tools.transforms.invertable_transform import InvertableTransform
 
 
-
 def minmax(v: torch.Tensor,
            v_min: Optional[torch.Tensor] = None,
            v_max: Optional[torch.Tensor] = None,
@@ -18,10 +17,12 @@ def minmax(v: torch.Tensor,
         v_max = torch.max(v)
     return (v - v_min)/(v_max - v_min)*(new_max - new_min) + new_min
 
+
 class MinMax(InvertableTransform, FittableTransform, torch.nn.Module):
     """MinMax normalization."""
-    def __init__(self, 
-                 new_min: torch.Tensor = -1, 
+
+    def __init__(self,
+                 new_min: torch.Tensor = -1,
                  new_max: torch.Tensor = 1,
                  dim: Optional[Union[int, Tuple[int]]] = None
                  ):
@@ -53,9 +54,9 @@ class MinMax(InvertableTransform, FittableTransform, torch.nn.Module):
     def transform(self, x: torch.Tensor) -> torch.Tensor:
         super().transform(x)
         return minmax(x, self.min, self.max, self.new_min, self.new_max)
-    
+
     def inverse_transform(self, x: torch.Tensor) -> torch.Tensor:
         return minmax(x, self.new_min, self.new_max, self.min, self.max)
-    
+
     def extra_repr(self) -> str:
         return f"dim={self.dim}"

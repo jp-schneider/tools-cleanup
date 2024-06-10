@@ -10,23 +10,28 @@ from tools.model.module_scene_node import ModuleSceneNode
 from tools.serialization.json_convertible import JsonConvertible
 from tools.model.abstract_scene_node import AbstractSceneNode
 from tools.transforms.affine.transforms3d import (assure_affine_matrix,
-                                            assure_affine_vector,
-                                            component_position_matrix,
-                                            component_rotation_matrix,
-                                            transformation_matrix)
+                                                  assure_affine_vector,
+                                                  component_position_matrix,
+                                                  component_rotation_matrix, position_quaternion_to_affine_matrix, rotmat_to_unitquat, split_transformation_matrix,
+                                                  transformation_matrix)
 from tools.util.typing import NUMERICAL_TYPE, VEC_TYPE
 from tools.util.torch import tensorify
+from nsf
 
 
 class ModuleSceneNode3D(ModuleSceneNode):
     """Pytorch Module class for nodes within a scene."""
 
-    _position: torch.Tensor
-    """The objects relative position w.r.t its parent 
-    in affine an affine transformation matrix containing is position and rotation."""
+    _translation: torch.Tensor
+    """The objects relative translation w.r.t its parent
+    as a translation vector (3, ) xyz."""
+
+    _orientation: torch.Tensor
+    """The objects relative orientation w.r.t its parent as normalized quaternion (4, ). (x, y, z, w)"""
 
     def __init__(self,
-                 position: Optional[VEC_TYPE] = None,
+                 translation: Optional[VEC_TYPE] = None,
+                 orientation: Optional[VEC_TYPE] = None,
                  name: Optional[str] = None,
                  children: Optional[Iterable['AbstractSceneNode']] = None,
                  decoding: bool = False,
@@ -34,11 +39,13 @@ class ModuleSceneNode3D(ModuleSceneNode):
                  **kwargs
                  ):
         super().__init__(name=name, children=children, decoding=decoding, **kwargs)
-        if position is None:
-            position = torch.tensor(np.identity(4), dtype=dtype)
-        position = assure_affine_matrix(position, dtype=dtype)
-        self.register_buffer("_position", position)
- 
+        if translation is None:
+            translation = torch.tensor(np.zeros(3), dtype=dtype)
+        if orientation is None:
+            orientation = torch.tensor([0., 0., 0., 1.], dtype=dtype)
+        self.register_buffer("_translation", translation)
+        self.register_buffer("_orientation", orientation)
+
     def translate(self, translation_vector: VEC_TYPE):
         """Translate the object by moving its position.
 
@@ -48,11 +55,11 @@ class ModuleSceneNode3D(ModuleSceneNode):
             The 3 / 4 element (x, y, z[, w]) vector to perform a position translation.
         """
         mat = transformation_matrix(assure_affine_vector(translation_vector,
-                                                         dtype=self._position.dtype,
-                                                         device=self._position.device,
-                                                         requires_grad=False), 
-                                                         dtype=self._position.dtype, 
-                                                         device=self._position.device)
+                                                         dtype=self._translation.dtype,
+                                                         device=self._translation.device,
+                                                         requires_grad=False),
+                                    dtype=self._translation.dtype,
+                                    device=self._translation.device)
         self._transform(mat)
 
     def __str__(self):
@@ -61,13 +68,16 @@ class ModuleSceneNode3D(ModuleSceneNode):
     def __repr__(self):
         return f"{type(self).__name__}(name={self.name})"
 
-    def get_position(self) -> VEC_TYPE:
-        return self._position
-    
+    def get_position(self, *args, **kwargs) -> VEC_TYPE:
+        return position_quaternion_to_affine_matrix(self._translation, self._orientation)
+
     def set_position(self, value: VEC_TYPE):
-        self._position = assure_affine_matrix(value)
-    
-    def get_global_position(self) -> torch.Tensor:
+        pos, rot = split_transformation_matrix(value)
+        quat = rotmat_to_unitquat(rot)
+        self._translation = pos
+        self._orientation = quat
+
+    def get_global_position(self, **kwargs) -> torch.Tensor:
         """Return the global position of the scene object, taking into account the position of the parents.
 
         Returns
@@ -76,13 +86,12 @@ class ModuleSceneNode3D(ModuleSceneNode):
             Matrix describing the global position.
         """
         if self._parent is None:
-            return self._position
+            return self.get_position()
         else:
-            return self.get_parent().get_global_position() @ self._position
+            return self.get_parent().get_global_position(**kwargs) @ self._position
 
-
-    def get_global_position_vector(self) -> torch.Tensor:
-        """Return the global position of the scene object as (x, y, z, w) vector, 
+    def get_global_position_vector(self, **kwargs) -> torch.Tensor:
+        """Return the global position of the scene object as (x, y, z, w) vector,
         taking into account the position of the parents.
 
         Returns
@@ -90,10 +99,10 @@ class ModuleSceneNode3D(ModuleSceneNode):
         torch.Tensor
             Vector describing the global position.
         """
-        return self.get_global_position()[0:4, 3]
+        return self.get_global_position(**kwargs)[0:4, 3]
 
     def _transform(self, rotation_matrix: torch.Tensor):
-        self._position = rotation_matrix @ self._position
+        self.set_position(rotation_matrix @ self.get_position())
 
     def transform(self, rotation_matrix: VEC_TYPE):
         """Rotates the position by a given affine rotation matrix of
@@ -109,8 +118,6 @@ class ModuleSceneNode3D(ModuleSceneNode):
                                        requires_grad=self._position.requires_grad)
         self._transform(rot_mat)
 
-
-
     def yaw(self, angle: Optional[NUMERICAL_TYPE] = None, mode: Literal["deg", "rad"] = 'rad') -> None:
         """Perform a yaw, rotation around Y-axis by an angle.
 
@@ -124,9 +131,9 @@ class ModuleSceneNode3D(ModuleSceneNode):
         if angle is None or angle == 0.:
             return
         self._transform(component_rotation_matrix(angle_y=angle, mode=mode,
-                                              dtype=self._position.dtype,
-                                              device=self._position.device,
-                                              requires_grad=self._position.requires_grad))
+                                                  dtype=self._position.dtype,
+                                                  device=self._position.device,
+                                                  requires_grad=self._position.requires_grad))
 
     def pitch(self, angle: Optional[NUMERICAL_TYPE] = None, mode: Literal["deg", "rad"] = 'rad') -> None:
         """Perform a pitch, rotation around Z-axis by an angle.
@@ -141,9 +148,9 @@ class ModuleSceneNode3D(ModuleSceneNode):
         if angle is None or angle == 0.:
             return
         self._transform(component_rotation_matrix(angle_z=angle, mode=mode,
-                                              dtype=self._position.dtype,
-                                              device=self._position.device,
-                                              requires_grad=self._position.requires_grad))
+                                                  dtype=self._position.dtype,
+                                                  device=self._position.device,
+                                                  requires_grad=self._position.requires_grad))
 
     def roll(self, angle: Optional[NUMERICAL_TYPE] = None, mode: Literal["deg", "rad"] = 'rad') -> None:
         """Perform a roll, rotation around X-axis by an angle.
@@ -158,9 +165,9 @@ class ModuleSceneNode3D(ModuleSceneNode):
         if angle is None or angle == 0.:
             return
         self._transform(component_rotation_matrix(angle_x=angle, mode=mode,
-                                              dtype=self._position.dtype,
-                                              device=self._position.device,
-                                              requires_grad=self._position.requires_grad))
+                                                  dtype=self._position.dtype,
+                                                  device=self._position.device,
+                                                  requires_grad=self._position.requires_grad))
 
     # region Visualization
 
@@ -200,18 +207,33 @@ class ModuleSceneNode3D(ModuleSceneNode):
 
         def get_positions(component: AbstractSceneNode) -> List[Tuple[torch.Tensor, List[torch.Tensor], List[str]]]:
             # Get global position
-            pos = component.get_global_position()
-            origin = pos[:3, 3]
+            pos = component.get_global_position(**kwargs)
+            origin = pos[..., :3, 3]
+
+            if len(pos.shape) == 2:
+                pos = pos.unsqueeze(0)
+
+            if len(origin.shape) == 1:
+                origin = origin.unsqueeze(0)
 
             # 3 Vectors indicating local coordinate system
-            x_vec = (pos @ component_position_matrix(x=coordinate_system_indicator_length))[:3, 3]
-            y_vec = (pos @ component_position_matrix(y=coordinate_system_indicator_length))[:3, 3]
-            z_vec = (pos @ component_position_matrix(z=coordinate_system_indicator_length))[:3, 3]
+            cord_vec_x = component_position_matrix(
+                x=coordinate_system_indicator_length, dtype=pos.dtype).repeat(pos.shape[0], 1, 1)
+            cord_vec_y = component_position_matrix(
+                y=coordinate_system_indicator_length, dtype=pos.dtype).repeat(pos.shape[0], 1, 1)
+            cord_vec_z = component_position_matrix(
+                z=coordinate_system_indicator_length, dtype=pos.dtype).repeat(pos.shape[0], 1, 1)
+
+            x_vec = torch.bmm(pos, cord_vec_x)[..., :3, 3]
+            y_vec = torch.bmm(pos, cord_vec_y)[..., :3, 3]
+            z_vec = torch.bmm(pos, cord_vec_z)[..., :3, 3]
 
             vecs = []
-            local_vecs = [x_vec, y_vec, z_vec]
-            texts = ["x", "y", "z"]
-            vecs.append((origin, local_vecs, texts))
+            for b in range(pos.shape[0]):
+                local_vecs = [x_vec[b], y_vec[b], z_vec[b]]
+                texts = ["x", "y", "z"]
+                vecs.append((origin[b], local_vecs, texts))
+
             for child in component.get_scene_children():
                 child: ModuleSceneNode3D
                 target = child.get_global_position()[:3, 3]
@@ -234,7 +256,8 @@ class ModuleSceneNode3D(ModuleSceneNode):
         end_y = []
         end_z = []
         colors = []
-        colors_c = ["red", "green", "blue"] + (["purple"] if plot_line_to_child else [])
+        colors_c = ["red", "green", "blue"] + \
+            (["purple"] if plot_line_to_child else [])
 
         texts = []
 
@@ -247,7 +270,8 @@ class ModuleSceneNode3D(ModuleSceneNode):
                 end_x.append(target[0])
                 end_y.append(target[1])
                 end_z.append(target[2])
-                colors.append(colors_c[min(2 + (1 if plot_line_to_child else 0), i)])
+                colors.append(
+                    colors_c[min(2 + (1 if plot_line_to_child else 0), i)])
                 texts.append(text[i])
 
         starts = np.stack([start_x, start_y, start_z], axis=1)
@@ -262,8 +286,10 @@ class ModuleSceneNode3D(ModuleSceneNode):
                 mult = 0.5 if texts[s] in ["x", "y", "z"] else 1
                 if plot_coordinate_annotations:
                     ax.text((starts[s, 0] + mult * (ends[s, 0] - starts[s, 0])),
-                            (starts[s, 1] + mult * (ends[s, 1] - starts[s, 1])),
-                            (starts[s, 2] + mult * (ends[s, 2] - starts[s, 2])),
+                            (starts[s, 1] + mult *
+                             (ends[s, 1] - starts[s, 1])),
+                            (starts[s, 2] + mult *
+                             (ends[s, 2] - starts[s, 2])),
                             texts[s],
                             horizontalalignment='center',
                             verticalalignment='center')
@@ -272,19 +298,18 @@ class ModuleSceneNode3D(ModuleSceneNode):
         if units[0] is not None:
             x_label += f" [{units[0]}]"
         ax.set_xlabel(x_label)
-        
+
         y_label = "Y"
         if units[1] is not None:
             y_label += f" [{units[1]}]"
         ax.set_ylabel(y_label)
-        
+
         z_label = "Z"
         if units[2] is not None:
             z_label += f" [{units[2]}]"
-        
+
         ax.set_zlabel(z_label)
         ax.set_aspect("equal")
-        ax.set_box_aspect
         return fig
 
     def plot_object(self, ax: Axes, **kwargs):
@@ -301,6 +326,7 @@ class ModuleSceneNode3D(ModuleSceneNode):
         """
         if kwargs.get("plot_coordinate_annotations", False) and self._name is not None:
             position = self.get_global_position_vector()
-            ax.text(*position[:3], self._name, horizontalalignment='center', verticalalignment='center')
-   
+            ax.text(*position[:3], self._name,
+                    horizontalalignment='center', verticalalignment='center')
+
     # endregion

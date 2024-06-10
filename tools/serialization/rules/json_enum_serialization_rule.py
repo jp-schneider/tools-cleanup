@@ -2,7 +2,7 @@ from typing import Any, Dict, List, Literal, Type
 from tools.error.argument_none_error import ArgumentNoneError
 from tools.serialization.json_convertible import JsonConvertible
 from .json_serialization_rule import JsonSerializationRule
-from enum import Enum
+from enum import Enum, IntEnum
 from tools.util.reflection import class_name, dynamic_import
 
 
@@ -14,7 +14,7 @@ class JsonEnumSerializationRule(JsonSerializationRule):
 
     @classmethod
     def applicable_forward_types(self) -> List[Type]:
-        return [Enum]
+        return [Enum, IntEnum]
 
     @classmethod
     def applicable_backward_types(self) -> List[Type]:

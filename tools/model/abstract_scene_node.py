@@ -8,13 +8,14 @@ import torch.nn as nn
 from matplotlib.axes import Axes
 from tools.serialization.json_convertible import JsonConvertible
 from tools.transforms.affine.transforms3d import (assure_affine_matrix,
-                                            assure_affine_vector,
-                                            component_position_matrix,
-                                            component_rotation_matrix,
-                                            transformation_matrix)
+                                                  assure_affine_vector,
+                                                  component_position_matrix,
+                                                  component_rotation_matrix,
+                                                  transformation_matrix)
 from tools.util.typing import NUMERICAL_TYPE, VEC_TYPE
 from tools.util.torch import tensorify
 from abc import abstractmethod
+
 
 class AbstractSceneNode(JsonConvertible):
     """Abstract class for nodes within a geometricall scene."""
@@ -32,17 +33,17 @@ class AbstractSceneNode(JsonConvertible):
 
     @abstractmethod
     def set_name(self, value: Optional[str]) -> None:
-        """Sets the name of the node. 
+        """Sets the name of the node.
 
         Parameters
         ----------
         value : Optional[str]
             New name of the node or None to remove the name.
-        """        
+        """
         ...
 
     @abstractmethod
-    def get_position(self) -> VEC_TYPE:
+    def get_position(self, *args, **kwargs) -> VEC_TYPE:
         """Get the local position of the node.
 
         Returns
@@ -72,8 +73,8 @@ class AbstractSceneNode(JsonConvertible):
         Parameters
         ----------
         children : AbstractSceneNode
-            Children to add. 
-        """     
+            Children to add.
+        """
         ...
 
     @abstractmethod
@@ -104,7 +105,7 @@ class AbstractSceneNode(JsonConvertible):
             The children of the node.
         """
         ...
-    
+
     @abstractmethod
     def set_parent(self, parent: Optional['AbstractSceneNode']) -> None:
         """Set the parent of the node.

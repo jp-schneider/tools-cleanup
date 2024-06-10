@@ -11,18 +11,20 @@ from tools.model.scene_node import SceneNode
 from tools.serialization.json_convertible import JsonConvertible
 from tools.model.abstract_scene_node import AbstractSceneNode
 from tools.transforms.affine.transforms3d import (assure_affine_matrix,
-                                            assure_affine_vector,
-                                            component_position_matrix,
-                                            component_rotation_matrix,
-                                            transformation_matrix)
+                                                  assure_affine_vector,
+                                                  component_position_matrix,
+                                                  component_rotation_matrix,
+                                                  transformation_matrix)
 from tools.util.typing import NUMERICAL_TYPE, VEC_TYPE
 from tools.util.torch import tensorify
 from torch.nn import ModuleList
+
 
 class ModuleSceneNode(SceneNode, torch.nn.Module):
     """Pytorch Module class for nodes within a scene."""
 
     _scene_children: ModuleList
+    """Scene children of the node as ModuleList."""
 
     def __init__(self,
                  name: Optional[str] = None,
@@ -30,9 +32,9 @@ class ModuleSceneNode(SceneNode, torch.nn.Module):
                  decoding: bool = False,
                  **kwargs
                  ):
-        super().__init__(name=name, 
-                         children=None, 
-                         decoding=decoding, 
+        super().__init__(name=name,
+                         children=None,
+                         decoding=decoding,
                          **kwargs)
         self._scene_children = ModuleList()
         if children is not None:
@@ -41,7 +43,7 @@ class ModuleSceneNode(SceneNode, torch.nn.Module):
     def set_parent(self, parent: Optional['AbstractSceneNode']) -> None:
         """Set the parent of the node.
 
-        Wraps it 
+        Wraps it
 
         Parameters
         ----------
@@ -51,7 +53,7 @@ class ModuleSceneNode(SceneNode, torch.nn.Module):
         if parent is not None:
             parent = ModuleSceneParent(parent)
         self._parent = parent
-        
+
     def add_scene_children(self, *children: 'AbstractSceneNode', **kwargs) -> None:
         """
         Add children to scene node.
@@ -60,8 +62,8 @@ class ModuleSceneNode(SceneNode, torch.nn.Module):
         Parameters
         ----------
         children : AbstractSceneNode
-            Children to add. 
-        """     
+            Children to add.
+        """
         for child in children:
             if isinstance(child, ModuleSceneParent):
                 child = child._node

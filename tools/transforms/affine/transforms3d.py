@@ -1,10 +1,11 @@
 import torch
 from typing import Literal, Optional, Tuple
-from tools.util.torch import tensorify
+from tools.util.torch import as_tensors, tensorify
 import numpy as np
 
 import numpy as np
 from tools.util.typing import NUMERICAL_TYPE, VEC_TYPE
+import torch.nn.functional as F
 
 __all__ = [
     "assure_affine_vector",
@@ -49,20 +50,26 @@ def assure_affine_vector(_input: VEC_TYPE,
     ValueError
         If shape is wrong.
     """
+    batched = False
     _input = tensorify(_input, dtype=dtype, device=device,
                        requires_grad=requires_grad)
-    if len(_input.shape) != 1:
-        raise ValueError(f"assure_affine_vector works only on 1 d tensors!")
-    if _input.shape[0] > 4 or _input.shape[0] < 3:
+    if len(_input.shape) == 2:
+        batched = True
+    if _input.shape[-1] > 4 or _input.shape[-1] < 3:
         raise ValueError(
             f"assure_affine_vector works only for tensors of length 3 or 4.")
-    if _input.shape[0] == 4:
+    if _input.shape[-1] == 4:
         return _input  # Assuming it contains already affine property
     else:
         # Length of 3
-        return torch.cat([_input, torch.tensor([1], device=_input.device, 
-                                               dtype=_input.dtype, 
-                                               requires_grad=_input.requires_grad)])
+        if not batched:
+            return torch.cat([_input, torch.tensor([1], device=_input.device,
+                                                   dtype=_input.dtype,
+                                                   requires_grad=_input.requires_grad)])
+        else:
+            return torch.cat([_input, torch.ones(_input.shape[:-1] + (1,),
+                                                 device=_input.device, dtype=_input.dtype,
+                                                 requires_grad=_input.requires_grad)], axis=-1)
 
 
 def assure_affine_matrix(_input: VEC_TYPE,
@@ -96,30 +103,42 @@ def assure_affine_matrix(_input: VEC_TYPE,
     """
     _input = tensorify(_input, dtype=dtype, device=device,
                        requires_grad=requires_grad)
-    if len(_input.shape) != 2:
-        raise ValueError(f"assure_affine_matrix works only on 2 d tensors!")
-    if _input.shape[0] > 4 or _input.shape[0] < 3:
+    if len(_input.shape) < 2:
+        raise ValueError(
+            f"assure_affine_matrix works only for dimensions (..., 3, 3) or (..., 4, 4).")
+    if _input.shape[-2] > 4 or _input.shape[-2] < 3:
         raise ValueError(
             f"assure_affine_matrix works only for tensors of length 3 or 4.")
-    if _input.shape[0] == 4:
+    if _input.shape[-2] == 4:
         pass
     else:
-        # Length of 3
+        mvec = torch.tensor(
+            [[0., 0., 0.] + ([] if _input.shape[-1] == 3 else [1.])],
+            device=_input.device, dtype=_input.dtype, requires_grad=_input.requires_grad)
+        mvec = mvec.repeat(*_input.shape[:-2], 1, 1)
         _input = torch.cat(
-            [_input, torch.tensor(
-                [[0., 0., 0.] + ([] if _input.shape[1] == 3 else [1.])],
-                device=_input.device, dtype=_input.dtype, requires_grad=_input.requires_grad)],
+            [_input, mvec],
             axis=-2)
-    if _input.shape[1] > 4 or _input.shape[1] < 3:
+    if _input.shape[-1] > 4 or _input.shape[-1] < 3:
         raise ValueError(
             f"assure_affine_matrix works only for tensors of length 3 or 4.")
-    if _input.shape[1] == 4:
+    if _input.shape[-1] == 4:
         pass
     else:
         # Length of 3
-        _input = torch.cat([_input, torch.tensor(
-            [[0., 0., 0., 1.]], device=_input.device, dtype=_input.dtype, requires_grad=_input.requires_grad).T], axis=-1)
+        mvec = torch.tensor(
+            [[0., 0., 0., 1.]], device=_input.device, dtype=_input.dtype, requires_grad=_input.requires_grad).T
+        mvec = mvec.repeat(*_input.shape[:-2], 1, 1)
+        _input = torch.cat([_input, mvec], axis=-1)
     return _input
+
+
+@as_tensors()
+def affine_rotation_matrix(orientation: VEC_TYPE) -> VEC_TYPE:
+    affine_mat = torch.eye(4, dtype=orientation.dtype, device=orientation.device).repeat(
+        *orientation.shape[:-2], 1, 1)
+    affine_mat[:, :3, :3] = orientation
+    return affine_mat
 
 
 def is_transformation_matrix(_input: VEC_TYPE) -> torch.Tensor:
@@ -165,6 +184,77 @@ def is_position_vector(_input: VEC_TYPE) -> torch.Tensor:
             return True
     return False
 
+
+@torch.jit.script
+def _split_transformation_matrix(_input: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+    """Splits a transformation matrix in its position and orientation component.
+
+    Parameters
+    ----------
+    _input : torch.Tensor
+        The input matrix
+
+    Returns
+    -------
+    Tuple[torch.Tensor, torch.Tensor]
+        The position (3, ) and orientation matrix (3, 3).
+
+    Raises
+    ------
+    ValueError
+        If input shape is of invalid shape.
+    """
+    position = _input[..., :3, 3]
+    orientation = _input[..., :3, :3]
+    return position, orientation
+
+
+@torch.jit.script
+def _compose_transformation_matrix(position: torch.Tensor, orientation: torch.Tensor) -> torch.Tensor:
+    """Composes a transformation matrix out of position and orientation.
+
+    Parameters
+    ----------
+    position : torch.Tensor
+        The position vector.
+    orientation : torch.Tensor
+        The orientation matrix.
+
+    Returns
+    -------
+    torch.Tensor
+        The composed transformation matrix.
+    """
+    shp = position.shape[:-1]
+    if len(shp) == 0:
+        mat = torch.eye(4, dtype=orientation.dtype, device=orientation.device)
+    else:
+        mat = torch.eye(4, dtype=orientation.dtype,
+                        device=orientation.device).repeat(shp[0], 1, 1)
+    mat[..., :3, :3] = orientation
+    mat[..., :3, 3] = position
+    return mat
+
+
+@as_tensors()
+def compose_transformation_matrix(position: VEC_TYPE, orientation: VEC_TYPE) -> VEC_TYPE:
+    """Composes a transformation matrix out of position and orientation.
+
+    Parameters
+    ----------
+    position : VEC_TYPE
+        The position vector.
+    orientation : VEC_TYPE
+        The orientation matrix.
+
+    Returns
+    -------
+    VEC_TYPE
+        The composed transformation matrix.
+    """
+    return _compose_transformation_matrix(position, orientation)
+
+
 def split_transformation_matrix(_input: VEC_TYPE) -> Tuple[torch.Tensor, torch.Tensor]:
     """Splits a transformation matrix in its position and orientation component.
 
@@ -183,10 +273,10 @@ def split_transformation_matrix(_input: VEC_TYPE) -> Tuple[torch.Tensor, torch.T
     ValueError
         If input shape is of invalid shape.
     """
-    if tuple(_input.shape) != (4, 4):
+    if tuple(_input.shape[-2:]) != (4, 4):
         raise ValueError(f"Invalid shape for split: {_input.shape}")
-    position = _input[:3, 3]
-    orientation = _input[:3, :3]
+    position = _input[..., :3, 3]
+    orientation = _input[..., :3, :3]
     return position, orientation
 
 
@@ -249,11 +339,13 @@ def component_rotation_matrix(angle_x: Optional[NUMERICAL_TYPE] = None,
         angle_y = torch.deg2rad(angle_y)
         angle_z = torch.deg2rad(angle_z)
 
-    rot = torch.tensor(np.identity(4), dtype=dtype, device=device, requires_grad=requires_grad)
+    rot = torch.tensor(np.identity(4), dtype=dtype,
+                       device=device, requires_grad=requires_grad)
     if dtype is None:
         rot = rot.to(dtype=torch.float32)  # Default dtype for torch.tensor
     if angle_x != 0.:
-        r_x = torch.zeros((4, 4), dtype=rot.dtype, device=rot.device, requires_grad=rot.requires_grad)
+        r_x = torch.zeros((4, 4), dtype=rot.dtype,
+                          device=rot.device, requires_grad=rot.requires_grad)
         r_x[0, 0] = 1
         r_x[1, 1] = torch.cos(angle_x)
         r_x[1, 2] = -torch.sin(angle_x)
@@ -262,7 +354,8 @@ def component_rotation_matrix(angle_x: Optional[NUMERICAL_TYPE] = None,
         r_x[3, 3] = 1
         rot @= r_x
     if angle_y != 0.:
-        r_y = torch.zeros((4, 4), dtype=rot.dtype, device=rot.device, requires_grad=rot.requires_grad)
+        r_y = torch.zeros((4, 4), dtype=rot.dtype,
+                          device=rot.device, requires_grad=rot.requires_grad)
         r_y[0, 0] = torch.cos(angle_y)
         r_y[0, 2] = torch.sin(angle_y)
         r_y[1, 1] = 1
@@ -271,7 +364,8 @@ def component_rotation_matrix(angle_x: Optional[NUMERICAL_TYPE] = None,
         r_y[3, 3] = 1
         rot @= r_y
     if angle_z != 0.:
-        r_z = torch.zeros((4, 4), dtype=rot.dtype, device=rot.device, requires_grad=rot.requires_grad)
+        r_z = torch.zeros((4, 4), dtype=rot.dtype,
+                          device=rot.device, requires_grad=rot.requires_grad)
         r_z[0, 0] = torch.cos(angle_z)
         r_z[0, 1] = -torch.sin(angle_z)
         r_z[1, 0] = torch.sin(angle_z)
@@ -280,6 +374,60 @@ def component_rotation_matrix(angle_x: Optional[NUMERICAL_TYPE] = None,
         r_z[3, 3] = 1
         rot @= r_z
     return rot
+
+
+@torch.jit.script
+def _euler_angles_to_rotation_matrix(angles: torch.Tensor) -> torch.Tensor:
+
+    x_rot = torch.eye(3, dtype=angles.dtype, device=angles.device).repeat(
+        angles.shape[0], 1, 1)
+    y_rot = torch.eye(3, dtype=angles.dtype, device=angles.device).repeat(
+        angles.shape[0], 1, 1)
+    z_rot = torch.eye(3, dtype=angles.dtype, device=angles.device).repeat(
+        angles.shape[0], 1, 1)
+
+    x_rot[:, 1, 1] = torch.cos(angles[:, 0])
+    x_rot[:, 1, 2] = -torch.sin(angles[:, 0])
+    x_rot[:, 2, 1] = torch.sin(angles[:, 0])
+    x_rot[:, 2, 2] = torch.cos(angles[:, 0])
+
+    y_rot[:, 0, 0] = torch.cos(angles[:, 1])
+    y_rot[:, 0, 2] = torch.sin(angles[:, 1])
+    y_rot[:, 2, 0] = -torch.sin(angles[:, 1])
+    y_rot[:, 2, 2] = torch.cos(angles[:, 1])
+
+    z_rot[:, 0, 0] = torch.cos(angles[:, 2])
+    z_rot[:, 0, 1] = -torch.sin(angles[:, 2])
+    z_rot[:, 1, 0] = torch.sin(angles[:, 2])
+    z_rot[:, 1, 1] = torch.cos(angles[:, 2])
+
+    return torch.bmm(torch.bmm(x_rot, y_rot), z_rot)
+
+
+@as_tensors()
+def euler_angles_to_rotation_matrix(angles: VEC_TYPE, mode: Literal["deg", "rad"] = 'rad') -> VEC_TYPE:
+    """Computes the rotation matrix out of euler angles.
+
+    Parameters
+    ----------
+    angles : VEC_TYPE
+        The euler angles in shape (..., 3).
+
+    mode : Literal[&quot;deg&quot;, &quot;rad&quot;], optional
+        If the angles are specified in radians [0, 2*pi), or degrees [0, 360), by default 'rad'
+
+    Returns
+    -------
+    VEC_TYPE
+        The rotation matrix of shape (..., 3, 3)
+    """
+    if len(angles.shape) == 1:
+        angles = angles.unsqueeze(0)
+    if len(angles.shape) != 2 or angles.shape[-1] != 3:
+        raise ValueError("Input must be of shape (..., 3)")
+    if mode == "deg":
+        angles = torch.deg2rad(angles)
+    return _euler_angles_to_rotation_matrix(angles)
 
 
 def component_position_matrix(x: Optional[NUMERICAL_TYPE] = None,
@@ -315,14 +463,15 @@ def component_position_matrix(x: Optional[NUMERICAL_TYPE] = None,
     device: torch.device, optional
         Torch device for init the tensors directly on a specific device.
     requires_grad: bool, optional
-        Whether initialized tensors will require gradient backpropagation, by default False 
+        Whether initialized tensors will require gradient backpropagation, by default False
 
     Returns
     -------
     torch.Tensor
         The 4 x 4 affine position matrix.
     """
-    position = component_transformation_matrix(x, y, z, dtype=dtype, device=device, requires_grad=requires_grad)
+    position = component_transformation_matrix(
+        x, y, z, dtype=dtype, device=device, requires_grad=requires_grad)
     rot = component_rotation_matrix(angle_x, angle_y, angle_z, mode=mode, dtype=dtype,
                                     device=device, requires_grad=requires_grad)
     return position @ rot
@@ -349,15 +498,16 @@ def component_transformation_matrix(x: Optional[NUMERICAL_TYPE] = None,
     device: torch.device, optional
         Torch device for init the tensors directly on a specific device, by default "cpu"
     requires_grad: bool, optional
-        Whether initialized tensors will require gradient backpropagation, by default False 
+        Whether initialized tensors will require gradient backpropagation, by default False
     Returns
     -------
     torch.Tensor
         Transformation matrix.
     """
-    mat = torch.tensor(np.identity(4), dtype=dtype, device=device, requires_grad=requires_grad)
+    mat = torch.tensor(np.identity(4), dtype=dtype,
+                       device=device, requires_grad=requires_grad)
     if dtype is None:
-        mat = mat.to(dtype=torch.float32) # Default dtype for torch.tensor
+        mat = mat.to(dtype=torch.float32)  # Default dtype for torch.tensor
     mat[0, 3] = x if x is not None else 0.
     mat[1, 3] = y if y is not None else 0.
     mat[2, 3] = z if z is not None else 0.
@@ -379,17 +529,19 @@ def transformation_matrix(vector: VEC_TYPE,
     device: torch.device, optional
         Torch device for init the tensors directly on a specific device, by default "cpu"
     requires_grad: bool, optional
-        Whether initialized tensors will require gradient backpropagation, by default False 
+        Whether initialized tensors will require gradient backpropagation, by default False
 
     Returns
     -------
     torch.Tensor
         The resulting transformation matrix.
     """
-    vector = tensorify(vector, dtype=dtype, device=device, requires_grad=requires_grad)
-    mat = torch.tensor(np.identity(4), dtype=dtype, device=device, requires_grad=requires_grad)
+    vector = tensorify(vector, dtype=dtype, device=device,
+                       requires_grad=requires_grad)
+    mat = torch.tensor(np.identity(4), dtype=dtype,
+                       device=device, requires_grad=requires_grad)
     if dtype is None:
-        mat = mat.to(dtype=torch.float32) # Default dtype for torch.tensor
+        mat = mat.to(dtype=torch.float32)  # Default dtype for torch.tensor
     mat[0:3, 3] = vector[0:3]
     return mat
 
@@ -409,19 +561,22 @@ def scale_matrix(vector: VEC_TYPE,
     device: torch.device, optional
         Torch device for init the tensors directly on a specific device, by default "cpu"
     requires_grad: bool, optional
-        Whether initialized tensors will require gradient backpropagation, by default False 
+        Whether initialized tensors will require gradient backpropagation, by default False
 
     Returns
     -------
     torch.Tensor
         The resulting scale matrix.
     """
-    vector = tensorify(vector, dtype=dtype, device=device, requires_grad=requires_grad)
-    mat = torch.tensor(np.identity(4), dtype=dtype, device=device, requires_grad=requires_grad)
+    vector = tensorify(vector, dtype=dtype, device=device,
+                       requires_grad=requires_grad)
+    mat = torch.tensor(np.identity(4), dtype=dtype,
+                       device=device, requires_grad=requires_grad)
     mat[0, 0] = vector[0]
     mat[1, 1] = vector[1]
     mat[2, 2] = vector[2]
     return mat
+
 
 def vector_angle(v1: VEC_TYPE, v2: VEC_TYPE) -> torch.Tensor:
     """Computes the angle between vector v1 and v2.
@@ -439,3 +594,225 @@ def vector_angle(v1: VEC_TYPE, v2: VEC_TYPE) -> torch.Tensor:
         Angle between vector.
     """
     return torch.acos(torch.dot(v1, v2) / (torch.norm(v1, keepdim=True) * torch.norm(v2, keepdim=True)))
+
+
+@torch.jit.script
+def _vector_angle_3d(v1: torch.Tensor, v2: torch.Tensor) -> torch.Tensor:
+    angle_x = torch.atan2(v2[:, 1], v2[:, 2]) - \
+        torch.atan2(v1[:, 1], v1[:, 2])  # YZ => X
+    angle_y = torch.atan2(v2[:, 0], v2[:, 2]) - \
+        torch.atan2(v1[:, 0], v1[:, 2])  # XZ => Y
+    angle_z = torch.atan2(v2[:, 0], v2[:, 1]) - \
+        torch.atan2(v1[:, 0], v1[:, 1])  # XY => Z
+    return torch.stack([angle_x, angle_y, angle_z], dim=-1)
+
+
+@as_tensors()
+def vector_angle_3d(v1: VEC_TYPE, v2: VEC_TYPE, output_mode: Literal["deg", "rad"] = "rad") -> VEC_TYPE:
+    """Computes the angle between vector v1 and v2.
+
+    Parameters
+    ----------
+    v1 : VEC_TYPE
+        The first input vector, shape (..., 3)
+    v2 : VEC_TYPE
+        The second input vector, shape (..., 3)
+
+    Returns
+    -------
+    VEC_TYPE
+        Angle between vector. Shape (...,)
+    """
+    # Get t he planes to calculate the angle against
+    unsqueezed = False
+    if len(v1.shape) == 1:
+        v1 = v1.unsqueeze(0)
+        unsqueezed = True
+    if len(v2.shape) == 1:
+        v2 = v2.unsqueeze(0)
+        unsqueezed = True
+
+    if v1.shape[-1] != 3 or v2.shape[-1] != 3:
+        raise ValueError("Input vectors must have shape (..., 3)")
+    if len(v1.shape) != len(v2.shape) or len(v1.shape) != 2:
+        raise ValueError("Input vectors must have the same shape")
+
+    ret = _vector_angle_3d(v1, v2)
+    if unsqueezed and ret.shape[0] == 1:
+        ret = ret.squeeze(0)
+    if output_mode == "deg":
+        ret = torch.rad2deg(ret)
+    return ret
+
+
+@torch.jit.script
+def unitquat_to_rotmat(quat: torch.Tensor) -> torch.Tensor:
+    """
+    Converts unit quaternion into rotation matrix representation.
+
+    Parameters
+    ----------
+    quat : torch.Tensor
+        batch of unit quaternions (B x 4 tensor, XYZW convention).
+
+    Returns
+    -------
+    torch.Tensor
+        batch of rotation matrices (B x 3 x 3 tensor).
+
+    Notes
+    ------
+    Original implementation from:
+
+    https://github.com/naver/roma
+
+    """
+    # Adapted from SciPy:
+    # https://github.com/scipy/scipy/blob/adc4f4f7bab120ccfab9383aba272954a0a12fb0/scipy/spatial/transform/rotation.py#L912
+    x = quat[..., 0]
+    y = quat[..., 1]
+    z = quat[..., 2]
+    w = quat[..., 3]
+
+    x2 = x * x
+    y2 = y * y
+    z2 = z * z
+    w2 = w * w
+
+    xy = x * y
+    zw = z * w
+    xz = x * z
+    yw = y * w
+    yz = y * z
+    xw = x * w
+
+    matrix = torch.empty(quat.shape[:-1] + (3, 3),
+                         dtype=quat.dtype, device=quat.device)
+
+    matrix[..., 0, 0] = x2 - y2 - z2 + w2
+    matrix[..., 1, 0] = 2 * (xy + zw)
+    matrix[..., 2, 0] = 2 * (xz - yw)
+
+    matrix[..., 0, 1] = 2 * (xy - zw)
+    matrix[..., 1, 1] = - x2 + y2 - z2 + w2
+    matrix[..., 2, 1] = 2 * (yz + xw)
+
+    matrix[..., 0, 2] = 2 * (xz + yw)
+    matrix[..., 1, 2] = 2 * (yz - xw)
+    matrix[..., 2, 2] = - x2 - y2 + z2 + w2
+    return matrix
+
+
+@torch.jit.script
+def flatten_batch_dims(tensor: torch.Tensor, end_dim: int) -> Tuple[torch.Tensor, List[int]]:
+    """
+
+    Utility function: flatten multiple batch dimensions into a single one, or add a batch dimension if there is none.
+
+    Parameters
+    ----------
+    tensor : torch.Tensor
+        Tensor to flatten.
+    end_dim : int
+        Maximum batch dimension to flatten (inclusive).
+
+    Returns
+    -------
+    Tuple[torch.Tensor, Tuple[int]]
+        The flattend tensor and the original batch shape.
+    """
+    batch_shape = tensor.shape[:end_dim+1]
+    flattened = tensor.flatten(end_dim=end_dim) if len(
+        batch_shape) > 0 else tensor.unsqueeze(0)
+    return flattened, batch_shape
+
+
+@torch.jit.script
+def unflatten_batch_dims(tensor: torch.Tensor, batch_shape: List[int]) -> torch.Tensor:
+    """Method to unflatten a tensor, which was previously flattened using flatten_batch_dims.
+
+    Parameters
+    ----------
+    tensor : torch.Tensor
+        Tensor to unflatten.
+    batch_shape : List[int]
+        Batch shape to unflatten.
+
+    Returns
+    -------
+    torch.Tensor
+        The unflattened tensor.
+    """
+    return tensor.reshape(batch_shape + tensor.shape[1:]) if len(batch_shape) > 0 else tensor.squeeze(0)
+
+
+@torch.jit.script
+def rotmat_to_unitquat(matrix: torch.Tensor):
+    """
+    Converts rotation matrix to unit quaternion representation.
+
+    Parameters:
+        m
+    Returns:
+        batch of unit quaternions (...x4 tensor, XYZW convention).
+
+    Notes
+    ------
+    Original implementation from:
+    https://github.com/naver/roma
+    """
+    matrix, batch_shape = flatten_batch_dims(matrix, end_dim=-3)
+    num_rotations, D1, D2 = matrix.shape
+    assert ((D1, D2) == (3, 3)), "Input should be a Bx3x3 tensor."
+
+    # Adapted from SciPy:
+    # https://github.com/scipy/scipy/blob/7cb3d751756907238996502b92709dc45e1c6596/scipy/spatial/transform/rotation.py#L480
+
+    decision_matrix = torch.empty(
+        (num_rotations, 4), dtype=matrix.dtype, device=matrix.device)
+    decision_matrix[:, :3] = matrix.diagonal(dim1=1, dim2=2)
+    decision_matrix[:, -1] = decision_matrix[:, :3].sum(dim=1)
+    choices = decision_matrix.argmax(dim=1)
+
+    quat = torch.empty((num_rotations, 4),
+                       dtype=matrix.dtype, device=matrix.device)
+
+    ind = torch.nonzero(choices != 3)[0]
+    i = choices[ind]
+    j = (i + 1) % 3
+    k = (j + 1) % 3
+
+    quat[ind, i] = 1 - decision_matrix[ind, -1] + 2 * matrix[ind, i, i]
+    quat[ind, j] = matrix[ind, j, i] + matrix[ind, i, j]
+    quat[ind, k] = matrix[ind, k, i] + matrix[ind, i, k]
+    quat[ind, 3] = matrix[ind, k, j] - matrix[ind, j, k]
+
+    ind = torch.nonzero(choices == 3)[0]
+    quat[ind, 0] = matrix[ind, 2, 1] - matrix[ind, 1, 2]
+    quat[ind, 1] = matrix[ind, 0, 2] - matrix[ind, 2, 0]
+    quat[ind, 2] = matrix[ind, 1, 0] - matrix[ind, 0, 1]
+    quat[ind, 3] = 1 + decision_matrix[ind, -1]
+
+    quat = quat / torch.norm(quat, dim=1)[:, None]
+    return unflatten_batch_dims(quat, batch_shape)
+
+
+@torch.jit.script
+def position_quaternion_to_affine_matrix(position: torch.Tensor, quaternion: torch.Tensor) -> torch.Tensor:
+    """
+    Create an affine matrix from a position and a quaternion.
+
+    Parameters
+    ----------
+    position : torch.Tensor
+        The position tensor of shape (..., 3).
+    quaternion : torch.Tensor
+        The quaternion tensor of shape (..., 4).
+
+    Returns
+    -------
+    torch.Tensor
+        The affine matrix of shape (..., 4, 4).
+    """
+    rotation_matrix = unitquat_to_rotmat(quaternion)
+    return _compose_transformation_matrix(position, rotation_matrix[..., :3, :3])

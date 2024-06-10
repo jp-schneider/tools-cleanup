@@ -93,6 +93,45 @@ def tensorify(input: NUMERICAL_TYPE,
     return torch.tensor(input, dtype=dtype, device=device, requires_grad=requires_grad)
 
 
+def as_tensors(keep_output: bool = False) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
+    """Decorator for converting all input arguments to tensors.
+
+    Will convert all input arguments numpy arrays to tensors, if they are not already.
+
+    Parameters
+    ----------
+    keep_output : bool, optional
+        If the output should be keept as it is, by default False
+
+    Returns
+    -------
+    Callable[[Callable[..., Any]], Callable[..., Any]]
+        The decorator.
+    """
+    from tools.util.numpy import numpyify
+
+    def decorator(fnc: Callable[..., Any]) -> Callable[..., Any]:
+        def wrapper(*args, **kwargs) -> Any:
+            nonlocal keep_output
+            keep_output = kwargs.pop("keep_tensor", keep_output)
+            is_numpy = False
+
+            def process(v):
+                nonlocal is_numpy
+                if isinstance(v, np.ndarray):
+                    is_numpy = True
+                    return tensorify(v)
+                return v
+            args = [process(arg) for arg in args]
+            kwargs = {k: process(v) for k, v in kwargs.items()}
+            ret = fnc(*args, **kwargs)
+            if keep_output or not is_numpy:
+                return ret
+            return numpyify(ret)
+        return wrapper
+    return decorator
+
+
 def tensorify_image(image: VEC_TYPE,
                     dtype: Optional[torch.dtype] = None,
                     device: Optional[torch.device] = None,

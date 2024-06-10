@@ -4,6 +4,7 @@ from tools.model.abstract_scene_node import AbstractSceneNode
 from tools.util.typing import VEC_TYPE
 from abc import abstractmethod
 
+
 class SceneNode(AbstractSceneNode):
     """Scene not class for nodes representing a geometrical scene / coordinate system."""
 
@@ -16,12 +17,23 @@ class SceneNode(AbstractSceneNode):
     _scene_children: Set['AbstractSceneNode']
     """Children of this node."""
 
-    def __init__(self, 
-                 name: Optional[str] = None, 
+    def __init__(self,
+                 name: Optional[str] = None,
                  children: Optional[Iterable['AbstractSceneNode']] = None,
                  decoding: bool = False,
                  **kwargs
                  ) -> None:
+        """Abstract class for nodes within a geometrical scene.
+
+        Parameters
+        ----------
+        name : Optional[str], optional
+            The name of the node for display purposes, by default None
+        children : Optional[Iterable[&#39;AbstractSceneNode&#39;]], optional
+            Its node children, by default None
+        decoding : bool, optional
+            If its currently beeing decoded and checks should be ommited, by default False
+        """
         super().__init__(decoding=decoding, **kwargs)
         self._parent = None
         self._name = name
@@ -33,7 +45,7 @@ class SceneNode(AbstractSceneNode):
         ret = super().__ignore_on_iter__()
         ret.add('_parent')
         return ret
-    
+
     def after_decoding(self, **kwargs) -> None:
         super().after_decoding(**kwargs)
         # Set parent of children
@@ -47,17 +59,17 @@ class SceneNode(AbstractSceneNode):
         -------
         Optional[str]
             The name of the node. If no name is set, returns None.
-        """        
+        """
         return self._name
 
     def set_name(self, value: Optional[str]) -> None:
-        """Sets the name of the node. 
+        """Sets the name of the node.
 
         Parameters
         ----------
         value : Optional[str]
             New name of the node or None to remove the name.
-        """        
+        """
         self._name = value
 
     def add_scene_children(self, *children: 'AbstractSceneNode', **kwargs) -> None:
@@ -68,8 +80,8 @@ class SceneNode(AbstractSceneNode):
         Parameters
         ----------
         children : AbstractSceneNode
-            Children to add. 
-        """     
+            Children to add.
+        """
         for child in children:
             child.set_parent(self)
             self._scene_children.add(child)
