@@ -1,5 +1,5 @@
 import torch
-from typing import Literal, Optional, Tuple
+from typing import List, Literal, Optional, Tuple
 from tools.util.torch import as_tensors, tensorify
 import numpy as np
 
@@ -747,14 +747,19 @@ def unflatten_batch_dims(tensor: torch.Tensor, batch_shape: List[int]) -> torch.
 
 
 @torch.jit.script
-def rotmat_to_unitquat(matrix: torch.Tensor):
+def rotmat_to_unitquat(matrix: torch.Tensor) -> torch.Tensor:
     """
     Converts rotation matrix to unit quaternion representation.
 
-    Parameters:
-        m
-    Returns:
-        batch of unit quaternions (...x4 tensor, XYZW convention).
+    Parameters
+    ---------
+    matrix : torch.Tensor
+        batch of rotation matrices (Bx3x3 tensor).
+
+    Returns
+    -------
+    torch.Tensor
+        batch of unit quaternions (Bx4 tensor, XYZW convention)
 
     Notes
     ------
@@ -777,21 +782,22 @@ def rotmat_to_unitquat(matrix: torch.Tensor):
     quat = torch.empty((num_rotations, 4),
                        dtype=matrix.dtype, device=matrix.device)
 
-    ind = torch.nonzero(choices != 3)[0]
-    i = choices[ind]
-    j = (i + 1) % 3
-    k = (j + 1) % 3
+    ind = torch.nonzero(choices != 3)
+    if len(ind) > 0:
+        i = choices[ind]
+        j = (i + 1) % 3
+        k = (j + 1) % 3
+        quat[ind, i] = 1 - decision_matrix[ind, -1] + 2 * matrix[ind, i, i]
+        quat[ind, j] = matrix[ind, j, i] + matrix[ind, i, j]
+        quat[ind, k] = matrix[ind, k, i] + matrix[ind, i, k]
+        quat[ind, 3] = matrix[ind, k, j] - matrix[ind, j, k]
 
-    quat[ind, i] = 1 - decision_matrix[ind, -1] + 2 * matrix[ind, i, i]
-    quat[ind, j] = matrix[ind, j, i] + matrix[ind, i, j]
-    quat[ind, k] = matrix[ind, k, i] + matrix[ind, i, k]
-    quat[ind, 3] = matrix[ind, k, j] - matrix[ind, j, k]
-
-    ind = torch.nonzero(choices == 3)[0]
-    quat[ind, 0] = matrix[ind, 2, 1] - matrix[ind, 1, 2]
-    quat[ind, 1] = matrix[ind, 0, 2] - matrix[ind, 2, 0]
-    quat[ind, 2] = matrix[ind, 1, 0] - matrix[ind, 0, 1]
-    quat[ind, 3] = 1 + decision_matrix[ind, -1]
+    ind = torch.nonzero(choices == 3)
+    if len(ind) > 0:
+        quat[ind, 0] = matrix[ind, 2, 1] - matrix[ind, 1, 2]
+        quat[ind, 1] = matrix[ind, 0, 2] - matrix[ind, 2, 0]
+        quat[ind, 2] = matrix[ind, 1, 0] - matrix[ind, 0, 1]
+        quat[ind, 3] = 1 + decision_matrix[ind, -1]
 
     quat = quat / torch.norm(quat, dim=1)[:, None]
     return unflatten_batch_dims(quat, batch_shape)

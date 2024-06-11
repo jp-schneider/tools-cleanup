@@ -10,6 +10,31 @@ import hashlib
 from tools.util.typing import NUMERICAL_TYPE, VEC_TYPE
 
 
+def set_jit_enabled(enabled: bool):
+    """Enables or disables JIT.
+
+    Parameters
+    ----------
+    enabled : bool
+        If JIT should be enabled.
+    """
+    if torch.__version__ < "1.7":
+        torch.jit._enabled = enabled
+    else:
+        if enabled:
+            torch.jit._state.enable()
+        else:
+            torch.jit._state.disable()
+
+
+def jit_enabled():
+    """Gets the current JIT state."""
+    if torch.__version__ < "1.7":
+        return torch.jit._enabled
+    else:
+        return torch.jit._state._enabled.enabled
+
+
 def get_weight_normalized_param_groups(network: torch.nn.Module,
                                        weight_decay: float,
                                        norm_suffix: str = 'weight_g',
