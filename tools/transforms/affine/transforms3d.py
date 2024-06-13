@@ -237,7 +237,7 @@ def _compose_transformation_matrix(position: torch.Tensor, orientation: torch.Te
 
 
 @as_tensors()
-def compose_transformation_matrix(position: VEC_TYPE, orientation: VEC_TYPE) -> VEC_TYPE:
+def compose_transformation_matrix(position: Optional[VEC_TYPE] = None, orientation: Optional[VEC_TYPE] = None) -> VEC_TYPE:
     """Composes a transformation matrix out of position and orientation.
 
     Parameters
@@ -252,6 +252,18 @@ def compose_transformation_matrix(position: VEC_TYPE, orientation: VEC_TYPE) -> 
     VEC_TYPE
         The composed transformation matrix.
     """
+    if position is None and orientation is None:
+        raise ValueError("At least one of the inputs must be provided.")
+    if position is None:
+        position = torch.zeros(orientation.shape[:-2] + (3, ),
+                               dtype=orientation.dtype,
+                               device=orientation.device
+                               )
+    if orientation is None:
+        orientation = torch.eye(3, dtype=position.dtype,
+                                device=position.device).repeat(
+            position.shape[:-1] + (1, 1)
+        )
     return _compose_transformation_matrix(position, orientation)
 
 

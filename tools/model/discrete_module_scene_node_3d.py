@@ -79,8 +79,14 @@ class DiscreteModuleSceneNode3D(ModuleSceneNode3D):
                              of position matricies: \n {position[torch.unique(w[:, 0])]}")
         return pos, quat
 
-    def get_position(self, *args, **kwargs) -> VEC_TYPE:
-        return position_quaternion_to_affine_matrix(self._translation, self._orientation)
+    def get_translation(self) -> torch.Tensor:
+        return self._translation
+
+    def get_orientation(self) -> torch.Tensor:
+        return self._orientation
+
+    def get_position(self, *args, **kwargs) -> torch.Tensor:
+        return position_quaternion_to_affine_matrix(self.get_translation(), self.get_orientation())
 
     def set_position(self, value: VEC_TYPE):
         pos, quat = self._parse_position(value)
@@ -89,8 +95,8 @@ class DiscreteModuleSceneNode3D(ModuleSceneNode3D):
 
     # region Transformation
 
-    def _transform(self, rotation_matrix: torch.Tensor, **kwargs):
-        self.set_position(rotation_matrix @ self.get_position(**kwargs))
+    def _transform(self, affine_matrix: torch.Tensor, **kwargs):
+        self.set_position(affine_matrix @ self.get_position(**kwargs))
 
     def translate(self, translation_vector: VEC_TYPE):
         """Translate the object by moving its position.
