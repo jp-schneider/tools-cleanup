@@ -13,7 +13,8 @@ from tools.error import ArgumentNoneError
 from tools.util.typing import DEFAULT
 from tools.util.reflection import dynamic_import
 
-CAMEL_SEPERATOR_PATTERN = re.compile(r'((?<!^)(?<!_))((?=[A-Z][a-z])|((?<=[a-z])(?=[A-Z])))')
+CAMEL_SEPERATOR_PATTERN = re.compile(
+    r'((?<!^)(?<!_))((?=[A-Z][a-z])|((?<=[a-z])(?=[A-Z])))')
 UPPER_SNAKE_PATTERN = re.compile(r'^([A-Z]+_?)*([A-Z]+)$')
 UPPER_PATTERN = re.compile(r'^([A-Z]+)$')
 
@@ -44,12 +45,13 @@ def to_snake_case(input: str) -> str:
     if input is None:
         raise ArgumentNoneError("input")
     if not isinstance(input, str):
-        raise ValueError(f"Type of input should be string but is: {type(input).__name__}")
+        raise ValueError(
+            f"Type of input should be string but is: {type(input).__name__}")
     if ('_' not in input or not UPPER_SNAKE_PATTERN.match(input)) and not UPPER_PATTERN.match(input):
         return CAMEL_SEPERATOR_PATTERN.sub('_', input).lower()
     else:
         return input.lower()
-    
+
 
 def snake_to_upper_camel(input: str, sep: str = "") -> str:
     """Converts a snake '_' pattern to a upper camel case pattern.
@@ -69,11 +71,13 @@ def snake_to_upper_camel(input: str, sep: str = "") -> str:
     words = [x.capitalize() for x in input.split("_")]
     return sep.join(words)
 
+
 class TimeDeltaTemplate(Template):
     """Class for formating timedelta with strftime like syntax"""
     delimiter = "%"
 
-def strfdelta(delta: timedelta, format: str) -> str:
+
+def strfdelta(delta: timedelta, format: str = "%D days %H:%M:%S.%f") -> str:
     """Formats the timedelta.
     Supported substitudes:
 
@@ -81,6 +85,7 @@ def strfdelta(delta: timedelta, format: str) -> str:
     %H - Hours
     %M - Minutes
     %S - Seconds
+    %f - Microseconds
 
     Parameters
     ----------
@@ -97,6 +102,7 @@ def strfdelta(delta: timedelta, format: str) -> str:
     d = {"D": delta.days}
     d["H"], rem = divmod(delta.seconds, 3600)
     d["M"], d["S"] = divmod(rem, 60)
+    d["f"] = delta.microseconds
     t = TimeDeltaTemplate(format)
     d = {k: f'{v:02d}' for k, v in d.items()}
     return t.substitute(**d)
@@ -116,7 +122,7 @@ def destinctive_number_float_format(values: Series,
     max_decimals : int, optional
         The upper limit for decimal digits, by default 10
     use_scientific_format : Optional[bool], optional
-        If the scientific format should be used or not, by default decision will be based 
+        If the scientific format should be used or not, by default decision will be based
         on how many distinctive decimal places are needed., by default None
     distinctive_digits_for_scientific_format : int, optional
         The number of destinctive digits for the scientific format, by default 4
@@ -192,12 +198,12 @@ def destinctive_number_float_format(values: Series,
     return f"{{:.{num_destinctive_digits}{'e' if use_scientific_format else 'f'}}}"
 
 
-def latex_postprocessor(text: str, 
-            replace_underline: bool = True,
-            replace_bfseries: bool = True,
-            replace_text_decoration_underline: bool = True,
-            replace_booktabs_rules: bool = True
-            ) -> str:
+def latex_postprocessor(text: str,
+                        replace_underline: bool = True,
+                        replace_bfseries: bool = True,
+                        replace_text_decoration_underline: bool = True,
+                        replace_booktabs_rules: bool = True
+                        ) -> str:
     """Postprocesses a latex string.
     Can applied to pandas to latex commands to fix incorrect latex syntax.
 
@@ -214,7 +220,7 @@ def latex_postprocessor(text: str,
     -------
     str
         The processed string.
-    """    
+    """
     # Pattern
     UNDERSCORE_IN_TEXT = r"(?<=([A-z0-9\_]))\_(?=[A-z0-9\_])"
     BF_SERIES = r"(\\bfseries)( )(?P<text>[A-z0-9.\-\_\+]+)( )"
@@ -232,7 +238,9 @@ def latex_postprocessor(text: str,
         text = text.replace("\\bottomrule", "\\hline")
     return text
 
+
 E = TypeVar('E', bound=Enum)
+
 
 def parse_enum(cls: Type[E], value: Any) -> E:
     """Parses a value to an enum.
@@ -256,21 +264,24 @@ def parse_enum(cls: Type[E], value: Any) -> E:
         If the value is not of the correct type or cannot be parsed.
     """
     if not issubclass(cls, Enum):
-        raise ValueError(f"Type of cls should be an Enum but is: {type(cls).__name__}")
+        raise ValueError(
+            f"Type of cls should be an Enum but is: {type(cls).__name__}")
     if isinstance(value, cls):
         return value
     elif isinstance(value, (str, int)):
         return cls(value)
     else:
-        raise ValueError(f"Type of value for creating: {cls.__name__} should be either string or int but is: {type(value).__name__}")
-        
+        raise ValueError(
+            f"Type of value for creating: {cls.__name__} should be either string or int but is: {type(value).__name__}")
 
-def parse_type(_type_or_str: Union[Type, str], 
+
+def parse_type(_type_or_str: Union[Type, str],
                parent_type: Optional[Union[Type, Tuple[Type, ...]]] = None,
                instance_type: Optional[Type] = None,
                variable_name: Optional[str] = None,
                default_value: Optional[Any] = None,
-               handle_invalid: Literal["set_default", "raise", "set_none"] = "raise" ,
+               handle_invalid: Literal["set_default",
+                                       "raise", "set_none"] = "raise",
                handle_not_a_class: Literal["ignore", "raise"] = "raise"
                ) -> Type:
     """Parses a type from a string or type.
@@ -298,7 +309,7 @@ def parse_type(_type_or_str: Union[Type, str],
         How to handle if the type is not a class, by default "raise"
         "ignore" - Will ignore the error and check for isinstance
         "raise" - Will raise an error
-        
+
     Returns
     -------
     Type
@@ -312,13 +323,15 @@ def parse_type(_type_or_str: Union[Type, str],
             else:
                 raise ValueError(error_message)
         elif handle_invalid == "set_default":
-            logger.warning(prefix + error_message + f" Setting default value: {default_value}")
+            logger.warning(prefix + error_message +
+                           f" Setting default value: {default_value}")
             return default_value
         elif handle_invalid == "set_none":
             logger.warning(prefix + error_message + " Setting None")
             return None
         else:
-            raise ValueError(prefix + f"Invalid handle_invalid: {handle_invalid}")
+            raise ValueError(
+                prefix + f"Invalid handle_invalid: {handle_invalid}")
     _parsed_type = None
     if isinstance(_type_or_str, str):
         try:
@@ -341,8 +354,9 @@ def parse_type(_type_or_str: Union[Type, str],
             elif handle_not_a_class == "ignore":
                 check_instance = True
             else:
-                raise ValueError(f"Invalid handle_not_a_class: {handle_not_a_class}")
-            
+                raise ValueError(
+                    f"Invalid handle_not_a_class: {handle_not_a_class}")
+
     if instance_type is not None and check_instance:
         if not isinstance(_parsed_type, instance_type):
             return handle_error(f"Type: {_parsed_type.__name__} is not an instance of: {instance_type.__name__}")
@@ -350,9 +364,9 @@ def parse_type(_type_or_str: Union[Type, str],
 
 
 def _format_value(
-                value: Any, 
-                format: Optional[str] = None,
-                default_formatters: Optional[Dict[Type, Callable[[Any], str]]] = None) -> str:
+        value: Any,
+        format: Optional[str] = None,
+        default_formatters: Optional[Dict[Type, Callable[[Any], str]]] = None) -> str:
     if format is not None and len(format) > 0:
         if "{" in format and "}" in format:
             return format.format(value)
@@ -362,6 +376,7 @@ def _format_value(
         default_formatters = _get_default_formatters()
     fmt = default_formatters.get(type(value), str)
     return fmt(value)
+
 
 def _get_default_formatters() -> Dict[Type, Callable[[Any], str]]:
     return {
@@ -376,12 +391,14 @@ def _get_default_formatters() -> Dict[Type, Callable[[Any], str]]:
         type(None): lambda x: "None"
     }
 
-def parse_format_string(format_string: str, 
-                        obj_list: List[Any], 
+
+def parse_format_string(format_string: str,
+                        obj_list: List[Any],
                         index_variable: str = "index",
                         allow_invocation: bool = False,
                         additional_variables: Optional[Dict[str, Any]] = None,
-                        default_formatters: Optional[Dict[Type, Callable[[Any], str]]] = DEFAULT,
+                        default_formatters: Optional[Dict[Type, Callable[[
+                            Any], str]]] = DEFAULT,
                         index_offset: int = 0
                         ) -> List[str]:
     """Formats content of a list of objects with a format string for each object.
@@ -394,7 +411,7 @@ def parse_format_string(format_string: str,
 
         Every variable in the format string will be replaced by the corresponding value of the config.
         Format specified as {variable:formatter} can be used the format the variable with normal string formatting.
-        
+
         Every property of the obj can be used as a variable, in addition to `index_variable` which is the index of the obj in the provided list.
 
     obj_list : List[Any]
@@ -419,11 +436,12 @@ def parse_format_string(format_string: str,
     pattern = r"\{(?P<variable>[A-z0-9\_]+)(?P<formatter>:[0-9A-z\.\,]+)?\}"
     # Check which variables should included in the format string
     variables = re.findall(pattern, format_string)
-    
+
     keys = [variable[0] for variable in variables]
-    formats = [variable[1] if len(variable) > 1 else None for variable in variables]
+    formats = [variable[1] if len(
+        variable) > 1 else None for variable in variables]
     key_formats = dict(zip(keys, formats))
-    
+
     if additional_variables is None:
         additional_variables = dict()
 
@@ -447,12 +465,14 @@ def parse_format_string(format_string: str,
                     if key in additional_variables:
                         value = additional_variables[key]
                     else:
-                        raise AttributeError(f"Object does not have a property: {key}")
+                        raise AttributeError(
+                            f"Object does not have a property: {key}")
 
             if callable(value) and allow_invocation:
                 value = value()
 
-            _formatted_value = _format_value(value, format=format, default_formatters=default_formatters)
+            _formatted_value = _format_value(
+                value, format=format, default_formatters=default_formatters)
 
             name = name.replace("{" + key + format + "}", _formatted_value)
         results.append(name)

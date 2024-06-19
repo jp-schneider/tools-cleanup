@@ -733,7 +733,8 @@ def flatten_batch_dims(tensor: torch.Tensor, end_dim: int) -> Tuple[torch.Tensor
     Tuple[torch.Tensor, Tuple[int]]
         The flattend tensor and the original batch shape.
     """
-    batch_shape = tensor.shape[:end_dim+1]
+    ed = end_dim + 1 if end_dim != -1 else None
+    batch_shape = tensor.shape[:ed]
     flattened = tensor.flatten(end_dim=end_dim) if len(
         batch_shape) > 0 else tensor.unsqueeze(0)
     return flattened, batch_shape

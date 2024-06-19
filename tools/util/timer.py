@@ -2,6 +2,7 @@ import time
 from datetime import datetime, timedelta
 from tools.util.format import strfdelta
 
+
 class Timer:
     """Time class which can be used as context manager to measure times.
 
@@ -83,9 +84,8 @@ class Timer:
         self._check_values()
         return timedelta(seconds=self._end - self._start)
 
-
     @classmethod
-    def strfdelta(cls, timedelta: timedelta, format: str) -> str:
+    def strfdelta(cls, timedelta: timedelta, format: str = "%D days %H:%M:%S.%f") -> str:
         return strfdelta(timedelta, format)
 
     def elapsed(self) -> timedelta:
