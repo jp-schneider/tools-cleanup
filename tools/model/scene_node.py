@@ -3,6 +3,9 @@ from typing import Iterable, Optional, Set, FrozenSet
 from tools.model.abstract_scene_node import AbstractSceneNode
 from tools.util.typing import VEC_TYPE
 from abc import abstractmethod
+from tools.logger.logging import logger
+from tools.logger.prefix_logger_adapter import PrefixLoggerAdapter
+from logging import Logger
 
 
 class SceneNode(AbstractSceneNode):
@@ -16,6 +19,9 @@ class SceneNode(AbstractSceneNode):
 
     _scene_children: Set['AbstractSceneNode']
     """Children of this node."""
+
+    logger: Logger
+    """Logger for this scene node."""
 
     def __init__(self,
                  name: Optional[str] = None,
@@ -40,6 +46,10 @@ class SceneNode(AbstractSceneNode):
         self._scene_children = set()
         if children is not None:
             self.add_scene_children(*children)
+        _logger = logger.getChild(type(self).__name__ + f"_{id(self)}")
+        if name is not None and len(name) > 0:
+            _logger = PrefixLoggerAdapter(_logger, dict(prefix=name))
+        self.logger = _logger
 
     def __ignore_on_iter__(self) -> Set[str]:
         ret = super().__ignore_on_iter__()

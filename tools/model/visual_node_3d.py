@@ -8,6 +8,7 @@ from tools.model.abstract_scene_node import AbstractSceneNode
 from tools.model.scene_node import SceneNode
 from tools.transforms.affine.transforms3d import component_position_matrix
 from tools.viz.matplotlib import saveable
+from mpl_toolkits.mplot3d import Axes3D
 
 
 class VisualNode3D(SceneNode):
@@ -21,6 +22,7 @@ class VisualNode3D(SceneNode):
                    plot_coordinate_annotations: bool = True,
                    coordinate_system_indicator_length: float = 0.3,
                    units: Optional[Union[List[str], str]] = None,
+                   ax: Optional[Axes3D] = None,
                    **kwargs
                    ) -> Figure:
         """Returns a matplotlib 3d plot with the scene.
@@ -40,9 +42,14 @@ class VisualNode3D(SceneNode):
         elif isinstance(units, str):
             units = [units] * 3
 
-        fig = plt.figure()
-        ax = plt.subplot(projection='3d')
-        ax: Axes3D
+        init_ax = False
+
+        if ax is None:
+            fig = plt.figure()
+            ax = plt.subplot(projection='3d')
+            init_ax = True
+        else:
+            fig = ax.get_figure()
 
         args = dict(plot_coordinate_systems=plot_coordinate_systems,
                     plot_coordinate_annotations=plot_coordinate_annotations,
@@ -80,7 +87,7 @@ class VisualNode3D(SceneNode):
 
             for child in component.get_scene_children():
                 child: VisualNode3D
-                target = child.get_global_position()[:3, 3]
+                target = child.get_global_position()[..., :3, 3]
                 if plot_line_to_child:
                     local_vecs.append(target)
                     texts.append("")
@@ -138,22 +145,23 @@ class VisualNode3D(SceneNode):
                             horizontalalignment='center',
                             verticalalignment='center')
 
-        x_label = "X"
-        if units[0] is not None:
-            x_label += f" [{units[0]}]"
-        ax.set_xlabel(x_label)
+        if init_ax:
+            x_label = "X"
+            if units[0] is not None:
+                x_label += f" [{units[0]}]"
+            ax.set_xlabel(x_label)
 
-        y_label = "Y"
-        if units[1] is not None:
-            y_label += f" [{units[1]}]"
-        ax.set_ylabel(y_label)
+            y_label = "Y"
+            if units[1] is not None:
+                y_label += f" [{units[1]}]"
+            ax.set_ylabel(y_label)
 
-        z_label = "Z"
-        if units[2] is not None:
-            z_label += f" [{units[2]}]"
+            z_label = "Z"
+            if units[2] is not None:
+                z_label += f" [{units[2]}]"
 
-        ax.set_zlabel(z_label)
-        ax.set_aspect("equal")
+            ax.set_zlabel(z_label)
+            ax.set_aspect("equal")
         return fig
 
     def plot_object(self, ax: Axes, **kwargs):

@@ -12,6 +12,10 @@ if torch is not None:
     VEC_TYPE = TypeVar("VEC_TYPE", bound=Union[torch.Tensor, np.ndarray])
     """Vector type, like torch.Tensor or numpy.ndarray."""
 
+    REAL_TYPE = TypeVar(
+        "REAL_TYPE", bound=Union[torch.Tensor, np.generic, int, float, decimal.Decimal])
+    """Real type which can be converted to a tensor."""
+
     NUMERICAL_TYPE = TypeVar(
         "NUMERICAL_TYPE", bound=Union[torch.Tensor, np.generic, int, float, complex, decimal.Decimal])
     """Numerical type which can be converted to a tensor."""
@@ -20,13 +24,18 @@ else:
     VEC_TYPE = TypeVar("VEC_TYPE", bound=np.ndarray)
     """Vector type, like torch.Tensor or numpy.ndarray."""
 
+    REAL_TYPE = TypeVar(
+        "REAL_TYPE", bound=Union[np.generic, int, float, decimal.Decimal])
+    """Real type which can be converted to a numpy.ndarray."""
+
     NUMERICAL_TYPE = TypeVar(
         "NUMERICAL_TYPE", bound=Union[np.generic, int, float, complex, decimal.Decimal])
-    """Numerical type which can be converted to a tensor."""
+    """Numerical type which can be converted to a numpy.ndarray."""
 
 
 class _DEFAULT():
     pass
+
 
 DEFAULT = _DEFAULT()
 """Default value singleton."""
