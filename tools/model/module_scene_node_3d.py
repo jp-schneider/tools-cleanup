@@ -57,6 +57,7 @@ class ModuleSceneNode3D(ModuleSceneNode, VisualNode3D):
         return self.get_global_position(**kwargs)[0:4, 3]
 
     # region Visualization
+    @torch.no_grad()
     def plot_object(self, ax: Axes, **kwargs):
         """Gets a projection 3D axis and is called during plot_coordinates
         function. Can be used to plot arbitrary objects.
@@ -73,5 +74,13 @@ class ModuleSceneNode3D(ModuleSceneNode, VisualNode3D):
             position = self.get_global_position_vector()
             ax.text(*position[:3], self._name,
                     horizontalalignment='center', verticalalignment='center')
+
+    @saveable()
+    @torch.no_grad()
+    def plot_scene(self,
+                   *args,
+                   **kwargs
+                   ) -> Figure:
+        return super().plot_scene(*args, **kwargs)
 
     # endregion

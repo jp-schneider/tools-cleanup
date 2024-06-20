@@ -735,8 +735,17 @@ def flatten_batch_dims(tensor: torch.Tensor, end_dim: int) -> Tuple[torch.Tensor
     """
     ed = end_dim + 1 if end_dim != -1 else None
     batch_shape = tensor.shape[:ed]
-    flattened = tensor.flatten(end_dim=end_dim) if len(
-        batch_shape) > 0 else tensor.unsqueeze(0)
+
+    expected_dim = -1 if end_dim >= 0 else abs(end_dim)
+
+    if len(batch_shape) > 0:
+        flattened = tensor.flatten(end_dim=end_dim)
+    else:
+        flattened = tensor.unsqueeze(0)
+        if expected_dim > 0:
+            missing = expected_dim - len(flattened.shape)
+            for _ in range(missing):
+                flattened = flattened.unsqueeze(0)
     return flattened, batch_shape
 
 
@@ -756,7 +765,15 @@ def unflatten_batch_dims(tensor: torch.Tensor, batch_shape: List[int]) -> torch.
     torch.Tensor
         The unflattened tensor.
     """
-    return tensor.reshape(batch_shape + tensor.shape[1:]) if len(batch_shape) > 0 else tensor.squeeze(0)
+
+    if len(batch_shape) > 0:
+        if not isinstance(batch_shape, list):
+            batch_shape = list(batch_shape)
+        cur_dim = list(tensor.shape[1:])
+        new_dims = batch_shape + cur_dim
+        return tensor.reshape(new_dims)
+    else:
+        return tensor.squeeze(0)
 
 
 @torch.jit.script
