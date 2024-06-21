@@ -13,8 +13,8 @@ from tools.model.abstract_scene_node import AbstractSceneNode
 from tools.transforms.affine.transforms3d import (assure_affine_matrix,
                                                   assure_affine_vector,
                                                   component_position_matrix,
-                                                  component_rotation_matrix, position_quaternion_to_affine_matrix, rotmat_to_unitquat, split_transformation_matrix,
-                                                  transformation_matrix)
+                                                  component_rotation_matrix, flatten_batch_dims, position_quaternion_to_affine_matrix, rotmat_to_unitquat, split_transformation_matrix,
+                                                  transformation_matrix, unflatten_batch_dims)
 from tools.util.typing import NUMERICAL_TYPE, VEC_TYPE
 from tools.util.torch import tensorify
 from tools.viz.matplotlib import saveable
@@ -55,6 +55,26 @@ class ModuleSceneNode3D(ModuleSceneNode, VisualNode3D):
             Vector describing the global position.
         """
         return self.get_global_position(**kwargs)[0:4, 3]
+
+    def local_to_global(self, v: torch.Tensor, **kwargs) -> torch.Tensor:
+        """Converts local vectors to global vectors.
+
+        Parameters
+        ----------
+        v : torch.Tensor
+            Vectors of shape ([... B,] 4) to convert.
+
+        Returns
+        -------
+        torch.Tensor
+            Vectors in global coordinates. Shape is ([... B,] 4).
+        """
+        v, v_batch_shape = flatten_batch_dims(v, -2)
+        glob_mat, _ = flatten_batch_dims(
+            self.get_global_position(**kwargs), -3)
+        res = torch.bmm(glob_mat.repeat(
+            v.shape[0], 1, 1), v.unsqueeze(-1)).squeeze(-1)
+        return unflatten_batch_dims(res, v_batch_shape)
 
     # region Visualization
     @torch.no_grad()
