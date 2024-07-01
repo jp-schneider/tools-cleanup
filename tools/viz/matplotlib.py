@@ -7,6 +7,7 @@ from typing import Any, Callable, Dict, List, Literal, Optional, Union, Tuple
 from matplotlib.colors import ListedColormap
 from matplotlib.image import AxesImage
 
+from tools.segmentation.masking import value_mask_to_channel_masks
 from tools.util.format import parse_format_string
 from tools.util.numpy import numpyify_image
 from tools.util.torch import VEC_TYPE
@@ -348,6 +349,7 @@ def register_alpha_map(base_name: str = 'binary', renew: bool = False) -> str:
     import numpy as np
     import matplotlib.pyplot as plt
     from matplotlib.colors import LinearSegmentedColormap
+    from matplotlib import colormaps
 
     name = f'alpha_{base_name}'
 
@@ -360,7 +362,7 @@ def register_alpha_map(base_name: str = 'binary', renew: bool = False) -> str:
             return name  # Already exists
         else:
             from matplotlib import cm
-            cm._colormaps.unregister(name)
+            colormaps.unregister(name)
 
     # get colormap
     ncolors = 256
@@ -377,7 +379,7 @@ def register_alpha_map(base_name: str = 'binary', renew: bool = False) -> str:
         name=name, colors=color_array)
 
     # register this new colormap with matplotlib
-    plt.register_cmap(cmap=map_object)
+    colormaps.register(cmap=map_object)
     return name
 
 
@@ -884,3 +886,167 @@ def align_marker(marker: Any, ha: Union[str, float] = 'center', va: Union[str, f
     m_arr[:, 1] += va / 2
 
     return Path(m_arr, bm.get_path().codes)
+
+
+@saveable()
+def plot_mask(image: VEC_TYPE,
+              mask: VEC_TYPE,
+              size: int = 5,
+              title: str = None,
+              tight: bool = False,
+              background_value: int = 0,
+              ignore_class: Optional[int] = None,
+              _colors: Optional[List[str]] = None,
+              color: str = "#5999cb",
+              contour_linewidths: float = 2,
+              mask_mode: Literal['channel_mask',
+                                 'value_mask'] = 'channel_mask',
+              ax: Optional[Axes] = None,
+              darkening_background: float = 0.7,
+              labels: Optional[List[str]] = None,
+              lined_contours: bool = True,
+              filled_contours: bool = False,
+              axes_description: bool = False,
+              image_cmap: Optional[Any] = None,
+              **kwargs) -> Figure:  # type: ignore
+    import matplotlib.patches as mpatches
+    from tools.transforms import ToNumpyImage
+    from matplotlib.colors import to_rgba, to_rgb
+    from collections.abc import Iterable
+
+    to_numpy = ToNumpyImage()
+    mask = to_numpy(mask)
+    image = to_numpy(image)
+
+    mask = mask.squeeze()
+    if len(mask.shape) == 2:
+        mask = mask[..., None]
+    # Check if mask contains multiple classes
+
+    if ignore_class is not None:
+        fill = np.zeros_like(mask)
+        fill.fill(background_value)
+        mask = np.where(mask == ignore_class, fill, mask)
+
+    channel_mask = None
+    if mask_mode == 'value_mask':
+        channel_mask = value_mask_to_channel_masks(mask)
+    elif mask_mode == 'channel_mask':
+        channel_mask = mask
+    else:
+        raise ValueError("mask_mode should be 'channel_mask' or 'value_mask'")
+
+    multi_class = channel_mask.shape[2] > 1
+    any_fg_mask = np.clip(np.sum(np.where(
+        mask != background_value, 1, 0), axis=-1), 0, 1)  # True if not background
+    background_mask = np.logical_not(any_fg_mask).astype(float)
+
+    cmap_name = 'Blues'
+
+    if ax is None:
+        fig, ax = get_mpl_figure(
+            1, 1, size=size, ratio_or_img=image, tight=tight)
+    else:
+        fig = ax.figure
+
+    if image is not None:
+        ax.imshow(image, cmap=image_cmap)
+
+    cmap = plt.get_cmap("alpha_binary")
+
+    cmap = "tab10" if channel_mask.shape[-1] <= 10 else "tab20"
+    if isinstance(color, (list, tuple)) and multi_class:
+        colors = color
+    else:
+        colors = [color] if not multi_class else plt.get_cmap(
+            cmap)(range(channel_mask.shape[-1]))
+
+    m_inv = np.ones(mask.shape[:-1])
+
+    patches = []
+    for i in range(channel_mask.shape[-1]):
+        m = channel_mask[..., i]
+        label = None
+        if labels is not None:
+            if isinstance(labels, Iterable):
+                label = labels[i]
+            label = str(labels)
+
+        if lined_contours:
+            ax.contour(
+                m_inv - m, levels=[0.5], colors=[colors[i]], linewidths=contour_linewidths)
+        if filled_contours:
+            _color = to_rgba(colors[i][:])
+            c_img = np.zeros((*m.shape, 4))
+            c_img[:, :, :] = _color
+            c_img[:, :, -1] = c_img[:, :, -1] * m
+            ax.imshow(c_img)
+        if label is not None:
+            patches.append(mpatches.Patch(color=colors[i], label=label))
+
+    ax.imshow(background_mask, cmap='alpha_binary',
+              alpha=darkening_background, label='')
+
+    if not tight:
+        ax.axis('off')
+    # plt.legend()
+    if title is not None:
+        fig.suptitle(title)
+
+    if _colors is not None:
+        _colors.clear()
+        _colors.extend(colors)
+
+    if patches is not None and len(patches) > 0:
+        preserve_legend(ax, patches)
+
+    origin_marker_color = kwargs.get('origin_marker_color', None)
+    origin_marker_opposite_color = kwargs.get(
+        'origin_marker_opposite_color', None)
+
+    if origin_marker_color is not None or origin_marker_opposite_color is not None:
+        from matplotlib.colors import get_named_colors_mapping
+        # Create markers with imshow
+        transparent_nav = np.zeros((*image.shape[:2], 4))
+        cmap = get_named_colors_mapping()
+
+        def make_circle(r):
+            y, x = np.ogrid[-r:r, -r:r]
+            return x**2 + y**2 <= r**2
+
+        origin_marker_size = kwargs.get('origin_marker_size', 24)
+        # int(round(math.sqrt((origin_marker_size) / np.pi)))
+        marker_radius = origin_marker_size
+
+        if origin_marker_color is not None:
+            if isinstance(origin_marker_color, str):
+                origin_marker_color = cmap[origin_marker_color]
+            origin_marker_color = tuple(to_rgb(origin_marker_color))
+            origin_marker_color += (1,)
+            # Coloring the origin with 10 pixels
+            transparent_nav[:2 * marker_radius, :2 *
+                            marker_radius][make_circle(marker_radius)] = origin_marker_color
+
+        if origin_marker_opposite_color is not None:
+            if isinstance(origin_marker_opposite_color, str):
+                origin_marker_opposite_color = cmap[origin_marker_opposite_color]
+            origin_marker_opposite_color = tuple(
+                to_rgb(origin_marker_opposite_color))
+            origin_marker_opposite_color += (1,)
+            # Coloring the origin with 10 pixels
+            transparent_nav[-2 * marker_radius:, -2 * marker_radius:][make_circle(
+                marker_radius)] = origin_marker_opposite_color
+
+        ax.imshow(transparent_nav)
+
+    if axes_description:
+        ax.set_axis_on()
+        ax.set_xlabel("Coordinates [x]")
+        ax.set_ylabel("Coordinates [y]")
+    return fig
+
+
+register_alpha_map('binary')
+register_alpha_map('Greens')
+register_alpha_map('Reds')
+register_alpha_map('Blues')

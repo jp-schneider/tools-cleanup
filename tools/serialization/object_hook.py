@@ -1,12 +1,14 @@
 from typing import Dict, Any, Type, Union, Literal, Callable, Tuple
 from datetime import datetime
 from enum import Enum
+from tools.serialization.json_convertible import JsonConvertible
 from tools.util.format import REGEX_ISO_COMPILED
 from tools.util.reflection import dynamic_import
 import logging
 import inspect
 from inspect import Parameter
 from tools.util.reflection import class_name
+
 
 class _NOTSET:
     pass
@@ -19,6 +21,16 @@ def _init_object(_type: Type, data: Dict[str, Any]) -> Tuple[Any, Dict[str, Any]
     """Custom method to create object when constructing"""
     to_set_data = dict(data)
     to_set_data.pop('__class__', None)
+
+    # Get aliases
+    mappings = None
+    if issubclass(_type, JsonConvertible):
+        mappings = _type.get_decode_property_aliases()
+
+    if mappings is not None:
+        for key, value in mappings.items():
+            if key in to_set_data:
+                to_set_data[value] = to_set_data.pop(key)
 
     argspec = list(inspect.signature(_type).parameters)
 
@@ -34,7 +46,8 @@ def _init_object(_type: Type, data: Dict[str, Any]) -> Tuple[Any, Dict[str, Any]
                 required_args[arg] = value
             else:
                 # Will raise an error, but this may be intentional
-                logging.debug(f"Missing parameter: {arg} for constructing type: {_type.__name__}")
+                logging.debug(
+                    f"Missing parameter: {arg} for constructing type: {_type.__name__}")
 
     # Add a flag to the constructor when object is created during decoding.
     if 'kwargs' in argspec or 'decoding' in argspec:
@@ -52,7 +65,8 @@ def _init_object(_type: Type, data: Dict[str, Any]) -> Tuple[Any, Dict[str, Any]
                 raise err
     except TypeError as err:
         if '__init__()' in err.args[0]:
-            msg = err.args[0].replace("__init__()", f"__init__() of type: {class_name(_type)}")
+            msg = err.args[0].replace(
+                "__init__()", f"__init__() of type: {class_name(_type)}")
             err.args = (msg, ) + err.args[1:]
         raise err
     return ret, to_set_data
@@ -67,7 +81,8 @@ def configurable_object_hook(on_error: Literal['raise', 'ignore', 'warning'] = '
                 try:
                     object_type = dynamic_import(obj.get('__class__'))
                 except Exception as err:
-                    logging.exception(f"Could not import type: {obj.get('__class__')}")
+                    logging.exception(
+                        f"Could not import type: {obj.get('__class__')}")
                     raise err
                 else:
                     if issubclass(object_type, Enum):

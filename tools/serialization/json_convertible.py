@@ -52,6 +52,32 @@ class JsonConvertible:
     TEMP_PROPERTIES = ['__to_json_handle_unmatched__',
                        '__memo__', '__serializer_args__']
 
+    @classmethod
+    def get_decode_property_aliases(cls) -> Optional[Dict[str, str]]:
+        """Returns a dictionary of property aliases.
+        When converting from json to object, the keys of the dictionary
+        will be used to map the json keys to the object properties.
+
+        Returns
+        -------
+        Optional[Dict[str, str]]
+            A dictionary of property aliases.
+        """
+        return None
+
+    @classmethod
+    def get_encode_property_aliases(cls) -> Optional[Dict[str, str]]:
+        """Returns a dictionary of property aliases.
+        When converting from object to json, the keys of the dictionary
+        will be used to map the object properties to the json keys.
+
+        Returns
+        -------
+        Optional[Dict[str, str]]
+            A dictionary of property aliases.
+        """
+        return None
+
     def __init__(self, decoding: bool = False, **kwargs):
         """Constructor of component base class.
         The decoding arguments is used to indicate,
@@ -249,6 +275,13 @@ class JsonConvertible:
 
         for _property in cls.TEMP_PROPERTIES:
             res.pop(_property, None)
+
+        # Apply aliasing
+        aliases = cls.get_encode_property_aliases()
+        if aliases is not None:
+            for key, value in aliases.items():
+                if key in res:
+                    res[value] = res.pop(key)
 
         return res
 
@@ -615,7 +648,9 @@ class JsonConvertible:
         return self.convert_to_yaml_str(self, ensure_ascii=ensure_ascii, **kwargs)
 
     @classmethod
-    def from_json(cls: Type[AnyJsonConvertible], json_str: str, on_error: Literal['raise', 'ignore', 'warning'] = 'raise') -> AnyJsonConvertible:
+    def from_json(cls: Type[AnyJsonConvertible],
+                  json_str: str,
+                  on_error: Literal['raise', 'ignore', 'warning'] = 'raise', force_cls: bool = False, **kwargs) -> AnyJsonConvertible:
         """Tries to recreate the object from a json string.
 
         Parameters
@@ -641,7 +676,85 @@ class JsonConvertible:
         from tools.serialization import object_hook, configurable_object_hook
         if json_str is None:
             raise ArgumentNoneError('json_str')
-        return json.loads(json_str, object_hook=configurable_object_hook(on_error=on_error))
+        if force_cls:
+            object_dict = json.loads(json_str)
+            return cls.from_object_dict(object_dict, on_error=on_error, force_cls=True, **kwargs)
+        else:
+            return json.loads(json_str, object_hook=configurable_object_hook(on_error=on_error))
+
+    @classmethod
+    def from_object_dict(cls, obj: Dict[str, Any], on_error: Literal['raise', 'ignore', 'warning'] = 'raise', force_cls: bool = False, **kwargs) -> AnyJsonConvertible:
+        """Tries to recreate the object from a object / json dict.
+
+
+        Parameters
+        ----------
+        obj : Dict[str, Any]
+            Nested dictionary of the objects. Eventuially with __class__ attribute.
+
+        on_error : Literal[&#39;raise&#39;, &#39;ignore&#39;, &#39;warning&#39;], optional
+            How to behave if an error is raised on deserialization.
+            raise will throw an exception, ignore just leaves object as dict and warning leaves them as dict and logs a warning.
+            Default 'raise'
+
+        force_cls : bool, optional
+            If True, will set the __class__ attribute of the given root obj to the class of cls, resulting that the object
+            is reconstructed as cls also if the __class__ attribute is set in the object, by default False
+
+        Returns
+        -------
+        AnyJsonConvertible
+            The recreated instance.
+        """
+        from tools.serialization import ObjectDecoder, configurable_object_hook
+        decoder = ObjectDecoder(configurable_object_hook(on_error))
+        # If force class is set, we will try to recreate the object with the current class
+        if force_cls:
+            obj.update({'__class__': class_name(cls)})
+        return decoder.decode(obj)
+
+    @classmethod
+    def from_yaml(cls: Type[AnyJsonConvertible],
+                  yaml_str: str,
+                  on_error: Literal['raise', 'ignore', 'warning'] = 'raise', **kwargs) -> AnyJsonConvertible:
+        """Tries to recreate the object from a json string.
+
+        Parameters
+        ----------
+        json_str : str
+            The value of the json string.
+
+        on_error : Literal['raise', 'ignore', 'warning']
+            How to behave if an error is raised on deserialization.
+            raise will throw an exception, ignore just leaves object as dict and warning leaves them as dict and logs a warning.
+            Default 'raise'
+
+        Returns
+        -------
+        AnyJsonConvertible
+            The recreated instance.
+
+        Raises
+        ------
+        ArgumentNoneError
+            If str is none
+        """
+        from tools.serialization import object_hook, configurable_object_hook
+        import yaml
+        from yaml import Loader
+        if yaml_str is None:
+            raise ArgumentNoneError('yaml_str')
+        object_dict = yaml.load(yaml_str, Loader=Loader)
+        decoded = cls.from_object_dict(
+            object_dict, on_error=on_error, **kwargs)
+        # Unpack with classname
+        if isinstance(decoded, dict):
+            # Purge type name if its the only entry
+            if len(decoded) == 1:
+                name = list(decoded.keys())[0]
+                if type(decoded[name]).__name__ == name:
+                    return decoded[name]
+        return decoded
 
     def _save_to_file_json(self, path: str, ensure_ascii: bool = False, indent: int = 4, **kwargs) -> str:
         from tools.serialization import ObjectEncoder
@@ -668,7 +781,7 @@ class JsonConvertible:
         return path
 
     @classmethod
-    def load_from_file(cls: Type[AnyJsonConvertible], path: str, on_error: Literal['raise', 'ignore', 'warning'] = 'raise') -> AnyJsonConvertible:
+    def load_from_file(cls: Type[AnyJsonConvertible], path: str, on_error: Literal['raise', 'ignore', 'warning'] = 'raise', **kwargs) -> AnyJsonConvertible:
         """Loads a json convertible like object from a file.
 
         Parameters
@@ -693,15 +806,15 @@ class JsonConvertible:
             raise ValueError(f"Path: {path} has not file extension!")
         ext = os.path.basename(path).split(os.path.extsep)[1]
         if ext == "json":
-            return cls._load_from_file_json(path, on_error)
+            return cls._load_from_file_json(path, on_error, **kwargs)
         elif ext == "yaml" or ext == "yml":
-            return cls._load_from_file_yaml(path, on_error)
+            return cls._load_from_file_yaml(path, on_error, **kwargs)
         else:
             raise ValueError(
                 f"Unsupported file extension: {ext} Only json and yaml / yml are supported!")
 
     @classmethod
-    def _load_from_file_yaml(cls: Type[AnyJsonConvertible], path: str, on_error: Literal['raise', 'ignore', 'warning'] = 'raise') -> AnyJsonConvertible:
+    def _load_from_file_yaml(cls: Type[AnyJsonConvertible], path: str, on_error: Literal['raise', 'ignore', 'warning'] = 'raise', **kwargs) -> AnyJsonConvertible:
         """Loads a json convertible like object from a file which is in yaml format.
 
         Parameters
@@ -721,26 +834,13 @@ class JsonConvertible:
             when entries have a __class__ attribute, which is automatically created
             when serialized with the json convertible toolset.
         """
-        yaml = dynamic_import("yaml")
-        loader = dynamic_import("yaml.Loader")
         document = None
         with open(path, "r") as f:
             document = f.read()
-        object_dict = yaml.load(document, Loader=loader)
-        from tools.serialization import ObjectDecoder, configurable_object_hook
-        decoder = ObjectDecoder(configurable_object_hook(on_error))
-        decoded = decoder.decode(object_dict)
-        # Unpack with classname
-        if isinstance(decoded, dict):
-            # Purge type name if its the only entry
-            if len(decoded) == 1:
-                name = list(decoded.keys())[0]
-                if type(decoded[name]).__name__ == name:
-                    return decoded[name]
-        return decoded
+        return cls.from_yaml(document, on_error=on_error, **kwargs)
 
     @classmethod
-    def _load_from_file_json(cls: Type[AnyJsonConvertible], path: str, on_error: Literal['raise', 'ignore', 'warning'] = 'raise') -> AnyJsonConvertible:
+    def _load_from_file_json(cls: Type[AnyJsonConvertible], path: str, on_error: Literal['raise', 'ignore', 'warning'] = 'raise', **kwargs) -> AnyJsonConvertible:
         """Loads a json convertible like object from a file.
 
         Parameters
@@ -760,12 +860,11 @@ class JsonConvertible:
             when json has a __class__ attribute, which is automatically created
             when serialized with the json convertible toolset.
         """
-        from tools.serialization import object_hook, configurable_object_hook
         with open(path, "r") as f:
-            return json.load(fp=f, object_hook=configurable_object_hook(on_error=on_error))
+            return cls.from_json(f.read(), on_error=on_error, **kwargs)
 
     @classmethod
-    def load_from_string(cls, json_str: str, on_error: Literal['raise', 'ignore', 'warning'] = 'raise') -> Any:
+    def load_from_string(cls, json_str: str, on_error: Literal['raise', 'ignore', 'warning'] = 'raise', **kwargs) -> Any:
         """Alias for from json.
 
         Parameters
@@ -778,7 +877,7 @@ class JsonConvertible:
         Any
             Object which was deserialized.
         """
-        return cls.from_json(json_str, on_error)
+        return cls.from_json(json_str, on_error, **kwargs)
 
     # endregion
 

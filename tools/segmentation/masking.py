@@ -1,4 +1,4 @@
-from typing import Any, Dict, Optional, Literal, Union
+from typing import Any, Dict, List, Optional, Literal, Tuple, Union
 from tools.util.format import parse_enum
 from tools.util.reflection import class_name
 from tools.util.typing import VEC_TYPE
@@ -82,6 +82,50 @@ def channel_masks_to_value_mask(masks: VEC_TYPE,
                         f"Unknown overlap handling {handle_overlap}")
         mask = np.where(fill, object_values[i], mask)
     return mask
+
+
+def value_mask_to_channel_masks(
+    mask: VEC_TYPE,
+    ignore_value: Optional[Union[int, List[int]]] = None,
+    background_value: int = 0,
+) -> Tuple[np.ndarray, np.ndarray]:
+    """Converts a value mask, where objects are identified as different values, to a channel mask, where each channel represents a different object.
+
+    Parameters
+    ----------
+    mask : VEC_TYPE
+        The mask as a value mask, e.g. where each value represents a different object.
+        Should be of shape C x H x W or H x W x C (resp. torch.Tensor or np.ndarray)
+    ignore_value : Optional[Union[int, List[int]]], optional
+        Values to ignore when creating the mask, by default None
+    background_value : int, optional
+        Value which is treated as the background value, by default 0
+
+    Returns
+    -------
+    Tuple[np.ndarray, np.ndarray]
+        1. The channel mask of shape H x W x C
+        2. The object values of shape (C, ) (as they where in mask) corresponding to the channel mask index
+    """
+    if isinstance(mask, torch.Tensor) and len(mask.shape) == 2:
+        mask = mask[None, ...]
+    mask = mask.detach().cpu().permute((1, 2, 0)).numpy(
+    ) if isinstance(mask, torch.Tensor) else mask
+    mask = mask.squeeze()
+    if len(mask.shape) > 2:
+        raise ValueError(f"Value-Mask should be 2D, got {mask.shape}")
+    invalid_values = set([background_value])
+    if ignore_value is not None:
+        if isinstance(ignore_value, int):
+            invalid_values.add(ignore_value)
+        else:
+            invalid_values.update(ignore_value)
+    vals = np.unique(mask)
+    _valid_classes = np.stack([x for x in vals if x not in invalid_values])
+    channel_mask = np.zeros(mask.shape + (len(_valid_classes),))
+    for i, c in enumerate(_valid_classes):
+        channel_mask[..., i] = (mask == c)
+    return channel_mask, _valid_classes
 
 
 def load_mask(
