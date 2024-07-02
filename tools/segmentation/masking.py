@@ -13,14 +13,67 @@ from tqdm.auto import tqdm
 from tools.util.path_tools import read_directory
 import os
 from tools.io.image import create_image_exif, load_image_exif
+from tools.transforms.to_numpy_image import ToNumpyImage
+
+
+def split_overlap_channel_masks(masks: VEC_TYPE) -> List[np.ndarray]:
+    """Splits a list of channel masks into multiple masks, where each mask has no overlap with the other masks.
+
+    Parameters
+    ----------
+    masks : VEC_TYPE
+        Stack of channel masks of shape C x H x W or H x W x C (resp. torch.Tensor or np.ndarray)
+
+    Returns
+    -------
+    Tuple[List[np.ndarray], List[List[int]]]
+        1. List of masks, where each mask (H x W x C) has no overlap with the other masks.
+         E.g list items are disjunct to each other.
+        2. List of indices, where each index corresponds to the index of the mask in the original mask stack.
+    """
+
+    masks = numpyify_image(masks)
+    if len(masks.shape) == 2:
+        masks = masks[..., None]
+
+    occupancy_masks = [masks[..., 0]]
+    output_masks = [[masks[..., 0]]]
+    indices = [[0]]
+
+    for i in range(1, masks.shape[-1]):
+        # Get occupancy mask
+        current_mask = masks[..., i]
+        mask_assigned = False
+
+        for o in range(len(occupancy_masks)):
+            o_mask = occupancy_masks[o]
+            # Check if the mask area is already occupied
+            if np.any(o_mask & current_mask):
+                continue
+            else:
+                occupancy_masks[o] = o_mask | current_mask
+                output_masks[o].append(current_mask)
+                indices[o].append(i)
+                mask_assigned = True
+                break
+
+        # If mask was not assigned, create a new occupancy mask for it
+        if not mask_assigned:
+            occupancy_masks.append(current_mask)
+            output_masks.append([current_mask])
+            indices.append([i])
+    # Stack the masks
+    return [np.stack(x, axis=-1) for x in output_masks], indices
 
 
 def channel_masks_to_value_mask(masks: VEC_TYPE,
                                 object_values: Optional[VEC_TYPE] = None,
                                 handle_overlap: Literal['raise', 'ignore',
-                                                        'warning', 'warning+exclude'] = 'warning',
+                                                        'warning', 'warning+exclude'
+                                                        'multi_mask',
+                                                        ] = 'warning',
                                 base_value: Any = 0.
-                                ) -> np.ndarray:
+                                ) -> Union[np.ndarray, Tuple[List[np.ndarray], List[List[int]]]]:
     """Converts a list of channel masks to a single mask with a new value per mask object.
 
     Parameters
@@ -33,14 +86,34 @@ def channel_masks_to_value_mask(masks: VEC_TYPE,
         These values will be used within the mask to identify the object.
         Should be of shape (C, ) where C is the number of masks.
 
+    handle_overlap : Literal['raise', 'ignore', 'warning', 'warning+exclude', 'multi_mask'], optional
+        How to handle overlap in the masks.
+        - 'raise': Raises an error if overlap is detected.
+        - 'ignore': Ignores overlap, the last mask will be used.
+        - 'warning': Logs a warning if overlap is detected. Then proceeds as 'ignore'.
+        - 'warning+exclude': Logs a warning if overlap is detected and excludes the overlapping parts, first mask is dominant.
+        - 'multi_mask': Returns a list of masks, where each mask stack has no overlap with the other masks.
+
+    base_value : Any, optional
+        The base value to fill the mask with, by default 0.
+
+
     Returns
     -------
-    VEC_TYPE
-        Single mask with multiple channels, where each number represents a different object.
-        Shape is H x W
+
+    Union[np.ndarray, Tuple[List[np.ndarray], List[List[int]]]
+        if handle_overlap != 'multi_mask'
+            np.ndarray
+                Single mask with multiple channels, where each number represents a different object.
+                Shape is H x W
+        else
+            Tuple[List[np.ndarray], List[List[int]]]
+                1. List of masks, where each mask (H x W x C) has no overlap with the other masks.
+                2. List of indices, where each index corresponds to the index of the mask in the original mask stack.
     """
     masks = numpyify_image(masks)
-    object_values = numpyify(object_values)
+    object_values = numpyify(
+        object_values) if object_values is not None else None
 
     if object_values is None:
         object_values = np.arange(1, masks.shape[-1] + 1)
@@ -52,35 +125,51 @@ def channel_masks_to_value_mask(masks: VEC_TYPE,
             raise ValueError(
                 f"Object values must be unique, got {object_values}")
 
-    mask = np.zeros(masks.shape[:-1], dtype=masks.dtype)
-    mask.fill(base_value)
-    for i in range(masks.shape[-1]):
-        fill = masks[..., i] > 0
+    def _convert_masks(masks, object_values):
+        mask = np.zeros(masks.shape[:-1], dtype=masks.dtype)
+        mask.fill(base_value)
 
-        if mask[fill].sum() != 0:
-            # Overlap in classes.
-            if handle_overlap == 'ignore':
-                pass
-            else:
-                overlap_classes = ', '.join(
-                    [str(x) for x in np.unique(mask[fill]).astype(int).tolist() if x != 0])
-                if handle_overlap == 'raise':
-                    raise ValueError(
-                        f"Overlap in classes detected, class {object_values[i]} overlaps with class(es) {overlap_classes}")
-                elif handle_overlap == 'warning':
-                    logger.warning(
-                        f"Overlap in classes detected, class {object_values[i]} overlaps with class(es) {overlap_classes}")
-                elif handle_overlap == 'warning+exclude':
-                    logger.warning(
-                        f"Overlap in classes detected, class {object_values[i]} overlaps with class(es) {overlap_classes}, excluding it")
-                    duplicate_class = (mask != 0) & fill
-                    fill = fill & ~duplicate_class
-                    mask[duplicate_class] = 0.
-                    logger.warning(f"Excluded {duplicate_class.sum()} pixels")
+        for i in range(masks.shape[-1]):
+            fill = masks[..., i] > 0
+            if mask[fill].sum() != 0:
+                # Overlap in classes.
+                if handle_overlap == 'ignore':
+                    pass
                 else:
-                    raise ValueError(
-                        f"Unknown overlap handling {handle_overlap}")
-        mask = np.where(fill, object_values[i], mask)
+                    overlap_classes = ', '.join(
+                        [str(x) for x in np.unique(mask[fill]).astype(int).tolist() if x != 0])
+                    if handle_overlap == 'raise':
+                        raise ValueError(
+                            f"Overlap in classes detected, class {object_values[i]} overlaps with class(es) {overlap_classes}")
+                    elif handle_overlap == 'warning':
+                        logger.warning(
+                            f"Overlap in classes detected, class {object_values[i]} overlaps with class(es) {overlap_classes}")
+                    elif handle_overlap == 'warning+exclude':
+                        logger.warning(
+                            f"Overlap in classes detected, class {object_values[i]} overlaps with class(es) {overlap_classes}, excluding it")
+                        duplicate_class = (mask != 0) & fill
+                        fill = fill & ~duplicate_class
+                        mask[duplicate_class] = 0.
+                        logger.warning(
+                            f"Excluded {duplicate_class.sum()} pixels")
+                    else:
+                        raise ValueError(
+                            f"Unknown overlap handling {handle_overlap}")
+            mask = np.where(fill, object_values[i], mask)
+        return mask
+
+    if not handle_overlap == "multi_mask":
+        return _convert_masks(masks, object_values)
+    else:
+        # For multi_mask, we need to split the masks
+        masks, indices = split_overlap_channel_masks(masks)
+        ovals = []
+        for sub_idx in indices:
+            vals = np.zeros(len(sub_idx))
+            for i, idx in enumerate(sub_idx):
+                vals[i] = object_values[idx]
+            ovals.append(vals)
+        return [_convert_masks(m, o) for m, o in zip(masks, ovals)], indices
     return mask
 
 
@@ -95,7 +184,7 @@ def value_mask_to_channel_masks(
     ----------
     mask : VEC_TYPE
         The mask as a value mask, e.g. where each value represents a different object.
-        Should be of shape C x H x W or H x W x C (resp. torch.Tensor or np.ndarray)
+        Should be of shape B x H x W
     ignore_value : Optional[Union[int, List[int]]], optional
         Values to ignore when creating the mask, by default None
     background_value : int, optional
@@ -107,13 +196,10 @@ def value_mask_to_channel_masks(
         1. The channel mask of shape H x W x C
         2. The object values of shape (C, ) (as they where in mask) corresponding to the channel mask index
     """
-    if isinstance(mask, torch.Tensor) and len(mask.shape) == 2:
-        mask = mask[None, ...]
-    mask = mask.detach().cpu().permute((1, 2, 0)).numpy(
-    ) if isinstance(mask, torch.Tensor) else mask
+    mask = ToNumpyImage()(mask)
     mask = mask.squeeze()
-    if len(mask.shape) > 2:
-        raise ValueError(f"Value-Mask should be 2D, got {mask.shape}")
+    if len(mask.shape) not in [2, 3]:
+        raise ValueError(f"Value-Mask should be 2D or 3D, got {mask.shape}")
     invalid_values = set([background_value])
     if ignore_value is not None:
         if isinstance(ignore_value, int):
@@ -280,3 +366,88 @@ def convert_batch_instance_dict(frames: Dict[int, Dict[int, np.ndarray]], offset
                 instance_mask[..., j - offset] = v
         items.append(instance_mask)
     return np.stack(items, axis=0)
+
+
+def masks_to_inpaint_video(
+        images: VEC_TYPE,
+        masks: VEC_TYPE,
+        video_path: Optional[str] = None,
+        mask_alpha: float = 0.5,
+        cmap: Optional[str] = None) -> str:
+    """Creates a video from images and masks, which will be inpainted.
+
+    Parameters
+    ----------
+    images : VEC_TYPE
+        Stack of images of shape B x C x H x W x C or B x H x W x C (resp. torch.Tensor or np.ndarray)
+    masks : VEC_TYPE
+        Stack of masks of shape B x C x H x W or B x H x W x C (resp. torch.Tensor or np.ndarray)
+    video_path : Optional[str], optional
+        Path to the output video, by default None
+    mask_alpha : float, optional
+        Alpha value of the mask, by default 0.5
+    cmap : Optional[str], optional
+        Colormap to draw mask colors from, by default None
+
+    Returns
+    -------
+    str
+        Path to the video
+    """
+
+    to_numpy = ToNumpyImage()
+    images = to_numpy(images)
+    masks = to_numpy(masks)
+
+    if len(images.shape) != 4:
+        raise ValueError(
+            "Images must be of shape B x H x W x C or B x C x H x W x C")
+
+    if len(masks.shape) != 4:
+        raise ValueError(
+            "Masks must be of shape B x H x W x C or B x C x H x W x C")
+
+    if images.shape[0] != masks.shape[0]:
+        raise ValueError(
+            "Number of images and masks must match in the batch dimension.")
+
+    if video_path is None:
+        video_path = os.path.join("temp", "inpainted.mp4")
+
+    if cmap is None:
+        cmap = plt.get_cmap("tab10" if masks.shape[-1] <= 10 else "tab20")
+
+    inpainted_images = []
+
+    def _get_mask_color(i, alpha=0.5):
+        col = np.array(to_rgba(cmap(i)))
+        col[-1] = alpha
+        return col
+
+    mask_colors = {i: _get_mask_color(i, mask_alpha)
+                   for i in range(mask_stack.shape[-1])}
+    contour_colors = {i: _get_mask_color(
+        i, mask_alpha) for i in range(mask_stack.shape[-1])}
+    contour_width = 0
+
+    num_frames = mask_stack.shape[0]
+    # num_frames = 10
+    for i in tqdm(range(0, num_frames), total=num_frames):
+        image = images[i]
+        inpainted_image = None
+        for j in range(0, mask_stack.shape[-1]):
+            mask = mask_stack[i, ..., j]
+            if mask.sum() == 0:
+                continue
+            inpainted_image = inpaint_mask_image(inpainted_image, mask,
+                                                 mask_color=mask_colors[j],
+                                                 contour_width=contour_width,
+                                                 contour_color=contour_colors[j]
+                                                 )
+        inpainted_images.append(inpainted_image)
+    inpainted_images = np.stack(inpainted_images, axis=0)
+
+    if not os.path.exists(os.path.dirname(video_path)):
+        os.makedirs(os.path.dirname(video_path))
+    write_mp4(inpainted_images, video_path, fps=24, progress_bar=True)
+    return video_path

@@ -915,8 +915,14 @@ def plot_mask(image: VEC_TYPE,
     from collections.abc import Iterable
 
     to_numpy = ToNumpyImage()
-    mask = to_numpy(mask)
-    image = to_numpy(image)
+
+    if image is None and mask is None:
+        raise ValueError("At least one of image or mask should be provided")
+
+    mask = to_numpy(mask) if mask is not None else None
+    image = to_numpy(image) if image is not None else None
+    if image is None:
+        image = np.zeros(mask.shape[:2] + (3,))
 
     mask = mask.squeeze()
     if len(mask.shape) == 2:
@@ -930,7 +936,7 @@ def plot_mask(image: VEC_TYPE,
 
     channel_mask = None
     if mask_mode == 'value_mask':
-        channel_mask = value_mask_to_channel_masks(mask)
+        channel_mask, _ = value_mask_to_channel_masks(mask)
     elif mask_mode == 'channel_mask':
         channel_mask = mask
     else:
