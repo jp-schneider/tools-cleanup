@@ -22,12 +22,12 @@ def split_overlap_channel_masks(masks: VEC_TYPE) -> List[np.ndarray]:
     Parameters
     ----------
     masks : VEC_TYPE
-        Stack of channel masks of shape C x H x W or H x W x C (resp. torch.Tensor or np.ndarray)
+        Stack of channel masks of shape [..., B x] C x H x W or [..., B x] H x W x C (resp. torch.Tensor or np.ndarray)
 
     Returns
     -------
     Tuple[List[np.ndarray], List[List[int]]]
-        1. List of masks, where each mask (H x W x C) has no overlap with the other masks.
+        1. List of masks, where each mask ([..., B x] H x W x C) has no overlap with the other masks.
          E.g list items are disjunct to each other.
         2. List of indices, where each index corresponds to the index of the mask in the original mask stack.
     """
@@ -126,7 +126,7 @@ def channel_masks_to_value_mask(masks: VEC_TYPE,
                 f"Object values must be unique, got {object_values}")
 
     def _convert_masks(masks, object_values):
-        mask = np.zeros(masks.shape[:-1], dtype=masks.dtype)
+        mask = np.zeros(masks.shape[:-1], dtype=np.int32)
         mask.fill(base_value)
 
         for i in range(masks.shape[-1]):
@@ -208,7 +208,7 @@ def value_mask_to_channel_masks(
             invalid_values.update(ignore_value)
     vals = np.unique(mask)
     _valid_classes = np.stack([x for x in vals if x not in invalid_values])
-    channel_mask = np.zeros(mask.shape + (len(_valid_classes),))
+    channel_mask = np.zeros(mask.shape + (len(_valid_classes),), dtype=bool)
     for i, c in enumerate(_valid_classes):
         channel_mask[..., i] = (mask == c)
     return channel_mask, _valid_classes
@@ -270,7 +270,8 @@ def save_mask(mask: VEC_TYPE,
               path: str,
               spread: bool = False,
               metadata: Optional[dict] = None,
-              progress_bar: bool = False
+              progress_bar: bool = False,
+              additional_filename_variables: Optional[Dict[str, Any]] = None
               ) -> None:
     """Saves the given (value) based mask to the given path.
 
@@ -282,6 +283,8 @@ def save_mask(mask: VEC_TYPE,
     mask : VEC_TYPE
         Mask to save, should be of shape B x C x H x W or H x W x 1(resp. torch.Tensor or np.ndarray)
         Can have vales in range 0 - 255. If values are floats, an error is raised.
+        Expects a value based mask, where each value represents a different object.
+
     path : str
         Path to save the mask to.
 
@@ -291,6 +294,12 @@ def save_mask(mask: VEC_TYPE,
 
     metadata : Optional[dict], optional
         Optional metadata to save with the mask. Will be saved as MakerNote in the exif tag.
+
+    progress_bar : bool, optional
+        Whether to show a progress bar when saving a batch of masks, by default False
+
+    additional_filename_variables : Optional[Dict[str, Any]], optional
+        Additional variables to use in the filename format string, by default None
 
     Raises
     ------
@@ -329,8 +338,8 @@ def save_mask(mask: VEC_TYPE,
         args['exif'] = create_image_exif(metadata)
 
     if len(mask.shape) == 4:
-        filenames = parse_format_string(
-            path, [dict(index=i) for i in range(mask.shape[0])])
+        filenames = parse_format_string(path, [dict(index=i) for i in range(
+            mask.shape[0])], additional_variables=additional_filename_variables)
         if len(set(filenames)) != mask.shape[0]:
             raise ValueError(
                 f"Number of filenames {len(filenames)} does not match number of masks {mask.shape[0]} if you specified an index template?")
@@ -373,7 +382,9 @@ def masks_to_inpaint_video(
         masks: VEC_TYPE,
         video_path: Optional[str] = None,
         mask_alpha: float = 0.5,
-        cmap: Optional[str] = None) -> str:
+        cmap: Optional[str] = None,
+        fps: float = 24.0
+) -> str:
     """Creates a video from images and masks, which will be inpainted.
 
     Parameters
@@ -394,6 +405,9 @@ def masks_to_inpaint_video(
     str
         Path to the video
     """
+    from tools.video.utils import write_mp4
+    import matplotlib.pyplot as plt
+    from matplotlib.colors import to_rgba
 
     to_numpy = ToNumpyImage()
     images = to_numpy(images)
@@ -415,6 +429,7 @@ def masks_to_inpaint_video(
         video_path = os.path.join("temp", "inpainted.mp4")
 
     if cmap is None:
+
         cmap = plt.get_cmap("tab10" if masks.shape[-1] <= 10 else "tab20")
 
     inpainted_images = []
@@ -425,18 +440,17 @@ def masks_to_inpaint_video(
         return col
 
     mask_colors = {i: _get_mask_color(i, mask_alpha)
-                   for i in range(mask_stack.shape[-1])}
+                   for i in range(masks.shape[-1])}
     contour_colors = {i: _get_mask_color(
-        i, mask_alpha) for i in range(mask_stack.shape[-1])}
+        i, mask_alpha) for i in range(masks.shape[-1])}
     contour_width = 0
 
-    num_frames = mask_stack.shape[0]
+    num_frames = masks.shape[0]
     # num_frames = 10
     for i in tqdm(range(0, num_frames), total=num_frames):
-        image = images[i]
-        inpainted_image = None
-        for j in range(0, mask_stack.shape[-1]):
-            mask = mask_stack[i, ..., j]
+        inpainted_image = images[i].copy()
+        for j in range(0, masks.shape[-1]):
+            mask = masks[i, ..., j]
             if mask.sum() == 0:
                 continue
             inpainted_image = inpaint_mask_image(inpainted_image, mask,
@@ -449,5 +463,177 @@ def masks_to_inpaint_video(
 
     if not os.path.exists(os.path.dirname(video_path)):
         os.makedirs(os.path.dirname(video_path))
-    write_mp4(inpainted_images, video_path, fps=24, progress_bar=True)
+    write_mp4(inpainted_images, video_path, fps=fps, progress_bar=True)
     return video_path
+
+
+def inpaint_mask_image(
+        input_image: np.ndarray,
+        input_mask: np.ndarray,
+        mask_color: Any = "tab:blue",
+        contour_color: np.ndarray = "black",
+        contour_width: int = 5):
+    from matplotlib.colors import to_rgba
+    assert input_image.shape[:2] == input_mask.shape, 'different shape between image and mask'
+    # 0: background, 1: foreground
+    mask = np.clip(input_mask, 0, 1)
+
+    # paint mask
+    painted_image = inpaint_mask(
+        input_image, mask, np.array(to_rgba(mask_color)))
+    # paint contour
+    if contour_width > 0:
+        contour_radius = (contour_width - 1) // 2
+        dist_transform_fore = cv2.distanceTransform(mask, cv2.DIST_L2, 3)
+        dist_transform_back = cv2.distanceTransform(1-mask, cv2.DIST_L2, 3)
+
+        contour_radius += 2
+        contour_mask = np.abs(
+            np.clip(dist_map, -contour_radius, contour_radius))
+        contour_mask = contour_mask / np.max(contour_mask)
+        contour_mask[contour_mask > 0.5] = 1.
+        painted_image = inpaint_mask(
+            painted_image, 1-contour_mask, np.array(to_rgba(contour_color)))
+    return painted_image
+
+
+def inpaint_mask(image: np.ndarray,
+                 mask: np.ndarray,
+                 color: np.ndarray,
+                 ) -> np.ndarray:
+    """Inpaint the mask on the input image.
+
+    Parameters
+    ----------
+    image : np.ndarray
+        The input image.
+    mask : np.ndarray
+        Mask to be inpainted. Should be in the format (h, w).
+        Will be thresholded at 0.5.
+    color : np.ndarray
+        Color to be inpainted. Should be in the format (4,) in range [0, 1].
+        Where the first 3 values are the RGB values and the last value is the alpha value.
+
+    Returns
+    -------
+    np.ndarray
+        The inpainted image.
+    """
+    # If image not in uint8, convert to uint8
+    input_dtype = image.dtype
+    if image.dtype == np.uint8:
+        image = image.astype(np.float32) / 255.
+    mask = mask > 0.5
+    image = image.copy()
+    alpha = color[3]
+    color = color[:3]
+    image[mask] = image[mask] * (1-alpha) + color * alpha
+    # If image was uint8, convert back to uint8
+    if input_dtype == np.uint8:
+        image = (image * 255).astype(np.uint8)
+    return image
+
+
+def save_channel_masks(
+        masks: np.ndarray,
+        mask_directory: str,
+        oids: Optional[np.ndarray] = None,
+        filename_pattern: str = "img_{index:02d}_ov_{ov_index}.png",
+        spread: bool = True):
+    overlap_free_comb, overlap_free_comb_ids = split_overlap_channel_masks(
+        masks)
+
+    if not os.path.exists(mask_directory):
+        os.makedirs(mask_directory)
+
+    path = os.path.join(mask_directory, filename_pattern)
+
+    for i in range(len(overlap_free_comb)):
+        m_stack = overlap_free_comb[i]
+        m_stack_oids = oids[overlap_free_comb_ids[i]]
+        value_mask = channel_masks_to_value_mask(
+            m_stack, m_stack_oids, handle_overlap='raise')[..., None]
+        save_mask(value_mask, path, spread=spread,
+                  additional_filename_variables=dict(ov_index=i))
+
+
+def load_channel_masks(
+    mask_directory: str,
+    filename_pattern: str = r"img_(?P<index>[0-9]+)_ov_(?P<ov_index>[0-9]+).png",
+    output_format: Literal['channel', 'value'] = 'channel'
+) -> Union[List[np.ndarray], Tuple[np.ndarray, np.ndarray]]:
+    """Loads overlapping value masks from a directory.
+
+    Parameters
+    ----------
+    mask_directory : str
+        DIrectory where the masks are stored.
+    filename_pattern : str, optional
+        Filenamepattern to scan for, by default r"img_(?P<index>[0-9]+)_ov_(?P<ov_index>[0-9]+).png"
+
+    output_format : Literal['channel', 'value'], optional
+        Format of the output, by default 'channel'
+        - 'channel': Returns the channel mask
+        - 'value': Returns the value masks
+
+    Returns
+    -------
+    Union[List[np.ndarray], Tuple[np.ndarray, np.ndarray]]
+    Either:
+        List[np.ndarray]
+            List of non-overlapping value masks if output_format == 'value'
+        Tuple[np.ndarray, np.ndarray]
+            1. The channel mask of shape [..., B] H x W x C
+            2. The object values of shape (C, ) corresponding to the channel mask index
+    """
+    paths = read_directory(mask_directory, filename_pattern, parser=dict(
+        index=int, ov_index=int), path_key="path")
+    ovs = set([x['ov_index'] for x in paths])
+    ov_paths = dict()
+    for p in paths:
+        ov_index = p['ov_index']
+        if ov_index not in ov_paths:
+            ov_paths[ov_index] = []
+        ov_paths[ov_index].append(p)
+    for k in ov_paths:
+        ov_paths[k] = sorted(ov_paths[k], key=lambda x: x['index'])
+    # Read all masks
+    overlapping_masks = {k: [] for k in ovs}
+    for ov_index, path_dict_list in ov_paths.items():
+        for p in path_dict_list:
+            overlapping_masks[ov_index].append(load_mask(p['path']))
+    # Stack masks
+    for k in overlapping_masks:
+        overlapping_masks[k] = np.stack(overlapping_masks[k], axis=0)
+    value_mask = list(overlapping_masks.values())
+    if output_format == 'channel':
+        return merge_value_masks_to_channel_mask(value_mask)
+    else:
+        return value_mask
+
+
+def merge_value_masks_to_channel_mask(
+    value_masks: List[np.ndarray],
+) -> Tuple[np.ndarray, np.ndarray]:
+    """Merges a list of value masks to a single channel mask.
+
+    Parameters
+    ----------
+    value_masks : List[np.ndarray]
+        List of potentially overlapping value masks.
+
+    Returns
+    -------
+    Tuple[np.ndarray, np.ndarray]
+        1. The channel mask of shape [..., B] H x W x C
+        2. The object values of shape (C, ) corresponding to the channel mask index
+    """
+    comb = [value_mask_to_channel_masks(x) for x in value_masks]
+    channel_masks, channel_ids = np.concatenate(
+        [x[0] for x in comb], axis=-1), np.concatenate([x[1] for x in comb], axis=-1)
+
+    # Reorder masks
+    reordered_indices = np.argsort(channel_ids)
+    channel_masks = channel_masks[..., reordered_indices]
+    channel_ids = channel_ids[reordered_indices]
+    return channel_masks, channel_ids
