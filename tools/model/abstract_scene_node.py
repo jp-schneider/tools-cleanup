@@ -129,6 +129,17 @@ class AbstractSceneNode(JsonConvertible):
         ...
 
     @abstractmethod
+    def get_root(self) -> 'AbstractSceneNode':
+        """Get the root of the scene.
+
+        Returns
+        -------
+        AbstractSceneNode
+            The root of the scene.
+        """
+        ...
+
+    @abstractmethod
     def get_global_position(self, **kwargs) -> VEC_TYPE:
         """
         Gets the global position of the node.

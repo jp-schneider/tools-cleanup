@@ -25,3 +25,23 @@ class ToNumpyImage(ToNumpy):
             else:
                 raise ValueError(f"Input tensor has invalid shape: {x.shape}")
         return super().transform(x, **kwargs)
+
+
+numpyify_image = ToNumpyImage()
+"""
+Assuring that input is a numpy array by converting it to one.
+Accepts tensors or ndarrays or arbitrary value types.
+If the input is a tensor, it is converted to a numpy array and the first dimension is moved to the last dimension if shape is (C, H, W) -> (H, W, C)
+or second is moved if shape is (B, C, H, W) -> (B, H, W, C).
+If len(shape) == 2, the shape is not changed.
+
+Parameters
+----------
+input : VEC_TYPE
+    The input
+
+Returns
+-------
+np.ndarray
+    The created numpy array / type.
+"""

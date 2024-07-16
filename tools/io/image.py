@@ -1,9 +1,13 @@
-from typing import Any, Dict, Optional, Literal, Tuple, Union
+from typing import Any, Dict, List, Optional, Literal, Tuple, Union
+
+import torch
 from tools.util.format import parse_enum
 from tools.util.reflection import class_name
+from tools.util.torch import tensorify_image
 from tools.util.typing import VEC_TYPE
 import numpy as np
-from tools.util.numpy import numpyify, numpyify_image
+from tools.transforms.to_numpy import numpyify
+from tools.transforms.to_numpy_image import numpyify_image
 from tools.serialization.json_convertible import JsonConvertible
 from tools.logger.logging import logger
 from PIL.Image import Exif, Image
@@ -12,6 +16,7 @@ from tools.util.format import parse_format_string
 from tqdm.auto import tqdm
 from tools.util.path_tools import numerated_file_name, read_directory
 import os
+from torch.nn.functional import grid_sample
 
 
 def create_image_exif(metadata: Dict[Union[str, ExifTagsBase], Any]) -> Exif:
@@ -132,13 +137,28 @@ def load_image(
         Tuple of the image and the metadata.
     """
     from PIL import Image
-    mask_pil = Image.open(path)
-    image = np.array(mask_pil)
-    if not load_metadata:
-        return image
-    # Load metadata
-    metadata = load_image_exif(mask_pil, safe_load=safe_metadata_load)
-    return image, metadata
+    base, ext = os.path.splitext(path)
+    if ext.lower() == ".npy":
+        return np.load(path)
+    elif ext.lower() in [".tiff", ".tif"]:
+        try:
+            import cv2
+            image = cv2.imread(path)
+            # Convert to RGB if 3 channel
+            if image.shape[-1] == 3:
+                image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+            return image
+        except ImportError as err:
+            raise ImportError(
+                "OpenCV is not installed, but is required to load tiff images.")
+    else:
+        mask_pil = Image.open(path)
+        image = np.array(mask_pil)
+        if not load_metadata:
+            return image
+        # Load metadata
+        metadata = load_image_exif(mask_pil, safe_load=safe_metadata_load)
+        return image, metadata
 
 
 def save_image(image: VEC_TYPE,
@@ -177,8 +197,193 @@ def save_image(image: VEC_TYPE,
             os.makedirs(os.path.dirname(path), exist_ok=True)
 
     args = dict()
-    if len(metadata) > 0:
+    if metadata is not None and len(metadata) > 0:
         args['exif'] = create_image_exif(metadata)
 
-    Image.fromarray(img).save(path, **args)
+    base, ext = os.path.splitext(path)
+    # If tiff use opencv
+    if ext.lower() == ".tiff" or ext.lower() == ".tif":
+        if len(args) > 0:
+            raise ValueError("Exif data is not supported for tiff images.")
+        try:
+            import cv2
+            # If 3 channel, convert to BGR
+            if img.shape[-1] == 3:
+                img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
+            cv2.imwrite(path, img)
+        except ImportError as err:
+            raise ImportError(
+                "OpenCV is not installed, but is required to save tiff images.")
+    # Numpy save
+    elif ext.lower() == ".npy":
+        if len(args) > 0:
+            raise ValueError("Exif data is not supported for numpy images.")
+        np.save(base, img)
+    else:
+        Image.fromarray(img).save(path, **args)
     return path
+
+
+def resample(
+    image: np.ndarray,
+    resampling_ratio: Optional[float] = 1.,
+    mode: str = "bilinear",
+    target_size: Optional[Tuple[int, int]] = None,
+) -> np.ndarray:
+    """Resamples the image with the given resampling ratio.
+
+    Parameters
+    ----------
+    image : np.ndarray
+        Image to resample.
+    resampling_ratio : float
+        The resampling ratio. Should be greater than 0 as a fractional times the original size.
+        Is exclusive with target_size, by default 1
+    mode : str, optional
+        Either grid_sample modes like bilinear or subsample to just subsample the grid, by default "bilinear"
+    target_size : Optional[Tuple[int, int]], optional
+        The target size of the image is exclusive with resampling ratio. If provided this will be used, by default None
+        Format is (H, W)
+
+    Returns
+    -------
+    np.ndarray
+        The resampled image.
+    """
+    if resampling_ratio <= 0:
+        raise ValueError("Resampling ratio should be greater than 0.")
+    if mode != "subsample":
+        H, W, C = image.shape
+
+        if target_size is not None:
+            H_s, W_s = target_size
+        else:
+            H_s, W_s = int(H * resampling_ratio), int(W * resampling_ratio)
+
+        is_uint8 = image.dtype == np.uint8
+
+        image_tensor = tensorify_image(image, dtype=torch.float32)
+        grid = torch.nn.functional.affine_grid(torch.tensor(
+            [[[1., 0, 0], [0, 1., 0]]]), (1, C, H_s, W_s), align_corners=True)
+        # Move to GPU if available
+        if torch.cuda.is_available():
+            image_tensor = image_tensor.cuda()
+            grid = grid.cuda()
+
+        # Convert to 0-1 range if image was uint8
+        if is_uint8:
+            image_tensor = image_tensor / 255.0
+
+        resampled_image = grid_sample(image_tensor.unsqueeze(
+            0), grid, mode=mode, align_corners=True)[0]
+
+        if is_uint8:
+            # Convert back to 0-255 range
+            resampled_image = (resampled_image * 255.0).to(torch.uint8)
+        return numpyify_image(resampled_image)
+    else:
+        # Subsampling
+        skips = (1 / resampling_ratio)
+        # Check if close to integer
+        if not np.isclose(skips, int(skips), rtol=0.05):
+            raise ValueError(
+                "Resampling ratio should be close to 1/n, where n > 0 is an integer.")
+        skips = int(skips)
+        return image[::skips, ::skips, :]
+
+
+def load_image_stack(path: str, filename_format: str = r"(?P<index>[0-9]+).png") -> np.ndarray:
+    """Helper function to load images for a given path and filename format.
+
+    Parameters
+    ----------
+    path : str
+        Path to the images.
+
+    filename_format : str, optional
+        Filename format regex, by default r"(?P<index>[0-9]+).png"
+        Images will be sorted by index.
+
+    Returns
+    -------
+    np.ndarray
+        Image stack in shape B x H x W x C.
+        B order is index order ascending.
+    """
+    image_paths = read_directory(
+        path, filename_format, parser=dict(index=int), path_key="path")
+    sorted_index = sorted(image_paths, key=lambda x: x["index"])
+
+    img = load_image(sorted_index[0]["path"])
+    images = np.zeros((len(sorted_index), *img.shape), dtype=img.dtype)
+    images[0] = img
+
+    it = tqdm(total=len(sorted_index), desc="Loading images")
+    it.update(1)
+    for i in range(1, len(sorted_index)):
+        images[i] = load_image(sorted_index[i]["path"])
+        it.update(1)
+    return images
+
+
+def save_image_stack(images: VEC_TYPE,
+                     format_string_path: str,
+                     override: bool = False, mkdirs: bool = True,
+                     metadata: Optional[Dict[Union[str,
+                                                   ExifTagsBase], Any]] = None,
+                     progress_bar: bool = False,
+                     additional_filename_variables: Optional[Dict[str, Any]] = None
+                     ) -> List[str]:
+    """Saves the given image stack.
+
+    Expects to get a stack of images in the shape B x H x W x C for numpy or B x C x H x W if tensor.
+
+    Parameters
+    ----------
+    images : VEC_TYPE
+        Image stack to save.
+        Should be in the shape B x H x W x C for numpy or B x C x H x W if tensor.
+
+    format_string_path : str
+        Path format string to save the images.
+        Example: "path/to/save/image_{index}.png"
+        Index will be replaced with the index of the image in the stack.
+
+    metadata : Optional[dict], optional
+        Optional metadata to save with the image as exif metadata. Will be saved as MakerNote in the exif tag.
+        The metadata will be the same for all images.
+
+    progress_bar : bool, optional
+        Whether to show a progress bar when saving a batch of images, by default False
+
+    additional_filename_variables : Optional[Dict[str, Any]], optional
+        Additional variables to use in the filename format string, by default None
+
+
+    Returns
+    -------
+    List[str]
+        List of saved filenames.
+    """
+    saved_files = []
+    images = numpyify_image(images)
+    if not len(images.shape) == 4:
+        raise ValueError("Image stack should have shape B x H x W x C")
+    if mkdirs:
+        if not os.path.exists(os.path.dirname(format_string_path)):
+            os.makedirs(os.path.dirname(format_string_path), exist_ok=True)
+    args = dict()
+
+    filenames = parse_format_string(format_string_path, [dict(index=i) for i in range(
+        images.shape[0])], additional_variables=additional_filename_variables)
+    if len(set(filenames)) != images.shape[0]:
+        raise ValueError(
+            f"Number of filenames {len(filenames)} does not match number of masks {images.shape[0]} if you specified an index template?")
+    it = enumerate(filenames)
+    if progress_bar:
+        it = tqdm(it, total=images.shape[0], desc="Saving images")
+    for i, f in it:
+        sf = save_image(images[i], f, override=override,
+                        mkdirs=False, metadata=metadata)
+        saved_files.append(sf)
+    return saved_files

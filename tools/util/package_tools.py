@@ -10,6 +10,7 @@ try:
 except (ImportError, ModuleNotFoundError):
     toml = None
 
+
 def get_module_path() -> str:
     """Gets the module path of the currently executable package.
 
@@ -22,7 +23,8 @@ def get_module_path() -> str:
     """
     global EXECUTED_MODULE_PATH
     if EXECUTED_MODULE_PATH is None:
-        EXECUTED_MODULE_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+        EXECUTED_MODULE_PATH = os.path.abspath(
+            os.path.join(os.path.dirname(__file__), ".."))
     return EXECUTED_MODULE_PATH
 
 
@@ -37,9 +39,10 @@ def get_executed_module_root_path() -> str:
     """
     return os.path.abspath(os.path.join(get_module_path(), ".."))
 
+
 def get_project_root_path() -> str:
     """Gets the root path of the current project.
-    A project root path is defined as the directory where the 
+    A project root path is defined as the directory where the
     pyproject.toml file is located.
 
     Returns
@@ -49,9 +52,10 @@ def get_project_root_path() -> str:
     """
     return os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 
+
 def get_package_root_path() -> str:
     """Gets the package path of the project.
-    A package root path is defined as the directory where the 
+    A package root path is defined as the directory where the
     source code of the project is located.
     In this case it is the directory where the awesome package is located.
 
@@ -61,6 +65,7 @@ def get_package_root_path() -> str:
         The absolute package root path of the project.
     """
     return os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+
 
 def get_invoked_package_name() -> str:
     """Gets the package name of the package which invoked this function.
@@ -87,8 +92,17 @@ def set_module_path(module_path: str) -> None:
     """
     global EXECUTED_MODULE_PATH
     EXECUTED_MODULE_PATH = os.path.normpath(module_path)
-    
 
+
+def set_exec_module(module: Any) -> None:
+    """Sets the module path of the currently executable package.
+
+    Parameters
+    ----------
+    module : Any
+        The module which is currently executed.
+    """
+    set_module_path(os.path.join(module.__file__, ".."))
 
 
 def is_project_root(path: str) -> bool:
@@ -107,6 +121,7 @@ def is_project_root(path: str) -> bool:
     """
     return os.path.isfile(os.path.join(path, "pyproject.toml"))
 
+
 def get_package_info(project_root_path: Optional[str] = None) -> Dict[str, Any]:
     """Gets the package information of the project.
     The package information is defined as the package name, version and description.
@@ -122,13 +137,16 @@ def get_package_info(project_root_path: Optional[str] = None) -> Dict[str, Any]:
         The package information of the project.
     """
     if toml is None:
-        raise ImportError("The package 'toml' is not installed. Please install it to use this function.")
-    project_root_path = project_root_path if project_root_path is not None and is_project_root(project_root_path) else get_project_root_path()
+        raise ImportError(
+            "The package 'toml' is not installed. Please install it to use this function.")
+    project_root_path = project_root_path if project_root_path is not None and is_project_root(
+        project_root_path) else get_project_root_path()
     pyproject_path = os.path.join(project_root_path, "pyproject.toml")
     with open(pyproject_path, "r") as file:
         pyproject = toml.load(file)
     package_info = pyproject["tool"]["poetry"]
     return package_info
+
 
 def get_package_name(project_root_path: Optional[str] = None) -> str:
     """Gets the package name of the project.

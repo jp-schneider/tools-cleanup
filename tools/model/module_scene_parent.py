@@ -3,6 +3,7 @@ from typing import TYPE_CHECKING, FrozenSet, Iterable, Optional, Set
 from tools.model.abstract_scene_node import AbstractSceneNode
 from tools.util.typing import VEC_TYPE
 
+
 class ModuleSceneParent(AbstractSceneNode):
     """Parent class for scene nodes that wrap a module class.
     Needed, as a pytorch module object can not deal with cyclic references.
@@ -19,13 +20,13 @@ class ModuleSceneParent(AbstractSceneNode):
 
     def get_name(self) -> Optional[str]:
         return self._node.get_name()
-    
+
     def set_name(self, value: Optional[str]) -> None:
         self._node.set_name(value)
 
     def get_position(self) -> VEC_TYPE:
         return self._node.get_position()
-    
+
     def set_position(self, value: VEC_TYPE) -> None:
         self._node.set_position(value)
 
@@ -46,4 +47,6 @@ class ModuleSceneParent(AbstractSceneNode):
 
     def get_global_position(self, **kwargs) -> VEC_TYPE:
         return self._node.get_global_position(**kwargs)
-    
+
+    def get_root(self) -> 'AbstractSceneNode':
+        return self._node.get_root()

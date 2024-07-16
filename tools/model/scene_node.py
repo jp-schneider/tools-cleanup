@@ -142,3 +142,15 @@ class SceneNode(AbstractSceneNode):
             The parent of the node. If the node has no parent, returns None.
         """
         return self._parent
+
+    def get_root(self) -> 'SceneNode':
+        """Get the root of the scene.
+
+        Returns
+        -------
+        SceneNode
+            The root of the scene.
+        """
+        if self._parent is None:
+            return self
+        return self._parent.get_root()

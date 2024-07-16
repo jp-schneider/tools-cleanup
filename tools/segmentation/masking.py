@@ -272,7 +272,7 @@ def save_mask(mask: VEC_TYPE,
               metadata: Optional[dict] = None,
               progress_bar: bool = False,
               additional_filename_variables: Optional[Dict[str, Any]] = None
-              ) -> None:
+              ) -> List[str]:
     """Saves the given (value) based mask to the given path.
 
     Can handle batches, if the mask is of shape B x C x H x W, it will save each mask in the batch to a separate file.
@@ -287,6 +287,7 @@ def save_mask(mask: VEC_TYPE,
 
     path : str
         Path to save the mask to.
+        If the mask is a batch, the path can be a format string, where the index of the mask in the batch can be used.
 
     spread: bool, optional
         Whether to spread the values of the mask to the full range 0 - 255 to make them visible with inspecting masks.
@@ -301,6 +302,16 @@ def save_mask(mask: VEC_TYPE,
     additional_filename_variables : Optional[Dict[str, Any]], optional
         Additional variables to use in the filename format string, by default None
 
+
+    Returns
+    -------
+    Union[str, List[str]]
+    Either:
+        str
+            Path to the saved file if the mask is not a batch.
+        List[str]
+            List of saved filenames.
+
     Raises
     ------
     ValueError
@@ -312,6 +323,7 @@ def save_mask(mask: VEC_TYPE,
     metadata_json = None
 
     mask = numpyify_image(mask)
+    saved_files = []
 
     # Check if all values are ints
     if not np.all((mask.astype(int) == mask)):
@@ -349,9 +361,12 @@ def save_mask(mask: VEC_TYPE,
         for i, f in it:
             img = Image.fromarray(mask[i].squeeze())
             img.save(f, **args)
+            saved_files.append(f)
     else:
         img = Image.fromarray(mask)
         img.save(path, **args)
+        return path
+    return saved_files
 
 
 def convert_batch_instance_dict(frames: Dict[int, Dict[int, np.ndarray]], offset: 0) -> np.ndarray:
@@ -583,7 +598,7 @@ def load_channel_masks(
         List[np.ndarray]
             List of non-overlapping value masks if output_format == 'value'
         Tuple[np.ndarray, np.ndarray]
-            1. The channel mask of shape [..., B] H x W x C
+            1. The channel mask of shape [..., B x ] H x W x C
             2. The object values of shape (C, ) corresponding to the channel mask index
     """
     paths = read_directory(mask_directory, filename_pattern, parser=dict(
