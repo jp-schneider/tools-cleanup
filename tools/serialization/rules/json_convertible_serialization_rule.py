@@ -5,7 +5,7 @@ from datetime import datetime
 from .json_serialization_rule import JsonSerializationRule
 from tools.serialization.json_convertible import JsonConvertible
 from tools.error.argument_none_error import ArgumentNoneError
-mafrom typing import Any, Dict, List, Literal, Optional, Type
+from typing import Any, Dict, List, Literal, Optional, Type
 
 
 class JsonConvertibleSerializationRule(JsonSerializationRule):
