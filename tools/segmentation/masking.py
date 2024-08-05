@@ -554,7 +554,27 @@ def save_channel_masks(
         mask_directory: str,
         oids: Optional[np.ndarray] = None,
         filename_pattern: str = "img_{index:02d}_ov_{ov_index}.png",
-        spread: bool = True):
+        spread: bool = True) -> List[str]:
+    """Saves a list of channel masks to a directory.
+
+    Parameters
+    ----------
+
+    masks : np.ndarray
+        List of channel masks of shape [..., B x] H x W x C
+    mask_directory : str
+        Directory to save the masks to.
+    oids : Optional[np.ndarray], optional
+        Object ids of the masks, by default None
+    filename_pattern : str, optional
+        Filename pattern to save the masks, by default "img_{index:02d}_ov_{ov_index}.png"
+    spread : bool, optional
+        Whether to spread the values of the mask to the full range 0 - 255 to make them visible with inspecting masks, by default
+        True
+    """
+    if oids is None:
+        oids = np.arange(masks.shape[-1])
+
     overlap_free_comb, overlap_free_comb_ids = split_overlap_channel_masks(
         masks)
 
@@ -563,13 +583,15 @@ def save_channel_masks(
 
     path = os.path.join(mask_directory, filename_pattern)
 
+    saved_paths = []
     for i in range(len(overlap_free_comb)):
         m_stack = overlap_free_comb[i]
         m_stack_oids = oids[overlap_free_comb_ids[i]]
         value_mask = channel_masks_to_value_mask(
             m_stack, m_stack_oids, handle_overlap='raise')[..., None]
-        save_mask(value_mask, path, spread=spread,
-                  additional_filename_variables=dict(ov_index=i))
+        p = save_mask(value_mask, path, spread=spread,
+                      additional_filename_variables=dict(ov_index=i))
+        saved_paths.extend(p)
 
 
 def load_channel_masks(
@@ -641,14 +663,23 @@ def merge_value_masks_to_channel_mask(
     -------
     Tuple[np.ndarray, np.ndarray]
         1. The channel mask of shape [..., B] H x W x C
-        2. The object values of shape (C, ) corresponding to the channel mask index
+        2. The object values of shape (C, 2) (y, x) where y is the index in the value_masks list, and x is the object value / index in the mask stack.
+            For the subindex in value mask, order the elements when filterd by the object value (y) in a increasing order.
     """
     comb = [value_mask_to_channel_masks(x) for x in value_masks]
+    gids = [x[1] for x in comb]
+    lgids = []
+    for i, x in enumerate(gids):
+        z = np.zeros(len(x))
+        z.fill(i)
+        lgids.append(np.stack([z, x], axis=-1))
+    lgids = np.concatenate(lgids, axis=0)
+
     channel_masks, channel_ids = np.concatenate(
-        [x[0] for x in comb], axis=-1), np.concatenate([x[1] for x in comb], axis=-1)
+        [x[0] for x in comb], axis=-1), np.concatenate(gids, axis=-1)
 
     # Reorder masks
-    reordered_indices = np.argsort(channel_ids)
+    reordered_indices = np.argsort(lgids[:, 1])
     channel_masks = channel_masks[..., reordered_indices]
-    channel_ids = channel_ids[reordered_indices]
+    channel_ids = lgids[reordered_indices]
     return channel_masks, channel_ids

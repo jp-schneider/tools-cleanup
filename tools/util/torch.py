@@ -7,7 +7,10 @@ from decimal import Decimal
 import numpy as np
 from tools.error import NoIterationTypeError, NoSimpleTypeError, ArgumentNoneError
 import hashlib
+from tools.util.progress_factory import ProgressFactory
 from tools.util.typing import NUMERICAL_TYPE, VEC_TYPE
+from typing import Callable, Tuple
+from tools.util.reflection import class_name
 
 
 def set_jit_enabled(enabled: bool):
@@ -327,6 +330,131 @@ def torch_to_numpy_dtype(dtype: torch.dtype) -> np.dtype:
         return torch_to_numpy_dtype_dict[dtype]
     else:
         raise ValueError(f"Unsupported dtype {dtype}")
+
+
+@torch.jit.script
+def flatten_batch_dims(tensor: torch.Tensor, end_dim: int) -> Tuple[torch.Tensor, List[int]]:
+    """
+
+    Utility function: flatten multiple batch dimensions into a single one, or add a batch dimension if there is none.
+
+    Parameters
+    ----------
+    tensor : torch.Tensor
+        Tensor to flatten.
+    end_dim : int
+        Maximum batch dimension to flatten (inclusive).
+
+    Returns
+    -------
+    Tuple[torch.Tensor, Tuple[int]]
+        The flattend tensor and the original batch shape.
+    """
+    ed = end_dim + 1 if end_dim != -1 else None
+    batch_shape = tensor.shape[:ed]
+
+    expected_dim = -1 if end_dim >= 0 else abs(end_dim)
+
+    if len(batch_shape) > 0:
+        flattened = tensor.flatten(end_dim=end_dim)
+    else:
+        flattened = tensor.unsqueeze(0)
+        if expected_dim > 0:
+            missing = expected_dim - len(flattened.shape)
+            for _ in range(missing):
+                flattened = flattened.unsqueeze(0)
+    return flattened, batch_shape
+
+
+@torch.jit.script
+def unflatten_batch_dims(tensor: torch.Tensor, batch_shape: List[int]) -> torch.Tensor:
+    """Method to unflatten a tensor, which was previously flattened using flatten_batch_dims.
+
+    Parameters
+    ----------
+    tensor : torch.Tensor
+        Tensor to unflatten.
+    batch_shape : List[int]
+        Batch shape to unflatten.
+
+    Returns
+    -------
+    torch.Tensor
+        The unflattened tensor.
+    """
+
+    if len(batch_shape) > 0:
+        if not isinstance(batch_shape, list):
+            batch_shape = list(batch_shape)
+        cur_dim = list(tensor.shape[1:])
+        new_dims = batch_shape + cur_dim
+        return tensor.reshape(new_dims)
+    else:
+        return tensor.squeeze(0)
+
+
+def batched_exec(*input,
+                 func: Callable[[torch.Tensor], torch.Tensor],
+                 batch_size: int,
+                 progress_bar: bool = False,
+                 pf: Optional[ProgressFactory] = None,
+                 **kwargs
+                 ) -> torch.Tensor:
+    """Execute a function in batches.
+
+    Parameters
+    ----------
+    input : List[torch.Tensor]
+        Should be a list of tensors which have a common batch dimension.
+        (B, ...) this is the first dimension and will be used to batch the execution.
+
+    func : Callable[[torch.Tensor], torch.Tensor]
+        Function to execute. Should take a tensors as input and return a tensor as output.
+
+    batch_size : int
+        The batch size to use for the execution.
+
+    progress_bar : bool, optional
+        If a progress bar should be displayed, by default False
+
+    pf : Optional[ProgressFactory], optional
+        Progress factory to reuse the progress bar, by default None
+
+    Returns
+    -------
+    torch.Tensor
+        Concatenated results of the function execution.
+    """
+    results = []
+    if progress_bar:
+        if pf is None:
+            pf = ProgressFactory()
+
+    if len(input) == 0:
+        raise ValueError("At least one input tensor is required")
+    B = input[0].shape[0]
+    full_batches, remainder = divmod(B, batch_size)
+
+    # Compute slices
+    slices = []
+
+    for i in range(0, full_batches):
+        slices.append(slice(i*batch_size, (i+1)*batch_size))
+    if remainder > 0:
+        slices.append(slice(full_batches*batch_size, B))
+
+    bar = None
+    if progress_bar:
+        bar = pf.tqdm(total=len(
+            slices), desc=f"Batched Execution: {class_name(func)}", tag=f"BATCH_EXEC_" + class_name(func), is_reusable=True)
+
+    for s in slices:
+        _ins = [i[s] for i in input]
+        r = func(*_ins, **kwargs)
+        results.append(r)
+        if progress_bar:
+            bar.update(1)
+    return torch.cat(results, dim=0)
 
 
 class TensorUtil():

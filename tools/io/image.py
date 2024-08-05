@@ -108,7 +108,9 @@ def load_image_exif(image: Image, safe_load: bool = True) -> Dict[Union[str, Exi
 def load_image(
     path: str,
     load_metadata: bool = False,
-    safe_metadata_load: bool = True
+    safe_metadata_load: bool = True,
+    max_size: Optional[int] = None,
+    size: Optional[Tuple[int, int]] = None
 ) -> Union[np.ndarray, Tuple[np.ndarray, Dict[Union[str, ExifTagsBase], Any]]]:
     """
     Loads an image from the given path.
@@ -125,6 +127,14 @@ def load_image(
 
     safe_metadata_load : bool, optional
         Whether the metadata should be loaded safely, by default True
+
+    max_size : Optional[int], optional
+        If the image should be resized to a maximum size, by default None
+        The image will be resized to the maximum size while maintaining aspect ratio.
+
+    size : Optional[Tuple[int, int]], optional
+        If a specific size should be used instead of max size, by default None
+        Is exclusive with max_size.
 
     Returns
     -------
@@ -143,10 +153,18 @@ def load_image(
     elif ext.lower() in [".tiff", ".tif"]:
         try:
             import cv2
-            image = cv2.imread(path)
+            image = cv2.imread(path, cv2.IMREAD_UNCHANGED)
             # Convert to RGB if 3 channel
             if image.shape[-1] == 3:
                 image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+            if max_size is not None or size is not None:
+                channel_added = False
+                if len(image.shape) == 2:
+                    image = np.expand_dims(image, axis=-1)
+                    channel_added = True
+                image = resize_image(image, max_size=max_size, size=size)
+                if channel_added:
+                    image = np.squeeze(image, axis=-1)
             return image
         except ImportError as err:
             raise ImportError(
@@ -154,6 +172,8 @@ def load_image(
     else:
         mask_pil = Image.open(path)
         image = np.array(mask_pil)
+        if max_size is not None or size is not None:
+            image = resize_image(image, max_size=max_size, size=size)
         if not load_metadata:
             return image
         # Load metadata
@@ -292,7 +312,83 @@ def resample(
         return image[::skips, ::skips, :]
 
 
-def load_image_stack(path: str, filename_format: str = r"(?P<index>[0-9]+).png") -> np.ndarray:
+def compute_new_size(image_shape: Tuple[int, int], max_size: int) -> Tuple[int, int]:
+    aspect = image_shape[1] / image_shape[0]
+    # Get if in landscape or portrait
+    if image_shape[1] > image_shape[0]:
+        # Landscape
+        new_size = (int(max_size / aspect), max_size)
+    else:
+        # Portrait
+        new_size = (max_size, int(max_size * aspect))
+    return new_size
+
+
+def compute_max_resolution(image_shape: Tuple[int, int], max_size: int) -> Tuple[int, int]:
+    if image_shape[0] <= max_size and image_shape[1] <= max_size:
+        return image_shape
+    aspect = image_shape[1] / image_shape[0]
+    # Get if in landscape or portrait
+    if image_shape[1] > image_shape[0]:
+        # Landscape
+        new_size = (int(max_size / aspect), max_size)
+    elif image_shape[1] <= image_shape[0]:
+        # Portrait
+        new_size = (max_size, int(max_size * aspect))
+    return new_size
+
+
+def resize_image(
+        image: np.ndarray,
+        max_size: Optional[int] = None,
+        size: Optional[Tuple[int, int]] = None
+) -> np.ndarray:
+    """Resizes the image to the given max size.
+    Maintains aspect ratio.
+
+    Parameters
+    ----------
+    image : np.ndarray
+        Image to resize. Should be in the shape (H, W, C) or (B, H, W, C)
+    max_size : int
+        Max size of the longest side of the image.
+    size : Optional[Tuple[int, int]], optional
+        If a specific size should be used instead of max size, by default None
+        Is exclusive with max_size.
+
+    Returns
+    -------
+    np.ndarray
+        Resized image.
+    """
+    from torchvision.transforms import Compose, Resize, ToTensor
+    from tools.transforms.to_numpy_image import ToNumpyImage
+    if len(image.shape) == 4:
+        B, H, W, C = image.shape
+    elif len(image.shape) == 3:
+        H, W, C = image.shape
+        B = 1
+    else:
+        raise ValueError("Image should have shape B x H x W x C or H x W x C")
+    if max_size is None and size is None:
+        raise ValueError("Either max_size or size should be provided.")
+    if max_size is not None and size is not None:
+        raise ValueError(
+            "Either max_size or size should be provided, not both.")
+    if max_size is not None:
+        new_size = compute_new_size((H, W), max_size)
+        transforms = Compose([ToTensor()] + ([Resize(new_size)]
+                             if (H > max_size or W > max_size) else []) + [ToNumpyImage()])
+    else:
+        transforms = Compose([ToTensor(), Resize(size), ToNumpyImage()])
+    return transforms(image)
+
+
+def load_image_stack(
+        path: str,
+        filename_format: str = r"(?P<index>[0-9]+).png",
+        max_size: Optional[int] = None
+) -> np.ndarray:
     """Helper function to load images for a given path and filename format.
 
     Parameters
@@ -304,6 +400,10 @@ def load_image_stack(path: str, filename_format: str = r"(?P<index>[0-9]+).png")
         Filename format regex, by default r"(?P<index>[0-9]+).png"
         Images will be sorted by index.
 
+    max_size : Optional[int], optional
+        If the image should be resized to a maximum size, by default None
+        The image will be resized to the maximum size while maintaining aspect ratio.
+
     Returns
     -------
     np.ndarray
@@ -314,14 +414,14 @@ def load_image_stack(path: str, filename_format: str = r"(?P<index>[0-9]+).png")
         path, filename_format, parser=dict(index=int), path_key="path")
     sorted_index = sorted(image_paths, key=lambda x: x["index"])
 
-    img = load_image(sorted_index[0]["path"])
+    img = load_image(sorted_index[0]["path"], max_size=max_size)
     images = np.zeros((len(sorted_index), *img.shape), dtype=img.dtype)
     images[0] = img
 
     it = tqdm(total=len(sorted_index), desc="Loading images")
     it.update(1)
     for i in range(1, len(sorted_index)):
-        images[i] = load_image(sorted_index[i]["path"])
+        images[i] = load_image(sorted_index[i]["path"], max_size=max_size)
         it.update(1)
     return images
 

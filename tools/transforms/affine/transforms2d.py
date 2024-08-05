@@ -5,6 +5,7 @@ import numpy as np
 
 import numpy as np
 from tools.util.typing import NUMERICAL_TYPE, VEC_TYPE
+from tools.util.torch import flatten_batch_dims, unflatten_batch_dims
 import torch
 
 __all__ = [
@@ -61,8 +62,8 @@ def assure_affine_vector(_input: VEC_TYPE,
         return _input  # Assuming it contains already affine property
     else:
         # Length of 2
-        return torch.cat([_input, torch.tensor([1], device=_input.device, 
-                                               dtype=_input.dtype, 
+        return torch.cat([_input, torch.tensor([1], device=_input.device,
+                                               dtype=_input.dtype,
                                                requires_grad=_input.requires_grad)])
 
 
@@ -165,6 +166,7 @@ def is_position_vector(_input: VEC_TYPE) -> torch.Tensor:
             return True
     return False
 
+
 def split_transformation_matrix(_input: VEC_TYPE) -> Tuple[torch.Tensor, torch.Tensor]:
     """Splits a transformation matrix in its position and orientation component.
 
@@ -235,11 +237,13 @@ def component_rotation_matrix(angle: Optional[NUMERICAL_TYPE] = None,
     if mode == "deg":
         angle = torch.deg2rad(angle)
 
-    rot = torch.tensor(np.identity(3), dtype=dtype, device=device, requires_grad=requires_grad)
+    rot = torch.tensor(np.identity(3), dtype=dtype,
+                       device=device, requires_grad=requires_grad)
     if dtype is None:
         rot = rot.to(dtype=torch.float32)  # Default dtype for torch.tensor
     if angle != 0.:
-        r_x = torch.zeros((3, 3), dtype=rot.dtype, device=rot.device, requires_grad=rot.requires_grad)
+        r_x = torch.zeros((3, 3), dtype=rot.dtype,
+                          device=rot.device, requires_grad=rot.requires_grad)
         r_x[0, 0] = 1
         r_x[1, 1] = torch.cos(angle)
         r_x[1, 2] = -torch.sin(angle)
@@ -268,24 +272,26 @@ def component_transformation_matrix(x: Optional[NUMERICAL_TYPE] = None,
     device: torch.device, optional
         Torch device for init the tensors directly on a specific device, by default "cpu"
     requires_grad: bool, optional
-        Whether initialized tensors will require gradient backpropagation, by default False 
+        Whether initialized tensors will require gradient backpropagation, by default False
     Returns
     -------
     torch.Tensor
         Transformation matrix.
     """
-    mat = torch.tensor(np.identity(3), dtype=dtype, device=device, requires_grad=requires_grad)
+    mat = torch.tensor(np.identity(3), dtype=dtype,
+                       device=device, requires_grad=requires_grad)
     if dtype is None:
-        mat = mat.to(dtype=torch.float32) # Default dtype for torch.tensor
+        mat = mat.to(dtype=torch.float32)  # Default dtype for torch.tensor
     mat[0, 2] = x if x is not None else 0.
     mat[1, 2] = y if y is not None else 0.
     return mat
 
+
 def component_scale_matrix(x: Optional[NUMERICAL_TYPE] = None,
-                                    y: Optional[NUMERICAL_TYPE] = None,
-                                    dtype: torch.dtype = None,
-                                    device: torch.device = None,
-                                    requires_grad: bool = False) -> torch.Tensor:
+                           y: Optional[NUMERICAL_TYPE] = None,
+                           dtype: torch.dtype = None,
+                           device: torch.device = None,
+                           requires_grad: bool = False) -> torch.Tensor:
     """Returng a scale matrix based on given components.
 
     Parameters
@@ -299,18 +305,20 @@ def component_scale_matrix(x: Optional[NUMERICAL_TYPE] = None,
     device: torch.device, optional
         Torch device for init the tensors directly on a specific device, by default "cpu"
     requires_grad: bool, optional
-        Whether initialized tensors will require gradient backpropagation, by default False 
+        Whether initialized tensors will require gradient backpropagation, by default False
     Returns
     -------
     torch.Tensor
         Transformation matrix.
     """
-    mat = torch.tensor(np.identity(3), dtype=dtype, device=device, requires_grad=requires_grad)
+    mat = torch.tensor(np.identity(3), dtype=dtype,
+                       device=device, requires_grad=requires_grad)
     if dtype is None:
-        mat = mat.to(dtype=torch.float32) # Default dtype for torch.tensor
+        mat = mat.to(dtype=torch.float32)  # Default dtype for torch.tensor
     mat[0, 0] = x if x is not None else 0.
     mat[1, 1] = y if y is not None else 0.
     return mat
+
 
 def transformation_matrix(vector: VEC_TYPE,
                           dtype: torch.dtype = None,
@@ -327,17 +335,19 @@ def transformation_matrix(vector: VEC_TYPE,
     device: torch.device, optional
         Torch device for init the tensors directly on a specific device, by default "cpu"
     requires_grad: bool, optional
-        Whether initialized tensors will require gradient backpropagation, by default False 
+        Whether initialized tensors will require gradient backpropagation, by default False
 
     Returns
     -------
     torch.Tensor
         The resulting transformation matrix.
     """
-    vector = tensorify(vector, dtype=dtype, device=device, requires_grad=requires_grad)
-    mat = torch.tensor(np.identity(3), dtype=dtype, device=device, requires_grad=requires_grad)
+    vector = tensorify(vector, dtype=dtype, device=device,
+                       requires_grad=requires_grad)
+    mat = torch.tensor(np.identity(3), dtype=dtype,
+                       device=device, requires_grad=requires_grad)
     if dtype is None:
-        mat = mat.to(dtype=torch.float32) # Default dtype for torch.tensor
+        mat = mat.to(dtype=torch.float32)  # Default dtype for torch.tensor
     mat[0:2, 2] = vector[0:2]
     return mat
 
@@ -357,19 +367,20 @@ def scale_matrix(vector: VEC_TYPE,
     device: torch.device, optional
         Torch device for init the tensors directly on a specific device, by default "cpu"
     requires_grad: bool, optional
-        Whether initialized tensors will require gradient backpropagation, by default False 
+        Whether initialized tensors will require gradient backpropagation, by default False
 
     Returns
     -------
     torch.Tensor
         The resulting scale matrix.
     """
-    vector = tensorify(vector, dtype=dtype, device=device, requires_grad=requires_grad)
-    mat = torch.tensor(np.identity(3), dtype=dtype, device=device, requires_grad=requires_grad)
+    vector = tensorify(vector, dtype=dtype, device=device,
+                       requires_grad=requires_grad)
+    mat = torch.tensor(np.identity(3), dtype=dtype,
+                       device=device, requires_grad=requires_grad)
     mat[0, 0] = vector[0]
     mat[1, 1] = vector[1]
     return mat
-
 
 
 def vector_angle(v1: VEC_TYPE, v2: VEC_TYPE) -> torch.Tensor:
