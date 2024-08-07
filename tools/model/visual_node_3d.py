@@ -162,6 +162,14 @@ class VisualNode3D(SceneNode):
 
             ax.set_zlabel(z_label)
             ax.set_aspect("equal")
+
+        # Set elevation, azimuth and roll if in kwargs
+        elev = kwargs.get("elevation", None)
+        azim = kwargs.get("azimuth", None)
+        roll = kwargs.get("roll", None)
+
+        if elev or azim or roll:
+            ax.view_init(elev=elev, azim=azim, roll=roll)
         return fig
 
     def plot_object(self, ax: Axes, **kwargs):

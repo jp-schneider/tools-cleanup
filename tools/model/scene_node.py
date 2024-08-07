@@ -1,4 +1,4 @@
-from typing import Iterable, Optional, Set, FrozenSet
+from typing import Generator, Iterable, Optional, Set, FrozenSet
 
 from tools.model.abstract_scene_node import AbstractSceneNode
 from tools.util.typing import VEC_TYPE
@@ -154,3 +154,30 @@ class SceneNode(AbstractSceneNode):
         if self._parent is None:
             return self
         return self._parent.get_root()
+
+    def query_children(self, include_self: bool = False, memo: Set["AbstractSceneNode"] = None) -> Generator['AbstractSceneNode', None, None]:
+        """Query all children of the node. in a depth first manner.
+
+        Parameters
+        ----------
+        include_self : bool, optional
+            If the node itself should be included in the query, by default False
+            Will be set to True for the child notes.
+
+        memo : Set[AbstractSceneNode], optional
+            Set of nodes that have already been visited, by default None
+            Will be set automatically to prevent infinite loops.
+
+        Yields
+        -------
+        Generator[AbstractSceneNode]
+            Generator for all children of the node.
+        """
+        if memo is None:
+            memo = set()
+        # Query children of the node if it has any.
+        for child in self._scene_children:
+            yield from child.query_children(include_self=True, memo=memo)
+        if include_self and self not in memo:
+            memo.add(self)
+            yield self
