@@ -384,10 +384,36 @@ def resize_image(
     return transforms(image)
 
 
+def index_image_folder(path, filename_format=r"(?P<index>[0-9]+).png", return_dict: bool = False) -> Union[List[str], List[Dict[str, Any]]]:
+    """Indexes the images in the given folder.
+
+    Parameters
+    ----------
+    path : str
+        Path to the folder.
+    filename_format : str, optional
+        Filename format regex, by default r"(?P<index>[0-9]+).png"
+    return_dict : bool, optional
+        If the return should be a list of dictionaries including the parsed values, by default False
+        If False, only the paths will be returned.
+
+    Returns
+    -------
+    Union[List[str], List[Dict[str, Any]]]
+        List of indexed filenames if return_dict is False, otherwise list of dictionaries with the parsed values.
+    """
+    image_paths = read_directory(
+        path, filename_format, parser=dict(index=int), path_key="path")
+    sorted_index = sorted(image_paths, key=lambda x: x["index"])
+    return [x["path"] for x in sorted_index] if not return_dict else sorted_index
+
+
 def load_image_stack(
         path: str,
         filename_format: str = r"(?P<index>[0-9]+).png",
-        max_size: Optional[int] = None
+        max_size: Optional[int] = None,
+        sorted_image_paths: Optional[List[int]] = None,
+        **kwargs
 ) -> np.ndarray:
     """Helper function to load images for a given path and filename format.
 
@@ -404,24 +430,28 @@ def load_image_stack(
         If the image should be resized to a maximum size, by default None
         The image will be resized to the maximum size while maintaining aspect ratio.
 
+    sorted_image_paths : Optional[List[str]], optional
+        Sorted image paths, by default None
+        If provided, the images will be loaded from these paths in the given order.
+
     Returns
     -------
     np.ndarray
         Image stack in shape B x H x W x C.
         B order is index order ascending.
     """
-    image_paths = read_directory(
-        path, filename_format, parser=dict(index=int), path_key="path")
-    sorted_index = sorted(image_paths, key=lambda x: x["index"])
+    if sorted_image_paths is None:
+        sorted_image_paths = index_image_folder(
+            path, filename_format=filename_format)
 
-    img = load_image(sorted_index[0]["path"], max_size=max_size)
-    images = np.zeros((len(sorted_index), *img.shape), dtype=img.dtype)
+    img = load_image(sorted_image_paths[0], max_size=max_size, **kwargs)
+    images = np.zeros((len(sorted_image_paths), *img.shape), dtype=img.dtype)
     images[0] = img
 
-    it = tqdm(total=len(sorted_index), desc="Loading images")
+    it = tqdm(total=len(sorted_image_paths), desc="Loading images")
     it.update(1)
-    for i in range(1, len(sorted_index)):
-        images[i] = load_image(sorted_index[i]["path"], max_size=max_size)
+    for i in range(1, len(sorted_image_paths)):
+        images[i] = load_image(sorted_image_paths[i], max_size=max_size)
         it.update(1)
     return images
 

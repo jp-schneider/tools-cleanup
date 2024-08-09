@@ -1,4 +1,4 @@
-from typing import Generator, Iterable, Optional, Set, FrozenSet
+from typing import Callable, Generator, Iterable, List, Optional, Set, FrozenSet, Union
 
 from tools.model.abstract_scene_node import AbstractSceneNode
 from tools.util.typing import VEC_TYPE
@@ -175,9 +175,51 @@ class SceneNode(AbstractSceneNode):
         """
         if memo is None:
             memo = set()
-        # Query children of the node if it has any.
-        for child in self._scene_children:
-            yield from child.query_children(include_self=True, memo=memo)
+
         if include_self and self not in memo:
             memo.add(self)
             yield self
+
+        # Query children of the node if it has any.
+        for child in self._scene_children:
+            yield from child.query_children(include_self=True, memo=memo)
+
+    def find(self,
+             criteria: Callable[['AbstractSceneNode'], bool],
+             include_self: bool = True,
+             find_first: bool = False) -> Union[Generator['AbstractSceneNode', None, None], Optional['AbstractSceneNode']]:
+        """Find one or all nodes that matches the given criteria.
+
+        Parameters
+        ----------
+        criteria : Callable[[AbstractSceneNode], bool]
+            Criteria to match on the nodes.
+
+        include_self : bool, optional
+            If the node itself should be included in the search, by default True
+            Otherwise only the children will recursively be searched.
+
+        find_first : bool, optional
+            If only the first matching node should be returned, by default False
+            Otherwise all matching nodes will be returned as a generator.
+
+        Yields
+        -------
+        Generator[AbstractSceneNode, None, None]
+            Generator for all children of the node that match the criteria if find_first is False.
+
+        Returns
+        -------
+        Optional[AbstractSceneNode]
+            The child node that matches the criteria if find_first is true. If no node matches, returns None.
+
+        """
+        # Check if criteria is not none
+        if criteria is None:
+            raise ValueError("Criteria must not be None.")
+        for node in self.query_children(include_self=include_self):
+            if criteria(node):
+                if find_first:
+                    return node
+                yield node
+        return None

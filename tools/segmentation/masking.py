@@ -594,24 +594,72 @@ def save_channel_masks(
         saved_paths.extend(p)
 
 
+def index_value_masks_folder(path: str, filename_pattern: str = r"img_(?P<index>[0-9]+)_ov_(?P<ov_index>[0-9]+).png", return_dict: bool = False) -> Union[Dict[int, List[str]], Dict[int, List[Dict[str, Any]]]]:
+    """Returns a dictionary of indexed overlapping aware value masks from a directory.
+
+    Each Key is the overlapping index of a stack of masks, while masks in different overlapping indices can overlap, while masks in the same overlapping index do not overlap.
+    This indexing is used to losslessly store masks in a directory, by saving them as value masks if they have no overlap.
+
+    Parameters
+    ----------
+    path : str
+        Path to the directory where the masks are stored.
+
+    filename_pattern : str, optional
+        Pattern to search for and load the masks, by default r"img_(?P<index>[0-9]+)_ov_(?P<ov_index>[0-9]+).png"
+
+    return_dict : bool, optional
+        If the return should be a list of dictionaries including the parsed values, by default False
+        If False, only the paths will be returned.
+
+    Returns
+    -------
+    Union[Dict[int, List[str]], Dict[int, List[Dict[str, Any]]]]
+        Dictionary of indexed overlapping aware value masks.
+        Key is the overlapping index, value is a list of paths to the masks which belong to the same object in various time steps if the values are the same.
+
+        If return_dict is True, the values are dictionaries with the parsed values, while the path is stored under the key 'path'.
+    """
+    paths = read_directory(path, filename_pattern, parser=dict(
+        index=int, ov_index=int), path_key="path")
+    ovs = set([x.get('ov_index', 0) for x in paths])
+    ov_paths = dict()
+    for p in paths:
+        ov_index = p.get('ov_index', 0)
+        if ov_index not in ov_paths:
+            ov_paths[ov_index] = []
+        ov_paths[ov_index].append(p)
+    for k in ov_paths:
+        sorted_paths = sorted(ov_paths[k], key=lambda x: x['index'])
+        ov_paths[k] = [p["path"]
+                       for p in sorted_paths] if not return_dict else list(sorted_paths)
+    return ov_paths
+
+
 def load_channel_masks(
     mask_directory: str,
     filename_pattern: str = r"img_(?P<index>[0-9]+)_ov_(?P<ov_index>[0-9]+).png",
-    output_format: Literal['channel', 'value'] = 'channel'
+    output_format: Literal['channel', 'value'] = 'channel',
+    overlapping_mask_paths: Optional[Dict[int, List[str]]] = None
 ) -> Union[List[np.ndarray], Tuple[np.ndarray, np.ndarray]]:
     """Loads overlapping value masks from a directory.
 
     Parameters
     ----------
     mask_directory : str
-        DIrectory where the masks are stored.
+        Directory where the masks are stored.
     filename_pattern : str, optional
-        Filenamepattern to scan for, by default r"img_(?P<index>[0-9]+)_ov_(?P<ov_index>[0-9]+).png"
+        Filename pattern to scan for, by default r"img_(?P<index>[0-9]+)_ov_(?P<ov_index>[0-9]+).png"
 
     output_format : Literal['channel', 'value'], optional
         Format of the output, by default 'channel'
         - 'channel': Returns the channel mask
         - 'value': Returns the value masks
+
+    overlapping_mask_paths : Optional[Dict[int, List[str]]]
+        Optional dictionary of overlapping mask paths, by default None
+        This can be an already indexed dictionary of mask paths, if not provided, the function will index the mask directory.
+
 
     Returns
     -------
@@ -623,22 +671,15 @@ def load_channel_masks(
             1. The channel mask of shape [..., B x ] H x W x C
             2. The object values of shape (C, ) corresponding to the channel mask index
     """
-    paths = read_directory(mask_directory, filename_pattern, parser=dict(
-        index=int, ov_index=int), path_key="path")
-    ovs = set([x['ov_index'] for x in paths])
-    ov_paths = dict()
-    for p in paths:
-        ov_index = p['ov_index']
-        if ov_index not in ov_paths:
-            ov_paths[ov_index] = []
-        ov_paths[ov_index].append(p)
-    for k in ov_paths:
-        ov_paths[k] = sorted(ov_paths[k], key=lambda x: x['index'])
+    if overlapping_mask_paths is None:
+        overlapping_mask_paths = index_value_masks_folder(
+            mask_directory, filename_pattern)
+
     # Read all masks
-    overlapping_masks = {k: [] for k in ovs}
-    for ov_index, path_dict_list in ov_paths.items():
+    overlapping_masks = {k: [] for k in overlapping_mask_paths}
+    for ov_index, path_dict_list in overlapping_mask_paths.items():
         for p in path_dict_list:
-            overlapping_masks[ov_index].append(load_mask(p['path']))
+            overlapping_masks[ov_index].append(load_mask(p))
     # Stack masks
     for k in overlapping_masks:
         overlapping_masks[k] = np.stack(overlapping_masks[k], axis=0)

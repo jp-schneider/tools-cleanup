@@ -1,6 +1,7 @@
 import copy
 from enum import Enum
 import math
+import os
 import re
 from datetime import timedelta
 from string import Template
@@ -10,8 +11,12 @@ import inspect
 from pandas import Series
 
 from tools.error import ArgumentNoneError
+from tools.error.argument_none_type_suggestion_error import ArgumentNoneTypeSuggestionError
+from tools.util.path_tools import format_os_independent
 from tools.util.typing import DEFAULT
 from tools.util.reflection import dynamic_import
+from traceback import extract_stack
+from types import TracebackType
 
 CAMEL_SEPERATOR_PATTERN = re.compile(
     r'((?<!^)(?<!_))((?=[A-Z][a-z])|((?<=[a-z])(?=[A-Z])))')
@@ -478,3 +483,153 @@ def parse_format_string(format_string: str,
         results.append(name)
 
     return results
+
+
+def raise_on_none(obj: Any, shadow_function_in_exception_trace: bool = True) -> Any:
+    """Checks if an object is not None and returns it unchanged.
+
+    And raises an error if it is.
+
+    As this checks the traceback for the variable name, it is not recommended to use this in performance critical code, when Nones are frequent,
+    and rather more on parsing user input.
+
+
+    Parameters
+    ----------
+    obj : Any
+        The object to check.
+
+    shadow_function_in_exception_trace : bool, optional
+        If the function should be shadowed in the exception trace, by default True
+        If set to True, the function will not appear in the exception trace, but the caller of the function.
+
+    Raises
+    ------
+    ArgumentNoneError
+        If the object is None.
+
+    ArgumentNoneTypeSuggestionError
+        If the object is None and the type was type hinted.
+        Can only find the type if a type hint was used and the function can be imported - this is possible if its a standalone function or constructor of a class.
+    """
+    ex = None
+    if obj is None:
+        pattern = r"raise_on_none\((obj( )+=( )+)?(?P<var_name>[A-z0-9_]+)(?P<other_args>(,( )*[A-z0-9_])+)?\)"
+        # We are lazy and trying to get the variable name from the stacktrace, but for beeing precise we need https://peps.python.org/pep-0657/ starting from 3.11
+        tb = extract_stack()
+        # Use the second last element which is the function / code executing the raise_on_none and extract the variable name
+        frame = tb[-2]
+        line = frame.line
+        # Use a regex to extract the variable name
+        matches = list(re.finditer(pattern, line))
+        if len(matches) == 0:
+            # Warn if we cannot extract the variable name
+            logger.warning(
+                f"Could not extract variable name in raise_on_none. In lineno: {frame.lineno} of file: {frame.filename} with line: {line}.")
+            ex = ArgumentNoneError("obj")
+        else:
+            # If we have exactly one match, we can extract the variable name
+            var_name = matches[0]["var_name"]
+            # if we have more than one match, display a warning and use the first one
+            if len(matches) > 1:
+                logger.warning(
+                    f"Multiple matches for variable name in raise_on_none: {matches} result may be incorrect. In lineno: {frame.lineno} of file: {frame.filename} multiple statements are used.")
+            # Get one frame up and try to extract the function call.
+            func_pattern = r"(?P<function_name>[A-z0-9_]+)\((?P<func_args>[A-z0-9,=\*_ ]*)\)"
+            frame_func_invocation = tb[-3]
+            func_invocations = list(re.finditer(
+                func_pattern, frame_func_invocation.line))
+
+            if len(func_invocations) == 0 or len(func_invocations) > 1:
+                # Okay no idea on type hints, so we just raise the error
+                ex = ArgumentNoneError(var_name)
+            else:
+                # Exactly one function call, so we can try to import it and get the type hints
+                try:
+                    func_name = func_invocations[0]["function_name"]
+                    # Get the filename as module name
+                    module_name_proto = frame_func_invocation.filename.split(".")[
+                        0]
+                    # Replace any path prefix which is known from the module_name_proto, use the longest
+
+                    import sys
+                    index = -1
+                    length = -1
+                    for prefix in sys.path:
+                        if prefix in module_name_proto:
+                            if len(prefix) > length:
+                                index = module_name_proto.index(prefix)
+                                length = len(prefix)
+                    if index != -1:
+                        prefix = sys.path[index]
+                        module_name_proto = module_name_proto.replace(
+                            prefix, "")
+                        module_name_proto = module_name_proto.strip(
+                            os.path.sep)
+
+                    # Format os_indenpendent
+                    module_name_proto = format_os_independent(
+                        module_name_proto)
+                    # Replace / with .
+                    module_name = module_name_proto.replace("/", ".")
+
+                    # Import the function
+                    func = dynamic_import(module_name + "." + func_name)
+
+                    # Get the type hints
+                    signature = inspect.signature(func)
+                    var = signature.parameters.get(var_name)
+                    if var is None:
+                        raise ArgumentNoneError(var_name)
+                    if var.annotation == inspect._empty:
+                        ex = ArgumentNoneError(var_name)
+                    else:
+                        annotation = var.annotation
+                        ex = ArgumentNoneTypeSuggestionError(
+                            var_name, annotation)
+                except Exception:
+                    # If we cannot import the function, we just raise the error
+                    ex = ArgumentNoneError(var_name)
+        if shadow_function_in_exception_trace:
+            tb = _custom_traceback(1)
+            raise ex.with_traceback(tb)
+        else:
+            raise ex
+    else:
+        return obj
+
+
+def _custom_traceback(stack_position: int = 0) -> TracebackType:
+    """Creates a custom traceback.
+
+    Will return a traceback object which can be used to raise an error with a custom traceback.
+
+    Parameters
+    ----------
+    stack_position : int, optional
+        Position in the call stack where the exception should appear, by default 0
+        0 is the current function, 1 is the caller of the function, 2 is the caller of the caller and so on.
+
+    Returns
+    -------
+    TracebackType
+        Traceback object.
+    """
+    # Stack position defines how many frames we go up
+    import sys
+    stack_position = abs(stack_position)
+    try:
+        raise ValueError()
+    except ValueError:
+        traceback = sys.exc_info()[2]
+        frame = traceback.tb_frame.f_back  # One iter
+        try:
+            for _ in range(stack_position):
+                frame = frame.f_back
+        except Exception:
+            pass
+        tb = TracebackType(tb_next=None,
+                           tb_frame=frame,
+                           tb_lasti=frame.f_lasti,
+                           tb_lineno=frame.f_lineno)
+        return tb

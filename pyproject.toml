@@ -24,6 +24,7 @@ pre-commit = {version = "^3.7.0", optional = true}
 autopep8 = "*"
 ipykernel = "*"
 ipywidgets = "*"
+pytest = "^8.3.2"
 
 [build-system]
 requires = ["poetry-core"]
