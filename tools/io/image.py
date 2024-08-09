@@ -451,7 +451,8 @@ def load_image_stack(
     it = tqdm(total=len(sorted_image_paths), desc="Loading images")
     it.update(1)
     for i in range(1, len(sorted_image_paths)):
-        images[i] = load_image(sorted_image_paths[i], max_size=max_size)
+        images[i] = load_image(sorted_image_paths[i],
+                               max_size=max_size, **kwargs)
         it.update(1)
     return images
 
