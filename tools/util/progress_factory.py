@@ -1,4 +1,4 @@
-from typing import Dict, Optional
+from typing import Dict, Optional, Iterable
 import weakref
 from tqdm.auto import tqdm
 from uuid import uuid4
@@ -149,3 +149,38 @@ class ProgressFactory:
         element = self._get_or_create(
             *args, tag=tag, is_reusable=is_reusable, **_kwargs)
         return element
+
+    def bar(self,
+            iterable: Optional[Iterable] = None,
+            total: Optional[int] = None,
+            desc: Optional[str] = None,
+            tag: Optional[str] = None,
+            is_reusable: bool = False, **kwargs) -> ProgressElement:
+        """Return a new or existing progress element.
+
+        Alias for tqdm.
+
+        iterable : Optional[Iterable], optional
+            Iterable to iterate over, by default None
+
+        total : Optional[int], optional
+            Total number of iterations, by default None
+
+        desc : Optional[str], optional
+            Description of the progress bar, by default None
+
+        tag : Optional[str], optional
+            Tag which can be used to reuse arbitrary progress bars, by default None
+
+        is_reusable : bool, optional
+            If the bar should be reusable, by default False
+
+        kwargs : dict
+            Additional arguments to pass to tqdm
+
+        Returns
+        -------
+        ProgressElement
+            The progress element
+        """
+        return self.tqdm(iterable, total=total, desc=desc, tag=tag, is_reusable=is_reusable, **kwargs)

@@ -34,6 +34,7 @@ else:
 
 
 class _DEFAULT():
+    """Default value singleton."""
     pass
 
 

@@ -17,6 +17,7 @@ from tqdm.auto import tqdm
 from tools.util.path_tools import numerated_file_name, read_directory
 import os
 from torch.nn.functional import grid_sample
+from tools.util.progress_factory import ProgressFactory
 
 
 def create_image_exif(metadata: Dict[Union[str, ExifTagsBase], Any]) -> Exif:
@@ -413,6 +414,8 @@ def load_image_stack(
         filename_format: str = r"(?P<index>[0-9]+).png",
         max_size: Optional[int] = None,
         sorted_image_paths: Optional[List[int]] = None,
+        progress_bar: bool = True,
+        progress_factory: Optional[ProgressFactory] = None,
         **kwargs
 ) -> np.ndarray:
     """Helper function to load images for a given path and filename format.
@@ -434,12 +437,20 @@ def load_image_stack(
         Sorted image paths, by default None
         If provided, the images will be loaded from these paths in the given order.
 
+    progress_bar : bool, optional
+        If a progress bar should be shown, by default True
+
+    progress_factory : Optional[ProgressFactory], optional
+        Optional progress factory to use, by default None
+
     Returns
     -------
     np.ndarray
         Image stack in shape B x H x W x C.
         B order is index order ascending.
     """
+    if progress_bar and progress_factory is None:
+        progress_factory = ProgressFactory()
     if sorted_image_paths is None:
         sorted_image_paths = index_image_folder(
             path, filename_format=filename_format)
@@ -448,12 +459,17 @@ def load_image_stack(
     images = np.zeros((len(sorted_image_paths), *img.shape), dtype=img.dtype)
     images[0] = img
 
-    it = tqdm(total=len(sorted_image_paths), desc="Loading images")
-    it.update(1)
+    it = None
+    if progress_bar:
+        it = progress_factory.bar(total=len(
+            sorted_image_paths), desc="Loading images", is_reusable=True, tag="load_image_stack", delay=1)
+        it.update(1)
+
     for i in range(1, len(sorted_image_paths)):
         images[i] = load_image(sorted_image_paths[i],
                                max_size=max_size, **kwargs)
-        it.update(1)
+        if progress_bar:
+            it.update(1)
     return images
 
 

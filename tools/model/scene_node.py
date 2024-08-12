@@ -219,7 +219,8 @@ class SceneNode(AbstractSceneNode):
             raise ValueError("Criteria must not be None.")
         for node in self.query_children(include_self=include_self):
             if criteria(node):
-                if find_first:
-                    return node
                 yield node
+                if find_first:
+                    # Will raise StopIteration
+                    return node
         return None
