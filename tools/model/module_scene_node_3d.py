@@ -54,7 +54,7 @@ class ModuleSceneNode3D(ModuleSceneNode, VisualNode3D):
         torch.Tensor
             Vector describing the global position.
         """
-        return self.get_global_position(**kwargs)[0:4, 3]
+        return self.get_global_position(**kwargs)[..., 3]
 
     def local_to_global(self, v: torch.Tensor, **kwargs) -> torch.Tensor:
         """Converts local vectors to global vectors.

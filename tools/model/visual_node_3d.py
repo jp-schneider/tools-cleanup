@@ -17,9 +17,9 @@ class VisualNode3D(SceneNode):
     # region Visualization
     @saveable()
     def plot_scene(self,
-                   plot_coordinate_systems: bool = True,
+                   plot_coordinate_systems: bool = False,
                    plot_line_to_child: bool = False,
-                   plot_coordinate_annotations: bool = True,
+                   plot_coordinate_annotations: bool = False,
                    coordinate_system_indicator_length: float = 0.3,
                    units: Optional[Union[List[str], str]] = None,
                    ax: Optional[Axes3D] = None,
@@ -186,7 +186,8 @@ class VisualNode3D(SceneNode):
         """
         if kwargs.get("plot_coordinate_annotations", False) and self._name is not None:
             position = self.get_global_position(**kwargs)[..., :3, 3]
-            ax.text(*position[:3], self._name,
-                    horizontalalignment='center', verticalalignment='center')
+            if len(position.shape) == 1:
+                ax.text(*position[:3], self._name,
+                        horizontalalignment='center', verticalalignment='center')
 
     # endregion
