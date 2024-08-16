@@ -9,6 +9,7 @@ from tools.model.scene_node import SceneNode
 from tools.transforms.affine.transforms3d import component_position_matrix
 from tools.viz.matplotlib import saveable
 from mpl_toolkits.mplot3d import Axes3D
+from tools.transforms.to_numpy import numpyify
 
 
 class VisualNode3D(SceneNode):
@@ -69,11 +70,11 @@ class VisualNode3D(SceneNode):
 
             # 3 Vectors indicating local coordinate system
             cord_vec_x = component_position_matrix(
-                x=coordinate_system_indicator_length, dtype=pos.dtype).repeat(pos.shape[0], 1, 1)
+                x=coordinate_system_indicator_length, dtype=pos.dtype, device=pos.device).repeat(pos.shape[0], 1, 1)
             cord_vec_y = component_position_matrix(
-                y=coordinate_system_indicator_length, dtype=pos.dtype).repeat(pos.shape[0], 1, 1)
+                y=coordinate_system_indicator_length, dtype=pos.dtype, device=pos.device).repeat(pos.shape[0], 1, 1)
             cord_vec_z = component_position_matrix(
-                z=coordinate_system_indicator_length, dtype=pos.dtype).repeat(pos.shape[0], 1, 1)
+                z=coordinate_system_indicator_length, dtype=pos.dtype, device=pos.device).repeat(pos.shape[0], 1, 1)
 
             x_vec = torch.bmm(pos, cord_vec_x)[..., :3, 3]
             y_vec = torch.bmm(pos, cord_vec_y)[..., :3, 3]
@@ -113,7 +114,9 @@ class VisualNode3D(SceneNode):
         texts = []
 
         for start, targets, text in vec_positions:
+            start = numpyify(start)
             for i, target in enumerate(targets):
+                target = numpyify(target)
                 start_x.append(start[0])
                 start_y.append(start[1])
                 start_z.append(start[2])

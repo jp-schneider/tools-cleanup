@@ -15,7 +15,7 @@ def minmax(v: torch.Tensor,
         v_min = torch.min(v)
     if v_max is None:
         v_max = torch.max(v)
-    return (v - v_min)/(v_max - v_min)*(new_max - new_min) + new_min
+    return (v - v_min) / (v_max - v_min) * (new_max - new_min) + new_min
 
 
 class MinMax(InvertableTransform, FittableTransform, torch.nn.Module):
