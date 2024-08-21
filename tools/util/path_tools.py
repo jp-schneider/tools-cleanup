@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 import re
 import subprocess
 from typing import Any, Dict, List, Optional
@@ -302,3 +303,62 @@ def replace_file_unallowed_chars(file_name: str, replace_with: str = "_") -> str
         replace_with.join(base_name), replace_with=replace_with)
     file_name = f"{base_name}.{ext}"
     return file_name
+
+
+def process_path(
+    path: str | Path,
+    need_exist: bool = False,
+    make_exist: bool = False,
+    allow_none: bool = False,
+    interpolate: bool = False,
+    interpolate_object: Optional[object] = None,
+    variable_name: Optional[str] = None
+) -> Optional[Path]:
+    """Preprocesses a path string or Path object.
+
+    Can interpolate certain values into the path string, based on the interpolate string
+    and with the parse_format_string function.
+
+    Parameters
+    ----------
+    path : str | Path
+        Path to preprocess, may contain placeholders for interpolation.
+    need_exist : bool, optional
+        If the path need to exist beforehand, by default False
+    make_exist : bool, optional
+        If the path should be created, by default False
+    allow_none : bool, optional
+        If calling with an empty path is allowed, otherwise raise an error, by default False
+    interpolate : bool, optional
+        If path interpolation should be carried out, by default False
+    interpolate_object : Optional[object], optional
+        The object to lookup for when having interpolation active, by default None
+    variable_name : Optional[str], optional
+        The current variable name to display in errors, by default None
+
+    Returns
+    -------
+    Optional[Path]
+        The processed path as Path object.
+    """
+    from tools.util.format import parse_format_string
+    if path is None:
+        if allow_none:
+            return None
+        else:
+            raise ValueError(
+                f"Path {'for ' + variable_name + ' ' if variable_name is not None else ''}must be set.")
+    if isinstance(path, Path):
+        return path
+    elif not isinstance(path, str):
+        raise ValueError(
+            f"Path {'for ' + variable_name + ' ' if variable_name is not None else ''}must be a string or Path object.")
+    if interpolate:
+        path = parse_format_string(path, [interpolate_object])[0]
+    p = Path(path).resolve()
+    if need_exist and not p.exists():
+        raise FileNotFoundError(
+            f"Path {'for ' + variable_name + ' ' if variable_name is not None else ''}{p} does not exist.")
+    if make_exist and not p.exists():
+        p.mkdir(parents=True, exist_ok=True)
+    return p

@@ -54,7 +54,7 @@ class DiscreteModuleSceneNode3D(ModuleSceneNode3D):
         self.register_buffer(
             "_translation", tensorify(translation, dtype=dtype))
         self.register_buffer(
-            "_orientation", tensorify(orientation, dtype=dtype))
+            "_orientation", tensorify(orientation, dtype=dtype, device=self._translation.device))
 
     def _get_default_translation(self, dtype: torch.dtype) -> torch.Tensor:
         return torch.zeros(3, dtype=dtype)
