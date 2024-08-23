@@ -6,6 +6,7 @@ from .json_serialization_rule import JsonSerializationRule
 import sys
 from tools.util.reflection import get_alias
 
+
 class JsonSerializationRuleRegistry():
     """Defines the known rules for converting an object into a json convertible structure."""
 
@@ -60,7 +61,10 @@ class JsonSerializationRuleRegistry():
             JsonTorchDtypeSerializationRule,
             JsonTorchDeviceSerializationRule,
             JsonTypeSerializationRule,
-            JsonSliceSerializationRule
+            JsonSliceSerializationRule,
+            JsonDefaultSingletonSerializationRule,
+            JsonPathSerializationRule
+
         )
         all_simple_rules: List[Type[JsonSerializationRule]] = [
             JsonIdentitySerializationRule,
@@ -76,7 +80,9 @@ class JsonSerializationRuleRegistry():
             JsonTorchDtypeSerializationRule,
             JsonTorchDeviceSerializationRule,
             JsonTypeSerializationRule,
-            JsonSliceSerializationRule
+            JsonSliceSerializationRule,
+            JsonDefaultSingletonSerializationRule,
+            JsonPathSerializationRule
         ]
 
         if 'numpy' in sys.modules:
@@ -84,7 +90,8 @@ class JsonSerializationRuleRegistry():
                 JsonGenericSerializationRule,
                 JsonNDArraySerializationRule,
             )
-            all_simple_rules = [JsonGenericSerializationRule, JsonNDArraySerializationRule] + all_simple_rules
+            all_simple_rules = [JsonGenericSerializationRule,
+                                JsonNDArraySerializationRule] + all_simple_rules
 
         if additional_simple_rules is not None:
             all_simple_rules += additional_simple_rules
@@ -115,9 +122,11 @@ class JsonSerializationRuleRegistry():
         if len(rules) == 0:
             return
         if any((not issubclass(x, JsonSerializationRule) for x in rules)):
-            raise ValueError("Some rules not subclassing JsonSerializationRule, cannot register them!")
+            raise ValueError(
+                "Some rules not subclassing JsonSerializationRule, cannot register them!")
         # Adding the new rules and keeping others, duplicates are purged.
-        self.__simple_rules__ = self._find_simple_rules(rules + self.__simple_rules__)
+        self.__simple_rules__ = self._find_simple_rules(
+            rules + self.__simple_rules__)
         self.__simple_type_rules_forward__, self.__simple_type_rules_backward__ = self._setup_simple_rules()
 
     def register_complex_rules(self, rules: List[Type[JsonSerializationRule]]):
@@ -140,9 +149,11 @@ class JsonSerializationRuleRegistry():
         if len(rules) == 0:
             return
         if any((not issubclass(x, JsonSerializationRule) for x in rules)):
-            raise ValueError("Some rules not subclassing JsonSerializationRule, cannot register them!")
+            raise ValueError(
+                "Some rules not subclassing JsonSerializationRule, cannot register them!")
         # Adding the new rules and keeping others, duplicates are purged.
-        self.__complex_rules__ = self._find_simple_rules(rules + self.__complex_rules__)
+        self.__complex_rules__ = self._find_simple_rules(
+            rules + self.__complex_rules__)
         self.__complex_type_rules_forward__, self.__complex_type_rules_backward__ = self._setup_complex_rules()
 
     def _find_complex_rules(self, additional_complex_rules: Optional[List[Type]] = None) -> List[Type]:
@@ -168,7 +179,8 @@ class JsonSerializationRuleRegistry():
         # purge duplicates
         all_complex_rules = list(set(all_complex_rules))
 
-        all_complex_rules = sorted(all_complex_rules, key=lambda v: v().priority)
+        all_complex_rules = sorted(
+            all_complex_rules, key=lambda v: v().priority)
 
         return all_complex_rules
 

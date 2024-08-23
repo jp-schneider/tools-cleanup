@@ -54,6 +54,7 @@ class SceneNode(AbstractSceneNode):
     def __ignore_on_iter__(self) -> Set[str]:
         ret = super().__ignore_on_iter__()
         ret.add('_parent')
+        ret.add('parent')
         return ret
 
     def after_decoding(self, **kwargs) -> None:

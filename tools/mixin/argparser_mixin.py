@@ -6,7 +6,7 @@ from dataclasses import MISSING, Field
 from typing import Any, Dict, List, Optional, Type, get_args
 
 from simple_parsing.docstring import get_attribute_docstring
-from typing_inspect import is_literal_type, is_optional_type, is_tuple_type, is_classvar
+from typing_inspect import is_literal_type, is_optional_type, is_tuple_type, is_classvar, is_union_type
 
 from tools.error import UnsupportedTypeError, IgnoreTypeError
 from enum import Enum
@@ -15,6 +15,7 @@ from tools.serialization.json_convertible import JsonConvertible
 
 WARNING_ON_UNSUPPORTED_TYPE = True
 """If true, a warning will be printed if a type is not supported."""
+
 
 def set_warning_on_unsupported_type(warning: bool) -> None:
     """Sets the warning on unsupported type.
@@ -26,6 +27,7 @@ def set_warning_on_unsupported_type(warning: bool) -> None:
     """
     global WARNING_ON_UNSUPPORTED_TYPE
     WARNING_ON_UNSUPPORTED_TYPE = warning
+
 
 class ParseEnumAction(argparse.Action):
     """Custom action to parse enum values from the command line."""
@@ -45,12 +47,13 @@ class ParseEnumAction(argparse.Action):
         elif isinstance(values, list):
             v = [self.enum_type(x) for x in values]
         else:
-            raise ValueError(f"Unsupported type of values: {type(values).__name__}")
+            raise ValueError(
+                f"Unsupported type of values: {type(values).__name__}")
         setattr(namespace, self.dest, v)
 
 
 class ArgparserMixin:
-    """Mixin wich provides functionality to construct a argparser for a 
+    """Mixin wich provides functionality to construct a argparser for a
     dataclass type and applies its data."""
 
     @classmethod
@@ -89,6 +92,8 @@ class ArgparserMixin:
                 ret["choices"] = list(arg)
                 ret["type"] = type(arg[0])
             return ret
+        elif _type == type(None):
+            raise IgnoreTypeError()
         elif ((isinstance(_type, Type) and
               (issubclass(_type, list) or issubclass(_type, tuple)))
               or is_tuple_type(_type)):
@@ -117,6 +122,25 @@ class ArgparserMixin:
                         enum_type=_type,
                         choices=choices,
                         action=ParseEnumAction)
+        elif is_union_type(_type):
+            # Check if contains None
+            _new_types = get_args(_type)
+            any_matched = False
+            args = dict()
+            for _new_type in _new_types:
+                try:
+                    args = cls._map_type_to_parser_arg(field, _new_type)
+                    any_matched = True
+                    break
+                except (IgnoreTypeError, UnsupportedTypeError):
+                    continue
+            if is_optional_type(_type):
+                args["required"] = False
+            if any_matched:
+                return args
+            else:
+                raise UnsupportedTypeError(
+                    f"Dont know how to handle type: {_type} of field: {field.name}.")
         elif is_optional_type(_type):
             # Unpack optional type.
             _new_type = get_args(_type)[0]
@@ -141,10 +165,12 @@ class ArgparserMixin:
             ret = dict()
             if len(arg) > 0:
                 if value not in arg:
-                    raise ValueError(f"{value} is not value supported for literal type: {_type}")
+                    raise ValueError(
+                        f"{value} is not value supported for literal type: {_type}")
                 return value
             else:
-                raise ValueError(f"Could not specify {value} for literal type: {_type}")
+                raise ValueError(
+                    f"Could not specify {value} for literal type: {_type}")
         elif ((isinstance(_type, Type) and
               (issubclass(_type, list) or issubclass(_type, tuple)))
               or is_tuple_type(_type)):
@@ -173,7 +199,8 @@ class ArgparserMixin:
             next((x[1] for x in members if x[0] == '__dataclass_fields__'), dict()).values())
 
         # Non private fields
-        fields = [x for x in all_fields if not x.name.startswith('_') and x.name not in cls.argparser_ignore_fields()]
+        fields = [x for x in all_fields if not x.name.startswith(
+            '_') and x.name not in cls.argparser_ignore_fields()]
         return fields
 
     @classmethod
@@ -198,7 +225,7 @@ class ArgparserMixin:
         ----------
         parser : Optional[ArgumentParser]
             An existing argument parser. If not specified a new one will be created. Defaults to None.
-        
+
         sep : str
             Separator for the argument name, will replace the "_" of config classes. Defaults to "-".
 
@@ -276,13 +303,14 @@ class ArgparserMixin:
             if hasattr(parsed_args, field.name):
                 value = getattr(parsed_args, field.name)
                 if ((field.default != MISSING and (value is not None and value != field.default)) or
-                        (field.default_factory != MISSING and (value is not None and value != field.default_factory()))
+                        (field.default_factory != MISSING and (
+                            value is not None and value != field.default_factory()))
                         or (field.default == MISSING and field.default_factory == MISSING)):
-                    setattr(self, field.name, self._get_parser_arg_value(field, value))
+                    setattr(self, field.name,
+                            self._get_parser_arg_value(field, value))
 
-    
     @classmethod
-    def parse_args(cls, 
+    def parse_args(cls,
                    parser: ArgumentParser,
                    add_config_path: bool = True,
                    sep: str = "-",
@@ -307,8 +335,9 @@ class ArgparserMixin:
         """
         from tools.logger.logging import logger
         if add_config_path:
-            parser.add_argument("--config-path", type=str, default=None, required=False)
-        
+            parser.add_argument("--config-path", type=str,
+                                default=None, required=False)
+
         parser = cls.get_parser(parser, sep=sep)
         args = parser.parse_args()
 
@@ -317,7 +346,8 @@ class ArgparserMixin:
             args.config_path = args.config_path.strip("\"").strip("\'")
             config = JsonConvertible.load_from_file(args.config_path)
             if not isinstance(config, cls):
-                logger.warning(f"Loaded config from file is not of type {cls.__name__}. But {type(config).__name__}.")
+                logger.warning(
+                    f"Loaded config from file is not of type {cls.__name__}. But {type(config).__name__}.")
             config.apply_parsed_args(args)
         else:
             config = cls.from_parsed_args(args)

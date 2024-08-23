@@ -633,3 +633,24 @@ def _custom_traceback(stack_position: int = 0) -> TracebackType:
                            tb_lasti=frame.f_lasti,
                            tb_lineno=frame.f_lineno)
         return tb
+
+
+def get_leading_zeros_format(max_number: int) -> str:
+    """Gets the format string for leading zeros for integers
+
+    Parameters
+    ----------
+    max_number : int
+        The maximum number which can appear.
+
+    Returns
+    -------
+    str
+        The format string. e.g. 05d for 5 leading zeros. if max_number is up to 99999.
+    """
+    return f"0{len(str(max_number))}d"
+
+
+def get_leading_zeros_format_string(max_number: int) -> str:
+    """Gets the format string for leading zeros for strings, directly usable in format strings."""
+    return f"{{:{get_leading_zeros_format(max_number)}}}"

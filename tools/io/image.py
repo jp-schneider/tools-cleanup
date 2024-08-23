@@ -479,7 +479,8 @@ def save_image_stack(images: VEC_TYPE,
                      metadata: Optional[Dict[Union[str,
                                                    ExifTagsBase], Any]] = None,
                      progress_bar: bool = False,
-                     additional_filename_variables: Optional[Dict[str, Any]] = None
+                     additional_filename_variables: Optional[Dict[str, Any]] = None,
+                     additional_filename_variables_list: Optional[List[Dict[str, Any]]] = None
                      ) -> List[str]:
     """Saves the given image stack.
 
@@ -506,6 +507,9 @@ def save_image_stack(images: VEC_TYPE,
     additional_filename_variables : Optional[Dict[str, Any]], optional
         Additional variables to use in the filename format string, by default None
 
+    additional_filename_variables_list : Optional[List[Dict[str, Any]], optional
+        Additional variables to use in the filename format string, by default None
+        If provided, the additional variables item corresponding to the index will be used.
 
     Returns
     -------
@@ -521,8 +525,21 @@ def save_image_stack(images: VEC_TYPE,
             os.makedirs(os.path.dirname(format_string_path), exist_ok=True)
     args = dict()
 
-    filenames = parse_format_string(format_string_path, [dict(index=i) for i in range(
-        images.shape[0])], additional_variables=additional_filename_variables)
+    def from_optional_list_index(l: Optional[List[Dict[str, Any]]], index: int) -> Dict[str, Any]:
+        if l is None:
+            return dict()
+        if len(l) <= index:
+            return dict()
+        d = l[index]
+        if d is None:
+            return dict()
+        d = dict(d)
+        d.pop("index", None)
+        return d
+
+    filenames = parse_format_string(format_string_path, [
+        dict(index=i, **from_optional_list_index(additional_filename_variables_list, i)) for i in range(images.shape[0])
+    ], additional_variables=additional_filename_variables)
     if len(set(filenames)) != images.shape[0]:
         raise ValueError(
             f"Number of filenames {len(filenames)} does not match number of masks {images.shape[0]} if you specified an index template?")

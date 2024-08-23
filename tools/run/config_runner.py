@@ -20,6 +20,7 @@ import sys
 from tools.logger.logging import logger
 from tools.util.seed import seed_all
 
+
 class ConfigRunner(AbstractRunner):
     """Config Runner which gets a config and can "run"."""
 
@@ -27,7 +28,7 @@ class ConfigRunner(AbstractRunner):
     """Configuration of the runner."""
 
     diff_config: Optional[Dict[str, Any]]
-    """Dictionary which contains the difference between the base config and the child config of the runner, 
+    """Dictionary which contains the difference between the base config and the child config of the runner,
     if the runner is part of a multi runner."""
 
     __saved_config__: Optional[str]
@@ -57,16 +58,18 @@ class ConfigRunner(AbstractRunner):
             The path where the config is stored, or None if no path was given.
         """
         if path is not None:
-            path = os.path.join(path, f"init_cfg_{to_snake_case(type(self.config).__name__)}.yaml")
+            path = os.path.join(
+                path, f"init_cfg_{to_snake_case(type(self.config).__name__)}.yaml")
             path = numerated_file_name(path)
-            path = self.config.save_to_file(path, no_uuid=True, no_large_data=True)
+            path = self.config.save_to_file(
+                path, no_uuid=True, no_large_data=True)
             with open(path, 'r') as f:
                 self.__saved_config__ = f.read()
             return path
         else:
-            self.__saved_config__ = self.config.convert_to_yaml_str(no_uuid=True, no_large_data=True)
+            self.__saved_config__ = self.config.convert_to_yaml_str(
+                self.config, no_uuid=True, no_large_data=True)
             return None
-
 
     def log_config(self, path: Optional[str] = None) -> None:
         """Logs the config of the runner.
@@ -74,4 +77,3 @@ class ConfigRunner(AbstractRunner):
         if self.__saved_config__ is None:
             self.store_config(path)
         logger.info(f"Using Config:\n{self.__saved_config__}")
-        

@@ -25,6 +25,7 @@ from tools.agent.util import LearningMode, LearningScope
 from tools.agent.torch_agent import TorchAgent
 from tools.serialization import ObjectEncoder, JsonConvertible
 
+
 class Tensorboard():
     """Tensorboard logging adapter with predefined methods.
     """
@@ -65,7 +66,7 @@ class Tensorboard():
                         log_config: bool = True,
                         log_graph: bool = True,
                         log_config_only_once: bool = True,
-                        name: Optional[str] = None, 
+                        name: Optional[str] = None,
                         ) -> 'Tensorboard':
         if name is None:
             base_name = os.path.basename(agent.agent_folder)
@@ -84,7 +85,8 @@ class Tensorboard():
         if log_optimizer:
             agent.epoch_processed.attach(logger.log_optimizer)
         if log_config:
-            agent.epoch_processed.attach(logger.log_config(only_once=log_config_only_once))
+            agent.epoch_processed.attach(
+                logger.log_config(only_once=log_config_only_once))
         if log_graph:
             agent.batch_processed.attach(logger.log_graph())
         return logger
@@ -167,7 +169,6 @@ class Tensorboard():
         tag = Tensorboard.to_tensorboard_tag(entry.tag)
         value = entry.value
         self.log_value(value=value, tag=tag, step=entry.global_step, time=time)
-        
 
     def log_value(self, value: Union[np.ndarray, torch.Tensor, int, float, complex], tag: str, step: int, time: Optional[float] = None):
         """Logs a numeric value to tensorboard.
@@ -193,7 +194,6 @@ class Tensorboard():
         else:
             self._log_scalar(value=value, tag=tag, step=step, time=time)
 
-
     def _log_scalar(self, value, tag: str, step: int, time: float):
         """Log method for simple scalars."""
         if isinstance(value, complex):
@@ -213,7 +213,7 @@ class Tensorboard():
         """Multi dimensional log for numpy arrays or tensors"""
         if len(value.shape) > 0:
             # Remove 1 dims
-            value = value.squeeze() 
+            value = value.squeeze()
         if len(value.shape) == 0:
             # Proceed as scalar
             self._log_scalar(value=value, tag=tag, step=step, time=time)
@@ -222,10 +222,9 @@ class Tensorboard():
             # Dimensions will be flattend and getting individual steps
             flattened = value.flatten()
             for i, v in enumerate(flattened):
-                # Assuming that previous steps had also same size, 
+                # Assuming that previous steps had also same size,
                 fl_step = max((step - 1), 0) * len(flattened) + i
                 self._log_scalar(value=v, tag=tag, step=fl_step, time=time)
-
 
     def log_optimizer(self, ctx: Dict[str, Any], output_args: TorchModelStepEventArgs):
         if output_args.mode == LearningMode.TRAINING:
@@ -268,7 +267,8 @@ class Tensorboard():
             nonlocal logged
             if (not logged):
                 if output_args.scope != LearningScope.BATCH:
-                    logging.warn("The model graph can be only logged in batch mode, as the input is needed!")
+                    logging.warn(
+                        "The model graph can be only logged in batch mode, as the input is needed!")
                     logged = True
                     return
                 if output_args.input is None:
@@ -366,7 +366,8 @@ class Tensorboard():
             torch_args = dict(
                 optimizer=type(output_args.optimizer).__name__,
                 optimizer_init_args=agent.optimizer_args,
-                optimizer_params=self._get_optimizer_parameters(output_args.optimizer),
+                optimizer_params=self._get_optimizer_parameters(
+                    output_args.optimizer),
                 loss_args=agent.loss,
             )
         return dict(
@@ -374,7 +375,8 @@ class Tensorboard():
             model=type(output_args.model).__name__,
             model_init_args=output_args.model_args,
             loss=output_args.loss_name,
-            dataset_config={k: v for k, v in output_args.dataset_config.items() if 'indices' not in k.lower()},
+            dataset_config={k: v for k, v in output_args.dataset_config.items(
+            ) if 'indices' not in k.lower()},
             **torch_args
         )
 
