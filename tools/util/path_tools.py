@@ -2,7 +2,7 @@ import os
 from pathlib import Path
 import re
 import subprocess
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 
 
 def relpath(from_: str, to: str, is_from_file: bool = True, is_to_file: bool = True) -> str:
@@ -306,7 +306,7 @@ def replace_file_unallowed_chars(file_name: str, replace_with: str = "_") -> str
 
 
 def process_path(
-    path: str | Path,
+    path: Union[str, Path],
     need_exist: bool = False,
     make_exist: bool = False,
     allow_none: bool = False,

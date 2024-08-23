@@ -332,6 +332,25 @@ def torch_to_numpy_dtype(dtype: torch.dtype) -> np.dtype:
         raise ValueError(f"Unsupported dtype {dtype}")
 
 
+def detach_module(module: torch.nn.Module) -> torch.nn.Module:
+    """Detaches a module from the computation graph.
+
+    Parameters
+    ----------
+    module : torch.nn.Module
+        Module to detach.
+
+    Returns
+    -------
+    torch.nn.Module
+        Detached module.
+    """
+
+    for param in module.parameters():
+        param.requires_grad = False
+    return module
+
+
 @torch.jit.script
 def flatten_batch_dims(tensor: torch.Tensor, end_dim: int) -> Tuple[torch.Tensor, List[int]]:
     """

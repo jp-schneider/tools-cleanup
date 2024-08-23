@@ -582,130 +582,161 @@ def plot_as_image(data: VEC_TYPE,
 
     imshow_kw = imshow_kw or dict()
 
-    data = numpyify_image(data)
+    input_data = []
 
-    rows = 1
+    if isinstance(data, (List, tuple)):
+        for d in data:
+            input_data.append(numpyify_image(d))
+    else:
+        input_data.append(numpyify_image(data))
+
+    rows = 0
     cols = 1
 
     images = []
-    _img_title = []
+    img_title = []
     cmaps = []
 
-    if 'complex' in str(data.dtype):
-        cols = 2
-        _img_title.append(f"|{variable_name}|")
-        images.append(np.abs(data))
-        cmaps.append("gray")
+    for data in input_data:
+        title_num_str = ""
+        _col_images = []
+        _col_titles = []
+        _col_cmaps = []
 
-        _img_title.append(f"angle({variable_name})")
-        images.append(np.angle(data))
-        cmaps.append("twilight")
-    else:
-        _img_title.append(variable_name)
-        images.append(data)
-        if cmaps is None:
-            cmaps.append("gray")
+        if len(input_data) > 1:
+            title_num_str = f"{rows + 1}: "
+        if 'complex' in str(data.dtype):
+            cols = 2
+            _col_titles.append(f"{title_num_str}|{variable_name}|")
+            _col_images.append(np.abs(data))
+            _col_cmaps.append("gray")
+
+            _col_titles.append(f"{title_num_str}angle({variable_name})")
+            _col_images.append(np.angle(data))
+            _col_cmaps.append("twilight")
         else:
-            cmaps.append(cmap)
+            _col_titles.append(title_num_str + variable_name)
+            _col_images.append(data)
+            if cmap is None:
+                _col_cmaps.append("gray")
+            else:
+                _col_cmaps.append(cmap)
+
+            images.append(_col_images)
+            img_title.append(_col_titles)
+            cmaps.append(_col_cmaps)
+
+        rows += 1
 
     if axes is None:
         fig, axes = get_mpl_figure(
-            rows=rows, cols=cols, size=size, tight=tight, ratio_or_img=images[0])
+            rows=rows, cols=cols, size=size, tight=tight, ratio_or_img=images[0][0], ax_mode="2d")
     else:
         fig = plt.gcf()
 
     if isinstance(axes, Subplot):
-        axes = [axes]
+        axes = np.array([axes])
 
-    for i, ax in enumerate(itertools.chain(axes)):
-        _image = images[i]
-        _title = _img_title[i]
+    if len(axes.shape) == 1:
+        axes = axes[None, ...]
+    used_idx = 0
 
-        color_mapping = None
+    for row in range(rows):
+        for col in range(cols):
+            ax = axes[row, col]
+            _imgs = images[row]
+            if col >= len(_imgs):
+                ax.set_axis_off()
+                continue
 
-        vmin = _image.min()
-        vmax = _image.max()
-        _cmap = cmaps[i]
-        if isinstance(_cmap, str):
-            _cmap = plt.get_cmap(_cmap)
+            _image = images[row][col]
+            _title = img_title[row][col]
 
-        if cscale is not None:
-            _cscale = cscale
-            if isinstance(cscale, list):
-                _cscale = cscale[i]
-            if _cscale == 'auto':
-                _cscale = 'log' if should_use_logarithm(
-                    _image.numpy()) else None
-            if _cscale is not None:
-                if _cscale == 'log':
-                    _image = np.log(_image)
-                    _title = f"log({_title})"
-            if _cscale == "count":
-                color_mapping = dict()
-                for j, value in enumerate(np.unique(_image)):
-                    color_mapping[j] = value
-                    _image = np.where(_image == value, j, _image)
+            color_mapping = None
 
-        if isinstance(_cmap, ListedColormap):
-            vmax = len(_cmap.colors) - 1
-            vmin = 0
-
-        if "vmin" in imshow_kw:
-            vmin = imshow_kw.pop("vmin")
-        else:
             vmin = _image.min()
-        if "vmax" in imshow_kw:
-            vmax = imshow_kw.pop("vmax")
-        else:
             vmax = _image.max()
-        if "cmap" in imshow_kw:
-            _cmap = imshow_kw.pop("cmap")
-        if "interpolation" in imshow_kw:
-            interpolation = imshow_kw.pop("interpolation")
-
-        if norm:
-            _norm = MinMax(new_min=0, new_max=1)
-            _norm.min = vmin
-            _norm.max = vmax
-            _norm.fitted = True
-            _image = _norm.transform(_image)
-            vmin = _norm.new_min
-            vmax = _norm.new_max
-
-        ax.imshow(_image, vmin=vmin, vmax=vmax, cmap=_cmap,
-                  interpolation=interpolation, **imshow_kw)
-
-        if not tight:
-            ax.set_title(_title)
-        if colorbar:
-            _cbar_format = None
-            if colorbar_tick_format is not None:
-                cft = ('{:' + colorbar_tick_format + '}')
-
-                def _cbar_format(x, pos):
-                    return cft.format(x)
-            divider = make_axes_locatable(ax)
-            cax = divider.append_axes('right', size='5%', pad=0.05)
-            fig.colorbar(ax.get_images()[0], cax=cax,
-                         format=_cbar_format, orientation='vertical')
-
-        if not ticks:
-            ax.get_xaxis().set_ticks([])
-            ax.get_yaxis().set_ticks([])
-
-        if value_legend:
-            unique_vals = np.unique(_image)
-            patches = []
+            _cmap = cmaps[row][col]
             if isinstance(_cmap, str):
                 _cmap = plt.get_cmap(_cmap)
 
-            norm = mpl.colors.Normalize(vmin=vmin, vmax=vmax)
-            for i, value in enumerate(unique_vals):
-                c = _cmap(norm(value))
-                if color_mapping is not None:
-                    value = color_mapping[value]
-                patches.append(Patch(color=c, label=f"{value:n}"))
-            ax.legend(handles=patches)
+            if cscale is not None:
+                _cscale = cscale
+                if isinstance(cscale, list):
+                    _cscale = cscale[i]
+                if _cscale == 'auto':
+                    _cscale = 'log' if should_use_logarithm(
+                        _image.numpy()) else None
+                if _cscale is not None:
+                    if _cscale == 'log':
+                        _image = np.log(_image)
+                        _title = f"log({_title})"
+                if _cscale == "count":
+                    color_mapping = dict()
+                    for j, value in enumerate(np.unique(_image)):
+                        color_mapping[j] = value
+                        _image = np.where(_image == value, j, _image)
+
+            if isinstance(_cmap, ListedColormap):
+                vmax = len(_cmap.colors) - 1
+                vmin = 0
+
+            if "vmin" in imshow_kw:
+                vmin = imshow_kw.pop("vmin")
+            else:
+                vmin = _image.min()
+            if "vmax" in imshow_kw:
+                vmax = imshow_kw.pop("vmax")
+            else:
+                vmax = _image.max()
+            if "cmap" in imshow_kw:
+                _cmap = imshow_kw.pop("cmap")
+            if "interpolation" in imshow_kw:
+                interpolation = imshow_kw.pop("interpolation")
+
+            if norm:
+                _norm = MinMax(new_min=0, new_max=1)
+                _norm.min = vmin
+                _norm.max = vmax
+                _norm.fitted = True
+                _image = _norm.transform(_image)
+                vmin = _norm.new_min
+                vmax = _norm.new_max
+
+            ax.imshow(_image, vmin=vmin, vmax=vmax, cmap=_cmap,
+                      interpolation=interpolation, **imshow_kw)
+
+            if not tight:
+                ax.set_title(_title)
+            if colorbar:
+                _cbar_format = None
+                if colorbar_tick_format is not None:
+                    cft = ('{:' + colorbar_tick_format + '}')
+
+                    def _cbar_format(x, pos):
+                        return cft.format(x)
+                divider = make_axes_locatable(ax)
+                cax = divider.append_axes('right', size='5%', pad=0.05)
+                fig.colorbar(ax.get_images()[0], cax=cax,
+                             format=_cbar_format, orientation='vertical')
+
+            if not ticks:
+                ax.get_xaxis().set_ticks([])
+                ax.get_yaxis().set_ticks([])
+
+            if value_legend:
+                unique_vals = np.unique(_image)
+                patches = []
+                if isinstance(_cmap, str):
+                    _cmap = plt.get_cmap(_cmap)
+
+                norm = mpl.colors.Normalize(vmin=vmin, vmax=vmax)
+                for i, value in enumerate(unique_vals):
+                    c = _cmap(norm(value))
+                    if color_mapping is not None:
+                        value = color_mapping[value]
+                    patches.append(Patch(color=c, label=f"{value:n}"))
+                ax.legend(handles=patches)
 
     if title is not None:
         fig.suptitle(title)
