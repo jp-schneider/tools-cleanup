@@ -446,7 +446,7 @@ class TorchAgent(Agent):
 
         # forward
         # track history if only in train
-        with (torch.set_grad_enabled(phase == LearningMode.TRAINING)):
+        with (torch.set_grad_enabled(phase == LearningMode.TRAINING)): # and torch.autograd.detect_anomaly():
 
             if isinstance(device_inputs, list):
                 # Unpacking as list as dataloader wraps multiple args within a list

@@ -467,7 +467,10 @@ def parse_format_string(format_string: str,
                 try:
                     value = getattr(obj, key)
                 except AttributeError:
-                    if key in additional_variables:
+                    if isinstance(obj, dict):
+                        if key in obj:
+                            value = obj[key]
+                    elif key in additional_variables:
                         value = additional_variables[key]
                     else:
                         raise AttributeError(
