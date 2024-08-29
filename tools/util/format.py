@@ -13,7 +13,7 @@ from pandas import Series
 from tools.error import ArgumentNoneError
 from tools.error.argument_none_type_suggestion_error import ArgumentNoneTypeSuggestionError
 from tools.util.path_tools import format_os_independent
-from tools.util.typing import DEFAULT
+from tools.util.typing import DEFAULT, MISSING
 from tools.util.reflection import dynamic_import
 from traceback import extract_stack
 from types import TracebackType
@@ -461,22 +461,22 @@ def parse_format_string(format_string: str,
     for i, obj in enumerate(obj_list):
         name = format_string
         for key, format in key_formats.items():
+            value = MISSING
             if index_variable is not None and key == index_variable:
                 value = i + index_offset
             else:
                 try:
                     value = getattr(obj, key)
                 except AttributeError:
-                    if isinstance(obj, dict):
-                        if key in obj:
-                            value = obj[key]
+                    if isinstance(obj, dict) and key in obj:
+                        value = obj[key]
                     elif key in additional_variables:
                         value = additional_variables[key]
-                    else:
-                        raise AttributeError(
-                            f"Object does not have a property: {key}")
+            if value == MISSING:
+                raise AttributeError(
+                    f"Object does not have a property: {key}")
 
-            if callable(value) and allow_invocation:
+            if value is not None and callable(value) and allow_invocation:
                 value = value()
 
             _formatted_value = _format_value(

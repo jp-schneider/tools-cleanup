@@ -9,15 +9,16 @@ import decimal
 
 if torch is not None:
     from torch import Tensor
-    VEC_TYPE = TypeVar("VEC_TYPE", bound=Union[torch.Tensor, np.ndarray])
+    VEC_TYPE = TypeVar(
+        "VEC_TYPE", bound=Union[torch.Tensor, np.ndarray])  # type: ignore
     """Vector type, like torch.Tensor or numpy.ndarray."""
 
     REAL_TYPE = TypeVar(
-        "REAL_TYPE", bound=Union[torch.Tensor, np.generic, int, float, decimal.Decimal])
+        "REAL_TYPE", bound=Union[torch.Tensor, np.generic, int, float, decimal.Decimal])  # type: ignore
     """Real type which can be converted to a tensor."""
 
     NUMERICAL_TYPE = TypeVar(
-        "NUMERICAL_TYPE", bound=Union[torch.Tensor, np.generic, int, float, complex, decimal.Decimal])
+        "NUMERICAL_TYPE", bound=Union[torch.Tensor, np.generic, int, float, complex, decimal.Decimal])  # type: ignore
     """Numerical type which can be converted to a tensor."""
 else:
     from torch import Tensor
@@ -40,3 +41,20 @@ class _DEFAULT():
 
 DEFAULT = _DEFAULT()
 """Default value singleton."""
+
+
+class _NOCHANGE:
+    pass
+
+
+class _CYCLE:
+    pass
+
+
+class _MISSING:
+    pass
+
+
+NOCHANGE = _NOCHANGE()
+CYCLE = _CYCLE()
+MISSING = _MISSING()

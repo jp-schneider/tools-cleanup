@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from tools.mixin import ArgparserMixin
 from tools.serialization import JsonConvertible
 from tools.util.diff import changes, NOCHANGE
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Set
 import logging
 
 from tools.logger.logging import logger
@@ -146,3 +146,19 @@ class Config(JsonConvertible, ArgparserMixin):
             rp = relpath(base_dir, tp, is_from_file=False, is_to_file=has_ext)
             rp = format_os_independent(rp)
             setattr(self, key, rp)
+
+    def __ignore_on_iter__(self) -> Set[str]:
+        s = super().__ignore_on_iter__()
+        s.add("progress_factory")
+        return s
+
+    def __getstate__(self):
+        state = self.__dict__.copy()
+        # Don't pickle baz
+        del state["progress_factory"]
+        return state
+
+    def __setstate__(self, state):
+        self.__dict__.update(state)
+        # Add baz back since it doesn't exist in the pickle
+        self.progress_factory = None

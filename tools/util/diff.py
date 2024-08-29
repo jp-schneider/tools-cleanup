@@ -2,19 +2,7 @@ from typing import Dict, Any, List, Tuple, Optional, Set
 from enum import Enum
 from collections.abc import MutableMapping
 from tools.util.reflection import class_name
-
-class _NOCHANGE:
-    pass
-
-class _CYCLE:
-    pass
-
-class _MISSING:
-    pass
-
-NOCHANGE = _NOCHANGE()
-CYCLE = _CYCLE()
-MISSING = _MISSING()
+from tools.util.typing import NOCHANGE, MISSING, CYCLE, _NOCHANGE, _MISSING, _CYCLE
 
 
 def dict_diff(base: Dict[str, Any], cmp: Dict[str, Any]) -> Dict[str, Any]:
@@ -48,6 +36,7 @@ def dict_diff(base: Dict[str, Any], cmp: Dict[str, Any]) -> Dict[str, Any]:
         return NOCHANGE
     return result
 
+
 def object_diff(base: Any, cmp: Any) -> Dict[str, Any]:
     """Returns the difference between two objects.
 
@@ -75,6 +64,7 @@ def object_diff(base: Any, cmp: Any) -> Dict[str, Any]:
     if type(base) != type(cmp):
         result["__class__"] = class_name(cmp)
     return result
+
 
 def list_diff(base: List[Any], cmp: List[Any]) -> List[Any]:
     """Returns the difference between two lists.
@@ -170,12 +160,13 @@ def changes(base: Any, cmp: Any) -> Any:
         result = cmp
     return result
 
+
 def flatten(
-    dictionary: Dict[str, Any], 
-    separator: str = '_', 
-    prefix: str='',
+    dictionary: Dict[str, Any],
+    separator: str = '_',
+    prefix: str = '',
     keep_empty: bool = False,
-    ) -> Dict[str, Any]:
+) -> Dict[str, Any]:
     """Flattens a dictionary.
 
     Parameters
@@ -200,7 +191,8 @@ def flatten(
     for key, value in dictionary.items():
         new_key = prefix + separator + key if prefix else key
         if isinstance(value, MutableMapping):
-            items.extend(flatten(value, separator=separator, prefix=new_key, keep_empty=keep_empty).items())
+            items.extend(flatten(value, separator=separator,
+                         prefix=new_key, keep_empty=keep_empty).items())
         else:
             items.append((new_key, value))
     return dict(items)
@@ -234,6 +226,7 @@ def filter(dictionary: Dict[str, Any], allowed_keys: Dict[str, Any]) -> Dict[str
                 result[key] = value
     return result
 
+
 def nested_keys(dictionary: Dict[str, Any]) -> Dict[str, Any]:
     """Returns all nested keys of a dictionary, whereby the value is a dictionary containing subkeys or is empty if there are no subkeys."""
     result = dict()
@@ -243,6 +236,7 @@ def nested_keys(dictionary: Dict[str, Any]) -> Dict[str, Any]:
         else:
             result[key] = dict()
     return result
+
 
 def combine_nested_keys(dictionaries: List[Dict[str, Any]]) -> Dict[str, Any]:
     """Combines nested keys of multiple dictionaries. On all hierarchies of the dict.
@@ -258,7 +252,7 @@ def combine_nested_keys(dictionaries: List[Dict[str, Any]]) -> Dict[str, Any]:
     -------
     Dict[str, Any]
         Nested dictionary of all keys.
-    """    
+    """
     result = dict()
     for dictionary in dictionaries:
         for key, value in dictionary.items():
@@ -271,105 +265,109 @@ def combine_nested_keys(dictionaries: List[Dict[str, Any]]) -> Dict[str, Any]:
                     result[key] = value
     return result
 
+
 def compute_diff_string(
-                        obj: Dict[str, Any],
-                        default_values: Dict[str, Any] = None, 
-                        key_alias: Optional[Dict[str, str]] = None,
-                        value_alias: Optional[Dict[str, str]] = None,
-                        value_separator: str = ":",
-                        item_separator: str = "_",
-                        nested_keys: Optional[Dict[str, Any]] = None,
-                        specified_markers: bool = True
-                        ) -> str:
-        """Computes a diff string based on the given object and default values.
-        This string will show the declaration differences of the current obj w.r.t the default values.
+    obj: Dict[str, Any],
+    default_values: Dict[str, Any] = None,
+    key_alias: Optional[Dict[str, str]] = None,
+    value_alias: Optional[Dict[str, str]] = None,
+    value_separator: str = ":",
+    item_separator: str = "_",
+    nested_keys: Optional[Dict[str, Any]] = None,
+    specified_markers: bool = True
+) -> str:
+    """Computes a diff string based on the given object and default values.
+    This string will show the declaration differences of the current obj w.r.t the default values.
 
-        Parameters
-        ----------
-        default_values : Dict[str, Any], optional
-            Default values to compare against, by default None
-        key_alias : Optional[Dict[str, str]], optional
-            Alias name for the key. This should be the mapping of the old key name to the new one.
-            As the default values can be a nested dict, this nesting can be adressed by concatenating the keys with the separator '__'.
-            So the key_alias itself is a flat dict, by default None
-        value_alias : Optional[Dict[str, str]], optional
-            This can be used to alter the value of the differing key by simple substitution.
-            Like 'False': 'No', by default None  
-            , by default None
-        value_separator : str, optional
-            How the value should be seperated from the key in the result string, by default ":"
-        item_separator : str, optional
-            How individual items should be separated, by default "_"
-        nested_keys : Optional[Dict[str, Any]], optional
-            If only a subset of the keys should be used for the diff, by default None
-        specified_markers : bool, optional
-            If the diff string should contain markers for specified values and changed values, by default True
-        Returns
-        -------
-        str
-            The diffstring with all altered parameters and their values.
-        """    
-        from tools.util.diff import nested_keys as get_nested_keys
+    Parameters
+    ----------
+    default_values : Dict[str, Any], optional
+        Default values to compare against, by default None
+    key_alias : Optional[Dict[str, str]], optional
+        Alias name for the key. This should be the mapping of the old key name to the new one.
+        As the default values can be a nested dict, this nesting can be adressed by concatenating the keys with the separator '__'.
+        So the key_alias itself is a flat dict, by default None
+    value_alias : Optional[Dict[str, str]], optional
+        This can be used to alter the value of the differing key by simple substitution.
+        Like 'False': 'No', by default None
+        , by default None
+    value_separator : str, optional
+        How the value should be seperated from the key in the result string, by default ":"
+    item_separator : str, optional
+        How individual items should be separated, by default "_"
+    nested_keys : Optional[Dict[str, Any]], optional
+        If only a subset of the keys should be used for the diff, by default None
+    specified_markers : bool, optional
+        If the diff string should contain markers for specified values and changed values, by default True
+    Returns
+    -------
+    str
+        The diffstring with all altered parameters and their values.
+    """
+    from tools.util.diff import nested_keys as get_nested_keys
 
-        def _process_value(v: Any, default_value: Optional[Any], 
-                           value_alias: Optional[Dict[str, str]] = None
-                           ) -> Any:
-            if isinstance(v, dict) or isinstance(default_value, dict):
-                ret = dict()
-                keys = []
-                if v is not None:
-                    keys = list(v.keys())
-                if default_value is not None:
-                    keys += list(default_value.keys())
-                keys = set(keys)
-                for k in keys:
-                    _v = v.get(k, None) if v is not None else None
-                    _def = default_value.get(k, None) if default_value is not None else None
-                    name = k
-                    if _v is None and _def is None:
-                        continue
-                    ret[name] = _process_value(_v, _def, value_alias=value_alias)
-                return ret
-            else:
-                has_changes = None
-                if v is not None:
-                    if default_value is not None:
-                        has_changes = not (v == default_value)
-                    v_str = str(v)
-                    if value_alias is not None:
-                        v_str = value_alias.get(v_str, v_str)
-                    if has_changes is not None:
-                        v_str = (v_str + ("*" if specified_markers else "")) if has_changes else v_str
-                    else:
-                        v_str = v_str + ("?" if specified_markers else "")
-                    return v_str
-                elif default_value is not None:
-                    v_str = str(default_value) 
-                    if value_alias is not None:
-                        v_str = value_alias.get(v_str, v_str)
-                    if specified_markers:
-                        v_str += "-"
-                    return v_str
-                else:
-                    raise NotImplementedError("Either v, or default should not be None, there is an error.")
-
-        own = obj
-        if nested_keys is not None:
-            own = filter(own, nested_keys)
-            default_values = filter(default_values, nested_keys)
+    def _process_value(v: Any, default_value: Optional[Any],
+                       value_alias: Optional[Dict[str, str]] = None
+                       ) -> Any:
+        if isinstance(v, dict) or isinstance(default_value, dict):
+            ret = dict()
+            keys = []
+            if v is not None:
+                keys = list(v.keys())
+            if default_value is not None:
+                keys += list(default_value.keys())
+            keys = set(keys)
+            for k in keys:
+                _v = v.get(k, None) if v is not None else None
+                _def = default_value.get(
+                    k, None) if default_value is not None else None
+                name = k
+                if _v is None and _def is None:
+                    continue
+                ret[name] = _process_value(_v, _def, value_alias=value_alias)
+            return ret
         else:
-            altered = changes(default_values, own)
-            ntk = get_nested_keys(altered)
-            own = filter(own, ntk)
-            default_values = filter(default_values, ntk)
-            
-        deep = _process_value(own, default_values, value_alias)
-        flattened_dict = flatten(deep, separator="__")
-        if key_alias is not None:
-            ret = {}
-            for k, v in flattened_dict.items():
-                new_key = key_alias.get(k, k)
-                ret[new_key] = v
-            flattened_dict = ret
-        comp = [k + value_separator + v for k, v in flattened_dict.items()]
-        return item_separator.join(comp)
+            has_changes = None
+            if v is not None:
+                if default_value is not None:
+                    has_changes = not (v == default_value)
+                v_str = str(v)
+                if value_alias is not None:
+                    v_str = value_alias.get(v_str, v_str)
+                if has_changes is not None:
+                    v_str = (v_str + ("*" if specified_markers else "")
+                             ) if has_changes else v_str
+                else:
+                    v_str = v_str + ("?" if specified_markers else "")
+                return v_str
+            elif default_value is not None:
+                v_str = str(default_value)
+                if value_alias is not None:
+                    v_str = value_alias.get(v_str, v_str)
+                if specified_markers:
+                    v_str += "-"
+                return v_str
+            else:
+                raise NotImplementedError(
+                    "Either v, or default should not be None, there is an error.")
+
+    own = obj
+    if nested_keys is not None:
+        own = filter(own, nested_keys)
+        default_values = filter(default_values, nested_keys)
+    else:
+        altered = changes(default_values, own)
+        ntk = get_nested_keys(altered)
+        own = filter(own, ntk)
+        default_values = filter(default_values, ntk)
+
+    deep = _process_value(own, default_values, value_alias)
+    flattened_dict = flatten(deep, separator="__")
+    if key_alias is not None:
+        ret = {}
+        for k, v in flattened_dict.items():
+            new_key = key_alias.get(k, k)
+            ret[new_key] = v
+        flattened_dict = ret
+    comp = [k + value_separator + v for k, v in flattened_dict.items()]
+    return item_separator.join(comp)

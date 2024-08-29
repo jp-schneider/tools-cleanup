@@ -655,7 +655,12 @@ class TensorUtil():
             raise NoIterationTypeError()
 
     @staticmethod
-    def apply_deep(obj: Any, fnc: Callable[[torch.Tensor], torch.Tensor], memo: Set[Any] = None) -> Any:
+    def apply_deep(obj: Any,
+                   fnc: Callable[[torch.Tensor], torch.Tensor],
+                   memo: Set[Any] = None,
+                   path: Optional[str] = None,
+                   accepts_path: Optional[bool] = None,
+                   ) -> Any:
         """Applies the given function on each tensor found in a object graph.
 
         Creates a deep copy of each object in the graph while querying it.
@@ -676,6 +681,17 @@ class TensorUtil():
         """
         if memo is None:
             memo = set()
+        if path is None:
+            path = ""
+        if accepts_path is None:
+            # Use inspect to check if the function accepts a path
+            accepts_path = False
+            import inspect
+            sig = inspect.signature(fnc)
+            # Check if the function has a path argument or a **kwargs
+            if "path" in sig.parameters or "**kwargs" in sig.parameters:
+                accepts_path = True
+
         try:
             if hasattr(obj, "__hash__") and obj.__hash__ is not None:
                 if obj in memo:
@@ -688,21 +704,26 @@ class TensorUtil():
         if isinstance(obj, (str, int, float, complex)):
             return obj
         if isinstance(obj, torch.Tensor):
-            ret = fnc(obj)
+            args = {}
+            if accepts_path:
+                args["path"] = path
+            ret = fnc(obj, **args)
             return ret
         elif isinstance(obj, list):
-            return [TensorUtil.apply_deep(x, fnc=fnc, memo=memo) for x in obj]
+            return [TensorUtil.apply_deep(x, fnc=fnc, memo=memo, path=path + f"[{i}]") for i, x in enumerate(obj)]
         elif isinstance(obj, tuple):
-            vals = [TensorUtil.apply_deep(x, fnc=fnc, memo=memo) for x in obj]
+            vals = [TensorUtil.apply_deep(
+                x, fnc=fnc, memo=memo, path=path + f"[{i}]") for i, x in enumerate(obj)]
             return tuple(vals)
         elif isinstance(obj, set):
-            return set([TensorUtil.apply_deep(x, fnc=fnc, memo=memo) for x in obj])
+            return set([TensorUtil.apply_deep(x, fnc=fnc, memo=memo, path=path + f"[{id(x)}]") for x in obj])
         elif isinstance(obj, OrderedDict):
-            return OrderedDict({k: TensorUtil.apply_deep(v, fnc=fnc, memo=memo) for k, v in obj.items()})
+            return OrderedDict({k: TensorUtil.apply_deep(v, fnc=fnc, memo=memo, path=path + f"[\"{k}\"]") for k, v in obj.items()})
         elif isinstance(obj, dict):
             return {
-                k: TensorUtil.apply_deep(v, fnc=fnc, memo=memo) for k, v in obj.items()}
+                k: TensorUtil.apply_deep(v, fnc=fnc, memo=memo, path=path + f"[\"{k}\"]") for k, v in obj.items()}
         elif hasattr(obj, "__dict__"):
             for k, v in obj.__dict__.items():
-                setattr(obj, k, TensorUtil.apply_deep(v, fnc=fnc, memo=memo))
+                setattr(obj, k, TensorUtil.apply_deep(
+                    v, fnc=fnc, memo=memo, path=path + f".{k}"))
         return obj
