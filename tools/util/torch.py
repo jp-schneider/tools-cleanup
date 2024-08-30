@@ -1,7 +1,10 @@
 import decimal
 import logging
+import os
+from types import FrameType
 from typing import Any, Callable, Dict, List, Optional, Set, TypeVar, Union
 from collections import OrderedDict
+from tools.util.path_tools import relpath
 import torch
 from decimal import Decimal
 import numpy as np
@@ -11,7 +14,9 @@ from tools.util.progress_factory import ProgressFactory
 from tools.util.typing import NUMERICAL_TYPE, VEC_TYPE
 from typing import Callable, Tuple
 from tools.util.reflection import class_name
-
+from tools.util.format import _custom_traceback
+from tools.logger.logging import tools_logger as logger
+from traceback import FrameSummary, extract_stack
 
 def set_jit_enabled(enabled: bool):
     """Enables or disables JIT.
@@ -727,3 +732,109 @@ class TensorUtil():
                 setattr(obj, k, TensorUtil.apply_deep(
                     v, fnc=fnc, memo=memo, path=path + f".{k}"))
         return obj
+
+SHADOW_TENSOR_WARNING = False
+SHADOW_TENSOR_USAGES: FrameSummary = []
+
+def shadow_zeros(x: torch.Tensor) -> torch.Tensor:
+    """Debug function which replaces the given Tensor with
+    zeros, so the original one will be not part of the compute graph.
+
+    Parameters
+    ----------
+    x : torch.Tensor
+        The original tensor.
+
+    Returns
+    -------
+    torch.Tensor
+        A zero tensor having the same shape and properties.
+    """
+    global SHADOW_TENSOR_WARNING, SHADOW_TENSOR_USAGES
+    tb = _custom_traceback(1)
+    summary = extract_stack(tb.tb_frame, 2)
+    frame = summary[-1]
+
+    if not SHADOW_TENSOR_WARNING:
+        # Warn that shadowing is active.
+        filename = relpath(os.getcwd(), frame.filename, is_from_file=False)
+        logger.warning("Some tensor(s) are beeing shadowed, check SHADOW_TENSOR_USAGES for all code positions.\n" + 
+                       f"First position: {filename} Line: {frame.lineno}.")
+        SHADOW_TENSOR_WARNING = True
+    SHADOW_TENSOR_USAGES.append(frame)
+
+    shape = x.shape
+    device = x.device
+    dtype = x.dtype
+    return torch.zeros(shape, dtype=dtype, device=device)
+
+def shadow_ones(x: torch.Tensor) -> torch.Tensor:
+    """Debug function which replaces the given Tensor with
+    ones, so the original one will be not part of the compute graph.
+
+    Parameters
+    ----------
+    x : torch.Tensor
+        The original tensor.
+
+    Returns
+    -------
+    torch.Tensor
+        A ones tensor having the same shape and properties.
+    """
+    global SHADOW_TENSOR_WARNING, SHADOW_TENSOR_USAGES
+    tb = _custom_traceback(1)
+    summary = extract_stack(tb.tb_frame, 2)
+    frame = summary[-1]
+
+    if not SHADOW_TENSOR_WARNING:
+        # Warn that shadowing is active.
+        filename = relpath(os.getcwd(), frame.filename, is_from_file=False)
+        logger.warning("Some tensor(s) are beeing shadowed, check SHADOW_TENSOR_USAGES for all code positions.\n" + 
+                       f"First position: {filename} Line: {frame.lineno}.")
+        SHADOW_TENSOR_WARNING = True
+    SHADOW_TENSOR_USAGES.append(frame)
+
+    shape = x.shape
+    device = x.device
+    dtype = x.dtype
+    return torch.ones(shape, dtype=dtype, device=device)
+
+
+def shadow_identity_2d(x: torch.Tensor) -> torch.Tensor:
+    """Debug function which replaces the given Tensor with
+    a identity matrix, so the original one will be not part of the compute graph.
+
+    Parameters
+    ----------
+    x : torch.Tensor
+        The original tensor. Shape ([..., B], N, N)
+
+    Returns
+    -------
+    torch.Tensor
+        A identity matrix tensor in 2D
+        Shape ([..., B], N, N)
+        Where (N, N) will be an identity matrix
+    """
+    global SHADOW_TENSOR_WARNING, SHADOW_TENSOR_USAGES
+    tb = _custom_traceback(1)
+    summary = extract_stack(tb.tb_frame, 2)
+    frame = summary[-1]
+
+    if not SHADOW_TENSOR_WARNING:
+        # Warn that shadowing is active.
+        filename = relpath(os.getcwd(), frame.filename, is_from_file=False)
+        logger.warning("Some tensor(s) are beeing shadowed, check SHADOW_TENSOR_USAGES for all code positions.\n" + 
+                       f"First position: {filename} Line: {frame.lineno}.")
+        SHADOW_TENSOR_WARNING = True
+    SHADOW_TENSOR_USAGES.append(frame)
+    if len(x.shape) < 2 or x.shape[-1] != x.shape[-2]:
+        raise ValueError("Need x to be in ([..., B,] N, N) shape.")
+    shape = x.shape
+    device = x.device
+    dtype = x.dtype
+    xf, bd = flatten_batch_dims(x, -3)
+    B = xf.shape[0]
+    eye = torch.eye(x.shape[-1], dtype=dtype, device=device).unsqueeze(0).repeat(B, 1, 1)
+    return unflatten_batch_dims(eye, bd)
