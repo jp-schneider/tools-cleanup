@@ -39,6 +39,8 @@ class DiscreteModuleSceneNode3D(ModuleSceneNode3D):
                  children: Optional[Iterable['AbstractSceneNode']] = None,
                  decoding: bool = False,
                  dtype: torch.dtype = torch.float32,
+                 _translation: Optional[torch.Tensor] = None,
+                 _orientation: Optional[torch.Tensor] = None,
                  **kwargs
                  ):
         super().__init__(name=name, children=children, decoding=decoding, **kwargs)
@@ -47,14 +49,32 @@ class DiscreteModuleSceneNode3D(ModuleSceneNode3D):
                 raise ValueError(
                     "Cannot pass position and translation or orientation.")
             translation, orientation = self._parse_position(position)
-        if translation is None:
-            translation = self._get_default_translation(dtype)
-        if orientation is None:
-            orientation = self._get_default_orientation(dtype)
-        self.register_buffer(
-            "_translation", tensorify(translation, dtype=dtype))
-        self.register_buffer(
-            "_orientation", tensorify(orientation, dtype=dtype, device=self._translation.device))
+        self._init_position(translation=translation, 
+                            orientation=orientation, 
+                            dtype=dtype,
+                            _translation=_translation,
+                            _orientation=_orientation
+                            )
+
+    def _init_position(self,  
+                       translation: Optional[VEC_TYPE],
+                        orientation: Optional[VEC_TYPE],
+                        dtype: torch.dtype,
+                        _translation: Optional[torch.Tensor] = None,
+                        _orientation: Optional[torch.Tensor] = None,
+                 ):
+        if _translation is not None:
+            self._translation = _translation
+            self._orientation = _orientation
+        else:
+            if translation is None:
+                translation = self._get_default_translation(dtype)
+            if orientation is None:
+                orientation = self._get_default_orientation(dtype)
+            self.register_buffer(
+                "_translation", tensorify(translation, dtype=dtype))
+            self.register_buffer(
+                "_orientation", tensorify(orientation, dtype=dtype, device=self._translation.device))
 
     def _get_default_translation(self, dtype: torch.dtype) -> torch.Tensor:
         return torch.zeros(3, dtype=dtype)
@@ -89,6 +109,8 @@ class DiscreteModuleSceneNode3D(ModuleSceneNode3D):
         return position_quaternion_to_affine_matrix(self.get_translation(), self.get_orientation())
 
     def set_position(self, value: VEC_TYPE):
+        if "_translation" not in self._buffers:
+            raise ValueError("Position can not be set when translations and orientations are just references.")
         pos, quat = self._parse_position(value)
         self._translation = pos
         self._orientation = quat

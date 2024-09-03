@@ -290,7 +290,7 @@ def parse_type(_type_or_str: Union[Type, str],
                handle_not_a_class: Literal["ignore", "raise"] = "raise"
                ) -> Type:
     """Parses a type from a string or type.
-    Optioanally includes checks for beeing a subclass of a parent type or an instance of a type.
+    Optionally includes checks for beeing a subclass of a parent type or an instance of a type.
 
     Parameters
     ----------

@@ -1,4 +1,4 @@
-from typing import Callable, Generator, Iterable, List, Optional, Set, FrozenSet, Union
+from typing import Any, Callable, Generator, Iterable, List, Optional, Set, FrozenSet, Union
 
 from tools.model.abstract_scene_node import AbstractSceneNode
 from tools.util.typing import VEC_TYPE
@@ -6,13 +6,16 @@ from abc import abstractmethod
 from tools.logger.logging import logger
 from tools.logger.prefix_logger_adapter import PrefixLoggerAdapter
 from logging import Logger
-
+from uuid import uuid4
 
 class SceneNode(AbstractSceneNode):
     """Scene not class for nodes representing a geometrical scene / coordinate system."""
 
     _name: Optional[str]
     """Name if the scene node for identification."""
+
+    _index: Any
+    """Index of the scene node for identification."""
 
     _parent: Optional['AbstractSceneNode']
     """Parent of this node. If None, this node is the root of the scene."""
@@ -27,6 +30,7 @@ class SceneNode(AbstractSceneNode):
                  name: Optional[str] = None,
                  children: Optional[Iterable['AbstractSceneNode']] = None,
                  decoding: bool = False,
+                 index: Optional[Any] = None,
                  **kwargs
                  ) -> None:
         """Abstract class for nodes within a geometrical scene.
@@ -39,6 +43,9 @@ class SceneNode(AbstractSceneNode):
             Its node children, by default None
         decoding : bool, optional
             If its currently beeing decoded and checks should be ommited, by default False
+        Index : Optional[Any], optional
+            Index of the scene node for identification, by default None
+            If None, a random uuid will be generated.
         """
         super().__init__(decoding=decoding, **kwargs)
         self._parent = None
@@ -50,6 +57,7 @@ class SceneNode(AbstractSceneNode):
         if name is not None and len(name) > 0:
             _logger = PrefixLoggerAdapter(_logger, dict(prefix=name))
         self.logger = _logger
+        self._index = index if index is not None else uuid4()
 
     def __ignore_on_iter__(self) -> Set[str]:
         ret = super().__ignore_on_iter__()
@@ -82,6 +90,16 @@ class SceneNode(AbstractSceneNode):
             New name of the node or None to remove the name.
         """
         self._name = value
+
+    def get_index(self) -> Any:
+        """Get the index of the node.
+
+        Returns
+        -------
+        Any
+            The index of the node.
+        """
+        return self._index
 
     def add_scene_children(self, *children: 'AbstractSceneNode', **kwargs) -> None:
         """
