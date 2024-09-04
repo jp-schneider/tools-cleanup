@@ -410,7 +410,7 @@ def index_image_folder(path, filename_format=r"(?P<index>[0-9]+).png", return_di
 
 
 def load_image_stack(
-        path: str,
+        path: Optional[str] = None,
         filename_format: str = r"(?P<index>[0-9]+).png",
         max_size: Optional[int] = None,
         sorted_image_paths: Optional[List[int]] = None,
@@ -422,8 +422,9 @@ def load_image_stack(
 
     Parameters
     ----------
-    path : str
+    path : Optional[str], optional
         Path to the images.
+        Must be specified if sorted_image_paths is None.
 
     filename_format : str, optional
         Filename format regex, by default r"(?P<index>[0-9]+).png"
@@ -452,6 +453,9 @@ def load_image_stack(
     if progress_bar and progress_factory is None:
         progress_factory = ProgressFactory()
     if sorted_image_paths is None:
+        if path is None:
+            raise ValueError(
+                "Path must be specified if sorted_image_paths is None")
         sorted_image_paths = index_image_folder(
             path, filename_format=filename_format)
 

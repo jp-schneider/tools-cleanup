@@ -1,2 +1,3 @@
 from tools.serialization.rules.numpy.json_generic_serialization_rule import JsonGenericSerializationRule
 from tools.serialization.rules.numpy.json_ndarrary_serialization_rule import JsonNDArraySerializationRule
+from tools.serialization.rules.numpy.json_numpy_dtype_serialization_rule import JsonNumpyDtypeSerializationRule

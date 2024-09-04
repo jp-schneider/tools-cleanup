@@ -63,7 +63,8 @@ class JsonSerializationRuleRegistry():
             JsonTypeSerializationRule,
             JsonSliceSerializationRule,
             JsonDefaultSingletonSerializationRule,
-            JsonPathSerializationRule
+            JsonPathSerializationRule,
+            JsonFileHandleSerializationRule,
 
         )
         all_simple_rules: List[Type[JsonSerializationRule]] = [
@@ -82,16 +83,19 @@ class JsonSerializationRuleRegistry():
             JsonTypeSerializationRule,
             JsonSliceSerializationRule,
             JsonDefaultSingletonSerializationRule,
-            JsonPathSerializationRule
+            JsonPathSerializationRule,
+            JsonFileHandleSerializationRule,
         ]
 
         if 'numpy' in sys.modules:
             from tools.serialization.rules.numpy import (
                 JsonGenericSerializationRule,
                 JsonNDArraySerializationRule,
+                JsonNumpyDtypeSerializationRule
             )
             all_simple_rules = [JsonGenericSerializationRule,
-                                JsonNDArraySerializationRule] + all_simple_rules
+                                JsonNDArraySerializationRule,
+                                JsonNumpyDtypeSerializationRule] + all_simple_rules
 
         if additional_simple_rules is not None:
             all_simple_rules += additional_simple_rules

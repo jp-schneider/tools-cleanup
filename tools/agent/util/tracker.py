@@ -1,6 +1,8 @@
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, Literal, Optional, Tuple
+import os
+from typing import Any, Callable, Dict, Literal, Optional, Tuple, Union
 
+from tools.serialization.json_convertible import JsonConvertible
 from tools.util.reflection import class_name
 
 from tools.metric.metric_entry import MetricEntry
@@ -10,6 +12,7 @@ from tools.metric.metric_summary import MetricSummary
 from datetime import datetime
 from copy import deepcopy
 import inspect
+from tools.util.path_tools import numerated_folder_name
 
 
 @dataclass
@@ -40,7 +43,8 @@ class Tracker():
     metrics: Dict[str, MetricSummary] = field(default_factory=dict)
     """Metrics contains a log of the current metrics."""
 
-    created_at: datetime = field(default_factory=lambda: datetime.now().astimezone())
+    created_at: datetime = field(
+        default_factory=lambda: datetime.now().astimezone())
     """Datetime when racker was created."""
 
     def copy(self, ignore_metrics: bool = False) -> 'Tracker':
@@ -62,7 +66,7 @@ class Tracker():
         return cpy
 
     @classmethod
-    def get_metric_name(cls, metric: Callable[[Any], Any]) -> str:
+    def get_metric_name(cls, metric: Union[str, Callable[[Any], Any]]) -> str:
         """Gets a name for the metric. Checks whether metric has
         a get_name method and calls it or uses its instance name.
 
@@ -76,6 +80,8 @@ class Tracker():
         str
             The name for the metric
         """
+        if isinstance(metric, str):
+            return metric
         if hasattr(metric, 'get_name'):
             name = metric.get_name()
         else:
@@ -169,9 +175,12 @@ class Tracker():
             return self.global_steps
         raise ValueError(f"Unknown value for: {scope}")
 
-    def step_metric(self, metric_name: str, value: Any, in_training: bool,
-                    is_primary: bool = False, step: Optional[int] = None):
-        """Logs a metric in step scope (batch) to the metric summary. Requires that the extend call for 
+    def step_metric(self,
+                    metric_name: str, value: Any, in_training: bool,
+                    is_primary: bool = False,
+                    step: Optional[int] = None,
+                    implicit_create: bool = True):
+        """Logs a metric in step scope (batch) to the metric summary. Requires that the extend call for
         this metric must be called in advance to increase performance.
 
         Parameters
@@ -186,18 +195,25 @@ class Tracker():
             If the metric is the primary training metric, by default False
         step : Optional[int], optional
             A step value when a diffrent than the current should be used, by default None
+        implicit_create : bool, optional
+            If the metric should be created if not existing, by default True
         """
         if step is None:
             step = self.get_steps(in_training=in_training)
         tag = Tracker.assemble_tag(
             metric_name=metric_name, in_training=in_training, is_epoch=False)
-        metric_summary = self.metrics[tag]
+        metric_summary = self.metrics.get(tag, None)
+        if metric_summary is None and implicit_create:
+            metric_summary = self.create_metric(
+                metric=metric_name, is_primary=is_primary, is_epoch=False, is_training=in_training)
         metric_summary.log(step=step, value=value,
                            global_step=self.global_steps)
 
     def epoch_metric(self, metric_name: str, value: Any, in_training: bool,
-                     is_primary: bool = False, step: Optional[int] = None):
-        """Logs a metric in epoch scope to the metric summary. Requires that the extend call for 
+                     is_primary: bool = False, step: Optional[int] = None,
+                     implicit_create: bool = True
+                     ):
+        """Logs a metric in epoch scope to the metric summary. Requires that the extend call for
         this metric must be called in advance to increase performance.
 
         Parameters
@@ -217,7 +233,10 @@ class Tracker():
             step = self.get_epoch(in_training=in_training)
         tag = Tracker.assemble_tag(
             metric_name=metric_name, in_training=in_training, is_epoch=True)
-        metric_summary = self.metrics[tag]
+        metric_summary = self.metrics.get(tag, None)
+        if metric_summary is None and implicit_create:
+            metric_summary = self.create_metric(
+                metric=metric_name, is_primary=is_primary, is_epoch=True, is_training=in_training)
         metric_summary.log(step=step, value=value,
                            global_step=self.global_epochs)
 
@@ -243,8 +262,10 @@ class Tracker():
         ValueError
             When the metric already exists!
         """
-        train_summary = self.create_metric(metric, is_primary, True, True, handle_exists=handle_exists)
-        test_summary = self.create_metric(metric, is_primary, True, False, handle_exists=handle_exists)
+        train_summary = self.create_metric(
+            metric, is_primary, True, True, handle_exists=handle_exists)
+        test_summary = self.create_metric(
+            metric, is_primary, True, False, handle_exists=handle_exists)
         return train_summary, test_summary
 
     def create_step_metric(self,
@@ -260,8 +281,8 @@ class Tracker():
         is_primary : bool, optional
             If this is the primary metric, by default False
         handle_exists: Literal['ignore', 'raise'], optional
-            How to handle if the metric exists, `raise` 
-            will raise an Value error, 'ignore' will 
+            How to handle if the metric exists, `raise`
+            will raise an Value error, 'ignore' will
             do nothing and just return, be default 'raise'
         Returns
         -------
@@ -273,11 +294,13 @@ class Tracker():
         ValueError
             When the metric already exists!
         """
-        train_summary = self.create_metric(metric, is_primary, False, True, handle_exists=handle_exists)
-        test_summary = self.create_metric(metric, is_primary, False, False, handle_exists=handle_exists)
+        train_summary = self.create_metric(
+            metric, is_primary, False, True, handle_exists=handle_exists)
+        test_summary = self.create_metric(
+            metric, is_primary, False, False, handle_exists=handle_exists)
         return train_summary, test_summary
 
-    def create_metric(self, metric: Callable[[Any], Any],
+    def create_metric(self, metric: Union[str, Callable[[Any], Any]],
                       is_primary: bool,
                       is_epoch: bool,
                       is_training: bool,
@@ -287,7 +310,7 @@ class Tracker():
 
         Parameters
         ----------
-        metric : Callable[[Any], Any]
+        metric : Union[str, Callable[[Any], Any]]
             The actuall callable metric to get a summary for.
         is_primary : bool
             If the metric is a primary (training / fitting) metric where the system optimizes for.
@@ -296,8 +319,8 @@ class Tracker():
         is_training : bool
             If the metric should be created for training, or validation purposes.
         handle_exists : Literal[&#39;ignore&#39;, &#39;raise&#39;], optional
-            How to handle if the metric exists, `raise` 
-            will raise an Value error, 'ignore' will 
+            How to handle if the metric exists, `raise`
+            will raise an Value error, 'ignore' will
             do nothing and just return, by default "raise"
 
         Returns
@@ -319,8 +342,10 @@ class Tracker():
                     raise ValueError(f"There is already an existing metric"
                                      + f"which is primary ({', '.join([k.tag for k in primaries])})")
             summary = MetricSummary(tag=tag, is_primary=is_primary,
-                                    scope=(MetricScope.BATCH if not is_epoch else MetricScope.EPOCH),
-                                    mode=(MetricMode.VALIDATION if not is_training else MetricMode.TRAINING),
+                                    scope=(
+                                        MetricScope.BATCH if not is_epoch else MetricScope.EPOCH),
+                                    mode=(
+                                        MetricMode.VALIDATION if not is_training else MetricMode.TRAINING),
                                     metric_qualname=class_name(metric))
             self.metrics[tag] = summary
         else:
@@ -444,7 +469,8 @@ class Tracker():
         Optional[MetricEntry]
             The metric entry or none if not found.
         """
-        summary = self.get_metric(metric_name=metric_name, scope=scope, mode=mode)
+        summary = self.get_metric(
+            metric_name=metric_name, scope=scope, mode=mode)
         if summary is None:
             return None
         # Check if current epoch exists:
@@ -635,3 +661,56 @@ class Tracker():
                    and ((x.scope == scope) if scope else True)]
         for metric in metrics:
             metric.trim()
+
+    def _save_to_directory(self, directory: str, **kwargs) -> Dict[str, Any]:
+        """Saves the tracker to a directory.
+
+        Parameters
+        ----------
+        directory : str
+            The directory where to save the tracker.
+        """
+        values = dict(vars(self))
+        values['metrics'] = {k: v._save_to_directory(directory=directory, **kwargs)
+                             for k, v in self.metrics.items()}
+        values["__class__"] = class_name(self)
+        return values
+
+    def save_to_directory(self,
+                          directory: str,
+                          override: bool = True,
+                          make_dirs: bool = True, **kwargs) -> str:
+        """Saves the tracker to a directory.
+
+        Parameters
+        ----------
+        directory : str
+            The directory where to save the tracker.
+        """
+        if not override:
+            directory = numerated_folder_name(directory)
+        values = self._save_to_directory(
+            directory=directory, override=True, make_dirs=make_dirs, **kwargs)
+        path = os.path.join(directory, "tracker.json")
+        JsonConvertible.convert_to_file(values,
+                                        override=override,
+                                        make_dirs=make_dirs,
+                                        path=path)
+        return directory
+
+    @classmethod
+    def from_directory(cls, directory: str) -> "Tracker":
+        """Loads a tracker from a directory.
+
+        Parameters
+        ----------
+        directory : str
+            The directory where the tracker is saved.
+
+        Returns
+        -------
+        Tracker
+            The loaded tracker.
+        """
+        path = os.path.join(directory, "tracker.json")
+        return JsonConvertible.load_from_file(path)

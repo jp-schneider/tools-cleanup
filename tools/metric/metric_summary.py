@@ -1,13 +1,17 @@
 import math
+import os
 import random
-from typing import Any, Optional, Tuple
+from typing import Any, Dict, Optional, Tuple
 import pandas as pd
 from dataclasses import dataclass, field
+
+from tools.util.reflection import class_name
 from .metric_entry import MetricEntry
 import numpy as np
 from tools.metric.metric_mode import MetricMode
 from tools.metric.metric_scope import MetricScope
-
+from tools.util.path_tools import replace_unallowed_chars
+from tools.serialization.files.data_frame_csv_file_handle import DataFrameCSVFileHandle
 import numpy as np
 from tools.util.format import snake_to_upper_camel
 
@@ -16,18 +20,22 @@ try:
 except (ImportError, ModuleNotFoundError):
     torch = None
 
+
 def create_metric_df() -> pd.DataFrame:
     df = pd.DataFrame(
         columns=MetricEntry.df_fields())
     df.set_index("step", inplace=True)
     return df
 
+
 class DoNotSet():
     pass
+
 
 DO_NOT_SET = DoNotSet()
 
 LABEL_TEXT_PATTERN = r"(?P<number>[0-9]+). (?P<text>.+)"
+
 
 def random_circle_point(angle: Optional[int] = None,
                         radius: Optional[int] = None,
@@ -40,6 +48,7 @@ def random_circle_point(angle: Optional[int] = None,
     if radius is None:
         radius = random.randint(radius_min, radius_max)
     return (math.cos(rad)*radius, math.sin(rad)*radius)
+
 
 @dataclass
 class MetricSummary():
@@ -62,7 +71,6 @@ class MetricSummary():
 
     metric_qualname: str = field(default=None)
     """The fully qualifying name of the metric class / loss function. Will be used to compare metrics."""
-
 
     @property
     def metric_name(self) -> str:
@@ -135,7 +143,7 @@ class MetricSummary():
             try:
                 self.values.at[step, "value"] = self.process_value(value)
                 self.values.at[step, "global_step"] = global_step
-                done=True
+                done = True
             except ValueError as err:
                 err_count += 1
         if not done:
@@ -186,3 +194,27 @@ class MetricSummary():
                                            step=step,
                                            tag=self.tag,
                                            metric_qualname=self.metric_qualname))
+
+    def _save_to_directory(self,
+                           directory: str,
+                           override: bool = True,
+                           make_dirs: bool = True,
+                           **kwargs
+                           ) -> Dict[str, Any]:
+        """Saves the metric to a directory.
+
+        Parameters
+        ----------
+        directory : str
+            The directory where the metric should be saved.
+        step : int
+            The step of the metric.
+        """
+        values = dict(vars(self))
+        values["__class__"] = class_name(self)
+        t_path = replace_unallowed_chars(self.tag) + ".csv"
+        path = os.path.join(directory, t_path)
+        values["values"] = DataFrameCSVFileHandle.for_object(values["values"], path,
+                                                             override=override,
+                                                             make_dirs=make_dirs)
+        return values
