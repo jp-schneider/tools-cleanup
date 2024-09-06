@@ -18,6 +18,7 @@ import numpy as np
 import sys
 from tools.logger.logging import logger
 from tools.util.seed import seed_all
+from tools.util.typing import MISSING
 
 class AbstractRunner():
     """Abstract Runner, a runner can be setup "builded" and "run"."""
@@ -55,7 +56,10 @@ class AbstractRunner():
         if type(self)._is_type_hinted_var(name):
             return object.__getattribute__(self, name)
         else:
-            return self.__runner_context__[name]
+            val = self.__runner_context__.get(name, MISSING)
+            if val == MISSING:
+                raise AttributeError(f"{name} not found in {class_name(self)}")
+            return val
 
     @abstractmethod
     def build(self, *args, **kwargs) -> None:

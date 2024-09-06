@@ -64,8 +64,8 @@ class DiscreteModuleSceneNode3D(ModuleSceneNode3D):
                         _orientation: Optional[torch.Tensor] = None,
                  ):
         if _translation is not None:
-            self._translation = _translation
-            self._orientation = _orientation
+            self.register_buffer("_translation", _translation)
+            self.register_buffer("_orientation", _orientation)
         else:
             if translation is None:
                 translation = self._get_default_translation(dtype)

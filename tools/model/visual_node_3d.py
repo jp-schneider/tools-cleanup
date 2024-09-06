@@ -7,6 +7,7 @@ import torch
 from tools.model.abstract_scene_node import AbstractSceneNode
 from tools.model.scene_node import SceneNode
 from tools.transforms.affine.transforms3d import component_position_matrix
+from tools.util.typing import REAL_TYPE
 from tools.viz.matplotlib import saveable
 from mpl_toolkits.mplot3d import Axes3D
 from tools.transforms.to_numpy import numpyify
@@ -24,6 +25,12 @@ class VisualNode3D(SceneNode):
                    coordinate_system_indicator_length: float = 0.3,
                    units: Optional[Union[List[str], str]] = None,
                    ax: Optional[Axes3D] = None,
+                   x_lim: Optional[Tuple[REAL_TYPE,
+                                        REAL_TYPE]] = None,
+                    y_lim: Optional[Tuple[REAL_TYPE,
+                                        REAL_TYPE]] = None,
+                    z_lim: Optional[Tuple[REAL_TYPE,
+                                        REAL_TYPE]] = None,
                    **kwargs
                    ) -> Figure:
         """Returns a matplotlib 3d plot with the scene.
@@ -164,6 +171,12 @@ class VisualNode3D(SceneNode):
                 z_label += f" [{units[2]}]"
 
             ax.set_zlabel(z_label)
+            if x_lim is not None:
+                ax.set_xlim(x_lim)
+            if y_lim is not None:
+                ax.set_ylim(y_lim)
+            if z_lim is not None:
+                ax.set_zlim(z_lim)
             ax.set_aspect("equal")
 
         # Set elevation, azimuth and roll if in kwargs

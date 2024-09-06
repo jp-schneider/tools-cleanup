@@ -7,7 +7,7 @@ try:
     from lightning.pytorch.loggers.logger import Logger
     from lightning.pytorch.utilities import rank_zero_only
     from tools.util.path_tools import process_path
-except ImportError:
+except ImportError as err:
     from tools.util.decorator import placeholder
     logger.warning(
         "Pytorch Lightning not installed. Pytorch Lightning related classes will not be available.")

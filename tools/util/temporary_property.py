@@ -1,45 +1,8 @@
 from typing import Any, Dict
 from tools.error import ArgumentNoneError
 import logging
-
-
-class _NOTSET():
-    pass
-
-
-class _PATHNONE():
-    pass
-
-
-NOTSET = _NOTSET()
-"""Constant for a non existing value."""
-
-PATHNONE = _PATHNONE()
-"""Constant for a non existing path."""
-
-
-def _get_nested_value(obj: Any, path: str, default: Any = NOTSET) -> Any:
-    if obj is None and len(path) > 0:
-        return PATHNONE
-    if '.' in path:
-        path, rest = path.split('.', 1)
-        return _get_nested_value(getattr(obj, path, default), rest, default)
-    else:
-        return getattr(obj, path, default)
-
-
-def _set_nested_value(obj: Any, path: str, value: Any):
-    if value == PATHNONE:
-        return
-    if '.' in path:
-        path, rest = path.split('.', 1)
-        return _set_nested_value(getattr(obj, path), rest, value)
-    else:
-        if value == NOTSET:
-            delattr(obj, path)
-        else:
-            setattr(obj, path, value)
-
+from tools.util.reflection import get_nested_value, set_nested_value
+from tools.util.typing import NOTSET, PATHNONE
 
 class TemporaryProperty():
     """Context manager for altering a object temporary and set properties back to their original value."""
@@ -78,13 +41,13 @@ class TemporaryProperty():
 
     def __enter__(self):
         for k, v in self.intermediate_values.items():
-            self.old_values[k] = _get_nested_value(self.obj, k, NOTSET)
+            self.old_values[k] = get_nested_value(self.obj, k, NOTSET)
             if self.old_values[k] == NOTSET:
                 logging.warning(f"Property: {k} was not existing in: {repr(self.obj)}!")
             if self.old_values[k] != PATHNONE:
-                _set_nested_value(self.obj, k, v)       
+                set_nested_value(self.obj, k, v)       
 
     def __exit__(self, type, value, traceback):
         for k, v in self.old_values.items():
-            _set_nested_value(self.obj, k, v)
+            set_nested_value(self.obj, k, v)
         return False

@@ -3,6 +3,8 @@ from typing import Any, Optional, Tuple, Type, Union, Set, Dict, List
 from types import ModuleType, FunctionType
 import importlib
 
+from tools.util.typing import NOTSET, PATHNONE
+
 IMPORT_CACHE = {}
 
 ALIAS_TYPE_CACHE: Dict[str, Type] = {}
@@ -297,3 +299,66 @@ def propagate_init_kwargs(cls_or_obj: Type, type_in_mro: Type, kwargs: Dict[str,
     if has_kwargs:
         return kwargs, dict()
     return accepted_params, left_params
+
+def _get_nested_value(obj: Any, path: str, default: Any = NOTSET) -> Any:
+    if obj is None and len(path) > 0:
+        return PATHNONE
+    if '.' in path:
+        path, rest = path.split('.', 1)
+        return _get_nested_value(getattr(obj, path, default), rest, default)
+    else:
+        return getattr(obj, path, default)
+    
+def _set_nested_value(obj: Any, path: str, value: Any):
+    if value == PATHNONE:
+        return
+    if '.' in path:
+        path, rest = path.split('.', 1)
+        return _set_nested_value(getattr(obj, path), rest, value)
+    else:
+        if value == NOTSET:
+            delattr(obj, path)
+        else:
+            setattr(obj, path, value)
+
+def set_nested_value(obj: Any, path: str, value: Any):
+    """Set a nested value in an object by a path / chain of attributes to the value.
+
+    Only supports setting attributes, not items in lists or dictionaries.
+    
+    Parameters
+    ----------
+    obj : Any
+        The object to set the value in.
+    path : str
+        The path to the value, e.g. "a.b.c".
+    value : Any
+        The value to set.
+        If the value is NOTSET, the attribute is deleted.
+    """
+    _set_nested_value(obj, path, value)
+
+def get_nested_value(obj: Any, path: str, default: Any = NOTSET) -> Any:
+    """Get a nested value in an object by a path / chain of attributes to the value.
+
+    Only supports getting attributes, not items in lists or dictionaries.
+    
+    Parameters
+    ----------
+    obj : Any
+        The object to get the value from.
+    path : str
+        The path to the value, e.g. "a.b.c".
+
+    default : Any, optional
+        The default value if the path does not exist, by default NOTSET.
+
+    Returns
+    -------
+    Any
+        The value at the path or the default value.
+
+        Returns PATHNONE if the path does not completely exist.
+        Returns NOTSET if the last attribute does not exist.
+    """
+    return _get_nested_value(obj, path, default)

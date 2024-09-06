@@ -75,6 +75,12 @@ class Config(JsonConvertible, ArgparserMixin):
             if self.progress_factory is None:
                 self.progress_factory = ProgressFactory()
 
+    def after_decoding(self):
+        super().after_decoding()
+        if self.use_progress_bar:
+            if self.progress_factory is None:
+                self.progress_factory = ProgressFactory()
+
     @classmethod
     def parse_args(cls,
                    parser: ArgumentParser,
@@ -161,4 +167,6 @@ class Config(JsonConvertible, ArgparserMixin):
     def __setstate__(self, state):
         self.__dict__.update(state)
         # Add baz back since it doesn't exist in the pickle
-        self.progress_factory = None
+        if self.use_progress_bar:
+            if self.progress_factory is None:
+                self.progress_factory = ProgressFactory()

@@ -36,7 +36,11 @@ else:
 
 class _DEFAULT():
     """Default value singleton."""
-    pass
+    
+    def __eq__(self, other: Any) -> bool:
+        if isinstance(other, _DEFAULT):
+            return True
+        return False
 
 
 DEFAULT = _DEFAULT()
@@ -44,17 +48,48 @@ DEFAULT = _DEFAULT()
 
 
 class _NOCHANGE:
-    pass
+
+    def __eq__(self, other: Any) -> bool:
+        if isinstance(other, _NOCHANGE):
+            return True
+        return False
 
 
 class _CYCLE:
-    pass
+    def __eq__(self, other: Any) -> bool:
+        if isinstance(other, _CYCLE):
+            return True
+        return False
 
 
 class _MISSING:
-    pass
+    def __eq__(self, other: Any) -> bool:
+        if isinstance(other, _MISSING):
+            return True
+        return False
 
 
 NOCHANGE = _NOCHANGE()
 CYCLE = _CYCLE()
 MISSING = _MISSING()
+
+
+class _NOTSET():
+    def __eq__(self, other: Any) -> bool:
+        if isinstance(other, _NOTSET):
+            return True
+        return False
+
+
+class _PATHNONE():
+    def __eq__(self, other: Any) -> bool:
+        if isinstance(other, _PATHNONE):
+            return True
+        return False
+
+
+NOTSET = _NOTSET()
+"""Constant for a non existing value."""
+
+PATHNONE = _PATHNONE()
+"""Constant for a non existing path."""
