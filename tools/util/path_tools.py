@@ -138,10 +138,76 @@ def read_directory(
                 for key, value in item.items():
                     if key in parser:
                         item[key] = parser[key](value)
-            _p = os.path.join(path, file)
+            _p = format_os_independent(os.path.join(path, file))
             item[path_key] = _p
             res.append(item)
     return res
+
+
+def read_directory_recursive(
+    path: str,
+    parser: Optional[Dict[str, callable]] = None,
+    path_key: str = "path"
+) -> List[Dict[str, Any]]:
+    """Reads a directory for files matching a regex pattern and returns a
+    list of dictionaries with the readed groups and full filepath.
+
+    This is an adapted version of read_directory which allows to specify a subpath as a regex.
+    And will recursively search for files matching the pattern.
+
+    Parameters
+    ----------
+    path : str
+        The path to read the files from.
+        Can contain a regex pattern with named groups at any point. "/" is used as a separator.
+
+    parser : Optional[Dict[str, callable]], optional
+        A parser dictionary which can contain keys which should correspond to named groups in the pattern,
+        the value should be a callable which is invoked by the parsed value. The result is then written to the result dictionary, by default None
+
+    Returns
+    -------
+    List[Dict[str, Any]]
+        List of dictionaries with the readed groups and full filepath.
+
+    """
+    directory = path.split("/")
+    # Check to what extend the path is a regex
+    p = []
+    special_chars = set(list(regex_special_chars()))
+    pattern_start = -1
+    for i, d in enumerate(directory):
+        if d == "." or d == "..":
+            p.append(d)
+            continue
+        if set(d).intersection(special_chars):
+            pattern_start = i
+            break
+        else:
+            p.append(d)
+    if len(p) == len(directory):
+        # No regex in path, match all files
+        return read_directory(path, ".*", parser, path_key)
+    path = "/".join(p)
+
+    next_patterns = directory[pattern_start:]
+    next_pattern = next_patterns.pop(0)
+    results = read_directory(path, next_pattern, parser, path_key)
+    if len(next_patterns) == 0:
+        return results
+    else:
+        super_results = []
+        for result in results:
+            sub_path = result.pop(path_key)
+            patterns = "/".join(next_patterns)
+            new_path = sub_path + "/" + patterns
+            rec_results = read_directory_recursive(new_path, parser, path_key)
+            for rec_result in rec_results:
+                rec_result.update(result)
+                super_results.append(rec_result)
+        return super_results
+
+    return read_directory(path, pattern, parser, path_key)
 
 
 def open_in_default_program(path_to_file: str) -> None:
@@ -280,6 +346,17 @@ def replace_unallowed_chars(path: str,
     for char in unallowed:
         path = path.replace(char, replace_with)
     return path
+
+
+def regex_special_chars() -> str:
+    """Returns a string containing all special regex characters.
+
+    Returns
+    -------
+    str
+        String containing all special regex characters.
+    """
+    return r".^$*+?{}[]\|()"
 
 
 def replace_file_unallowed_chars(file_name: str, replace_with: str = "_") -> str:

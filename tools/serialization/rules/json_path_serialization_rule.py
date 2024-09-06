@@ -20,6 +20,7 @@ class PathValueWrapper(JsonConvertible):
                  **kwargs):
         super().__init__(decoding, **kwargs)
         if decoding:
+            self.value = value
             return
         path_str = str(value)
         if convert_path_to_cwd_relative:
