@@ -49,23 +49,25 @@ class DiscreteModuleSceneNode3D(ModuleSceneNode3D):
                 raise ValueError(
                     "Cannot pass position and translation or orientation.")
             translation, orientation = self._parse_position(position)
-        self._init_position(translation=translation, 
-                            orientation=orientation, 
+        self._init_position(translation=translation,
+                            orientation=orientation,
                             dtype=dtype,
                             _translation=_translation,
                             _orientation=_orientation
                             )
 
-    def _init_position(self,  
+    def _init_position(self,
                        translation: Optional[VEC_TYPE],
-                        orientation: Optional[VEC_TYPE],
-                        dtype: torch.dtype,
-                        _translation: Optional[torch.Tensor] = None,
-                        _orientation: Optional[torch.Tensor] = None,
-                 ):
+                       orientation: Optional[VEC_TYPE],
+                       dtype: torch.dtype,
+                       _translation: Optional[torch.Tensor] = None,
+                       _orientation: Optional[torch.Tensor] = None,
+                       ):
         if _translation is not None:
-            self.register_buffer("_translation", _translation)
-            self.register_buffer("_orientation", _orientation)
+            self.register_buffer(
+                "_translation", _translation, persistent=False)
+            self.register_buffer(
+                "_orientation", _orientation, persistent=False)
         else:
             if translation is None:
                 translation = self._get_default_translation(dtype)
@@ -110,7 +112,8 @@ class DiscreteModuleSceneNode3D(ModuleSceneNode3D):
 
     def set_position(self, value: VEC_TYPE):
         if "_translation" not in self._buffers:
-            raise ValueError("Position can not be set when translations and orientations are just references.")
+            raise ValueError(
+                "Position can not be set when translations and orientations are just references.")
         pos, quat = self._parse_position(value)
         self._translation = pos
         self._orientation = quat
