@@ -582,8 +582,17 @@ def plot_as_image(data: VEC_TYPE,
 
     imshow_kw = imshow_kw or dict()
 
-    input_data = []
+    if "torch" in sys.modules:
+        from torch import Tensor
+        if isinstance(data, Tensor):
+            data = data.detach().cpu()
+            if len(data.shape) == 4:
+                data = [data[i] for i in range(data.shape[0])]
+    if isinstance(data, np.ndarray):
+        if len(data.shape) == 4:
+            data = [data[i] for i in range(data.shape[0])]
 
+    input_data = []
     if isinstance(data, (List, tuple)):
         for d in data:
             input_data.append(numpyify_image(d))

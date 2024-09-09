@@ -1,4 +1,4 @@
-from typing import List, Optional, Tuple, Union
+from typing import Any, Iterable, List, Optional, Set, Tuple, Union
 from matplotlib import pyplot as plt
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
@@ -11,6 +11,42 @@ from tools.util.typing import REAL_TYPE
 from tools.viz.matplotlib import saveable
 from mpl_toolkits.mplot3d import Axes3D
 from tools.transforms.to_numpy import numpyify
+from tools.util.typing import NOTSET
+
+
+def _should_plot_object(component: AbstractSceneNode,
+                        object_indices_blacklist: Optional[Set[Any]] = None,
+                        object_indices_whitelist: Optional[Set[Any]] = None) -> bool:
+    """Checks if the object should be plotted.
+
+    Parameters
+    ----------
+    component : AbstractSceneNode
+        The component to check.
+
+    object_indices_blacklist : Optional[Set[Any]], optional
+        The object indices blacklist.
+
+    object_indices_whitelist : Optional[Set[Any]] optional
+        The object indices whitelist.
+
+    Returns
+    -------
+    bool
+        If the object should be plotted.
+    """
+    idx = NOTSET
+    if object_indices_blacklist is not None:
+        if idx == NOTSET:
+            idx = component.get_index()
+        if idx in object_indices_blacklist:
+            return False
+    if object_indices_whitelist is not None:
+        if idx == NOTSET:
+            idx = component.get_index()
+        if idx not in object_indices_whitelist:
+            return False
+    return True
 
 
 class VisualNode3D(SceneNode):
@@ -26,11 +62,15 @@ class VisualNode3D(SceneNode):
                    units: Optional[Union[List[str], str]] = None,
                    ax: Optional[Axes3D] = None,
                    x_lim: Optional[Tuple[REAL_TYPE,
-                                        REAL_TYPE]] = None,
-                    y_lim: Optional[Tuple[REAL_TYPE,
-                                        REAL_TYPE]] = None,
-                    z_lim: Optional[Tuple[REAL_TYPE,
-                                        REAL_TYPE]] = None,
+                                         REAL_TYPE]] = None,
+                   y_lim: Optional[Tuple[REAL_TYPE,
+                                         REAL_TYPE]] = None,
+                   z_lim: Optional[Tuple[REAL_TYPE,
+                                         REAL_TYPE]] = None,
+                   object_indices_blacklist: Optional[Union[Any,
+                                                            Iterable[Any]]] = None,
+                   object_indices_whitelist: Optional[Union[Any,
+                                                            Iterable[Any]]] = None,
                    **kwargs
                    ) -> Figure:
         """Returns a matplotlib 3d plot with the scene.
@@ -49,6 +89,16 @@ class VisualNode3D(SceneNode):
             units = units[:2]
         elif isinstance(units, str):
             units = [units] * 3
+
+        if object_indices_blacklist is not None:
+            if not hasattr(object_indices_blacklist, "__iter__"):
+                object_indices_blacklist = [object_indices_blacklist]
+            object_indices_blacklist = set(object_indices_blacklist)
+
+        if object_indices_whitelist is not None:
+            if not hasattr(object_indices_whitelist, "__iter__"):
+                object_indices_whitelist = [object_indices_whitelist]
+            object_indices_whitelist = set(object_indices_whitelist)
 
         init_ax = False
 
@@ -96,17 +146,25 @@ class VisualNode3D(SceneNode):
             for child in component.get_scene_children():
                 child: VisualNode3D
                 target = child.get_global_position()[..., :3, 3]
-                if plot_line_to_child:
-                    local_vecs.append(target)
-                    texts.append("")
-                child.plot_object(ax, **args)
+                should_plot = _should_plot_object(
+                    child, object_indices_blacklist, object_indices_whitelist)
+                if should_plot:
+                    if plot_line_to_child:
+                        local_vecs.append(target)
+                        texts.append("")
+                    child.plot_object(ax, **args)
                 child_vecs = get_positions(child)
                 for cv in child_vecs:
                     vecs.append(cv)
             return vecs
 
         # Plot self
-        self.plot_object(ax, **args)
+
+        should_plot = _should_plot_object(
+            self, object_indices_blacklist, object_indices_whitelist)
+        if should_plot:
+            self.plot_object(ax, **args)
+
         vec_positions = get_positions(self)
         start_x = []
         start_y = []

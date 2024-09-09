@@ -611,12 +611,29 @@ def vector_angle(v1: VEC_TYPE, v2: VEC_TYPE) -> torch.Tensor:
 
 @torch.jit.script
 def _vector_angle_3d(v1: torch.Tensor, v2: torch.Tensor) -> torch.Tensor:
-    angle_x = torch.atan2(v2[:, 1], v2[:, 2]) - \
-        torch.atan2(v1[:, 1], v1[:, 2])  # YZ => X
-    angle_y = torch.atan2(v2[:, 0], v2[:, 2]) - \
-        torch.atan2(v1[:, 0], v1[:, 2])  # XZ => Y
-    angle_z = torch.atan2(v2[:, 0], v2[:, 1]) - \
-        torch.atan2(v1[:, 0], v1[:, 1])  # XY => Z
+    """
+    Computes the angle between two 3D vectors.
+
+    Parameters
+    ----------
+
+    v1 : torch.Tensor
+        The first input vector, shape (..., 3)
+
+    v2 : torch.Tensor
+        The second input vector, shape (..., 3)
+
+    Returns
+    -------
+    torch.Tensor
+        Angle between vector. Shape (..., 3)
+    """
+    angle_x = torch.atan2(v2[..., 1], v2[..., 2]) - \
+        torch.atan2(v1[..., 1], v1[..., 2])  # YZ => X
+    angle_y = torch.atan2(v2[..., 0], v2[..., 2]) - \
+        torch.atan2(v1[..., 0], v1[..., 2])  # XZ => Y
+    angle_z = torch.atan2(v2[..., 0], v2[..., 1]) - \
+        torch.atan2(v1[..., 0], v1[..., 1])  # XY => Z
     return torch.stack([angle_x, angle_y, angle_z], dim=-1)
 
 
@@ -792,3 +809,147 @@ def position_quaternion_to_affine_matrix(position: torch.Tensor, quaternion: tor
     """
     rotation_matrix = unitquat_to_rotmat(quaternion)
     return _compose_transformation_matrix(position, rotation_matrix[..., :3, :3])
+
+
+def calculate_rotation_matrix(a: torch.Tensor, b: torch.Tensor):
+    """
+    Calculates the rotation matrix R for each vector pair in a and b to transform a into b.
+
+    :math:`RA = B`
+    Where R is the rotation matrix, A is the input vector, and B is the target vector.
+
+    Parameters
+    ----------
+
+    a : torch.Tensor
+        The input vector of shape ([..., B], 3).
+
+    b : torch.Tensor
+        The target vector of shape ([..., B], 3).
+
+    Returns
+    -------
+    torch.Tensor
+        A PyTorch tensor of rotation matrices with shape ([..., B], 3, 3).
+    """
+
+    # Ensure vectors have the same shape
+    if a.shape != b.shape:
+        raise ValueError("Input vectors must have the same shape.")
+
+    # Flatten the batch dims
+    a, batch_shape = flatten_batch_dims(a, end_dim=-2)
+    b, _ = flatten_batch_dims(b, end_dim=-2)
+
+    # Check for opposite directions and flip if necessary
+    dot_products = torch.sum(a * b, dim=-1)
+    opposite_directions = dot_products < 0
+    a[opposite_directions] = -a[opposite_directions]  # Flip vectors in a
+
+    # Calculate the cross-product matrix for each vector pair
+    A = torch.cross(a, b, dim=-1)
+
+    # Calculate the dot product for each vector pair
+    dot_product = torch.sum(a * b, dim=-1)
+
+    # Calculate the rotation matrix using the Rodrigues formula for each vector pair
+    R = torch.eye(3)[None, :, :] + torch.cross(A[:, :, None], torch.eye(3)[None, :, :], dim=-2) + \
+        torch.einsum('ij,ik->ijk', A, A) * (1 - dot_product[:, None, None]) / (
+            torch.linalg.norm(A, dim=-1)[:, None, None] ** 2)
+
+    return unflatten_batch_dims(R, batch_shape)
+
+
+def compute_ray_plane_intersections_from_position_matrix(
+        plane_position: torch.Tensor,
+        ray_origins: torch.Tensor,
+        ray_directions: torch.Tensor,
+        eps: float = 1e-6,
+) -> torch.Tensor:
+    plane_position, plane_shape = flatten_batch_dims(
+        plane_position, end_dim=-3)
+    B = plane_position.shape[0]
+    normal = torch.eye(4, device=plane_position.device,
+                       dtype=plane_position.dtype).unsqueeze(0)
+    normal[..., 2, 3] = 1  # z = 1
+    normal = normal.repeat(B, 1, 1)  # (B, 4, 4)
+    plane_normal_target = torch.bmm(
+        plane_position, normal)[..., :3, 3]  # (B, 3)
+    plane_normals = plane_normal_target - plane_position[..., :3, 3]
+    plane_origin = plane_position[..., :3, 3]
+    return unflatten_batch_dims(compute_ray_plane_intersections(
+        plane_origins=plane_origin,
+        plane_normals=plane_normals,
+        ray_origins=ray_origins,
+        ray_directions=ray_directions,
+        eps=eps,
+    ), plane_shape)
+
+
+def compute_ray_plane_intersections(
+        plane_origins: torch.Tensor,
+        plane_normals: torch.Tensor,
+        ray_origins: torch.Tensor,
+        ray_directions: torch.Tensor,
+        eps: float = 1e-6,
+) -> torch.Tensor:
+    # Check if shapes are matching
+
+    plane_origins, plane_shape = flatten_batch_dims(plane_origins, end_dim=-2)
+    plane_normals, _ = flatten_batch_dims(plane_normals, end_dim=-2)
+
+    ray_origins, ray_shape = flatten_batch_dims(ray_origins, end_dim=-2)
+    ray_directions, _ = flatten_batch_dims(ray_directions, end_dim=-2)
+
+    shapes = [plane_origins.shape, plane_normals.shape,
+              ray_origins.shape, ray_directions.shape]
+    # All shapes should be the same
+    if len(set(shapes)) != 1:
+        raise ValueError("All input shapes should be the same. (B, 3)")
+
+    B = plane_origins.shape[0]
+
+    # # Calculate the dot product between the ray directions and plane normals
+    # dot_products = torch.matmul(ray_directions, plane_normals.T)
+
+    # # Find indices where the dot product is non-zero (i.e., the ray is not parallel to the plane)
+    # nonzero_indices = torch.abs(dot_products) > eps
+
+    # # Calculate the intersection points for non-parallel rays
+    # intersection_points = torch.zeros((B, N, 3))
+    # intersection_points[nonzero_indices[:, 0], nonzero_indices[:, 1]] = (
+    #     (torch.matmul(ray_origins[nonzero_indices[:, 1]], plane_normals[nonzero_indices[:, 0], :]) - torch.matmul(plane_origins[nonzero_indices[:, 0], :], plane_normals[nonzero_indices[:, 0], :]))
+    #     / dot_products[nonzero_indices[:, 0], nonzero_indices[:, 1]]
+    # ) * ray_directions[nonzero_indices[:, 1]] + ray_origins[nonzero_indices[:, 1]]
+
+    # # Set intersection points to NaN for parallel rays
+    # intersection_points[dot_products == 0] = float('nan')
+
+    # Plane normals to ray_dims
+    plane_n = plane_normals  # (B, 3)
+    plane_p = plane_origins  # (B, 3)
+
+    d = (plane_n * plane_p).sum(-1)  # dot product
+
+    # Add N to rays
+    ray_p = ray_origins  # (B, 3)
+    ray_v = ray_directions  # (B, 3)
+
+    intersection_points = torch.empty(
+        (B, 3), device=ray_origins.device, dtype=ray_origins.dtype)
+    intersection_points.fill_(float('nan'))
+
+    # Calculate intersection points
+    denom = (plane_n * ray_v).sum(-1)  # dot product
+
+    # This should be True for parallel rays Shape (N, B)
+    is_not_intersecting = torch.abs(denom) < eps
+
+    dot_n_p = (plane_n * ray_p).sum(-1)  # dot product
+
+    t = ((-(dot_n_p.unsqueeze(-1).repeat(1, 3) - d.unsqueeze(-1).repeat(1, 3))
+          )[~is_not_intersecting] / denom[~is_not_intersecting].unsqueeze(-1).repeat(1, 3)).squeeze()
+    intersection_points[~is_not_intersecting] = ray_p[~is_not_intersecting] + \
+        t * ray_v[~is_not_intersecting]  # Intersection points for unlimited planes
+
+    return unflatten_batch_dims(intersection_points, plane_shape)

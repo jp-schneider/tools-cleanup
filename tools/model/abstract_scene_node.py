@@ -1,4 +1,4 @@
-from typing import Iterable, List, Literal, Optional, Set, Tuple, FrozenSet
+from typing import Any, Iterable, List, Literal, Optional, Set, Tuple, FrozenSet
 from matplotlib.figure import Figure
 
 import matplotlib.pyplot as plt
@@ -148,6 +148,17 @@ class AbstractSceneNode(JsonConvertible):
         -------
         VEC_TYPE
             The global position of the node.
+        """
+        ...
+
+    @abstractmethod
+    def get_index(self) -> Any:
+        """Get the index of the node.
+
+        Returns
+        -------
+        Any
+            The index of the node.
         """
         ...
 
