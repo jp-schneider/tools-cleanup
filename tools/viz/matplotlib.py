@@ -2,14 +2,15 @@
 # Class for functions
 # File for useful functions when using matplotlib
 import io
-from typing import Any, Callable, Dict, List, Literal, Optional, Union, Tuple
+from typing import Any, Callable, Dict, Iterable, List, Literal, Optional, Union, Tuple
 
+from matplotlib.animation import FuncAnimation
 from matplotlib.colors import ListedColormap
 from matplotlib.image import AxesImage
 
 from tools.segmentation.masking import value_mask_to_channel_masks
 from tools.util.format import parse_format_string
-from tools.util.numpy import numpyify_image
+from tools.util.numpy import numpyify_image, numpyify
 from tools.util.torch import VEC_TYPE
 from tools.transforms.numpy.min_max import MinMax
 
@@ -58,6 +59,8 @@ def saveable(
     default_dpi: int = 300,
     default_override: bool = False,
     default_tight_layout: bool = False,
+    is_animation: bool = False,
+    default_fps: int = 24,
 ):
     """Declares a matplotlib figure producing function as saveable so the functions
     figure output can directly saved to disk by setting the save=True as kwarg.
@@ -107,6 +110,9 @@ def saveable(
         If the function should close the figure after saving.
         Default False
 
+    fps: int, optional
+        Frames per second for the animation. Default 24.
+
     Parameters
     ----------
     default_ext : Union[str, List[str]], optional
@@ -123,14 +129,18 @@ def saveable(
         If the function should by default override, by default False
     default_tight_layout : bool, optional
         If the function should by default call tight_layout on the figure, by default False
+    is_animation : bool, optional
+        If the function returns an animation, by default False
+    default_fps : int, optional
+        Frames per second for the animation, by default 24
     """
     from uuid import uuid4
 
     # type: ignore
-    def decorator(function: Callable[[Any], Figure]) -> Callable[[Any], Figure]:
+    def decorator(function: Callable[[Any], Union[Figure, FuncAnimation]]) -> Callable[[Any], Union[Figure, FuncAnimation]]:
         @wraps(function)
         def wrapper(*args, **kwargs):
-            nonlocal default_output_dir
+            nonlocal default_output_dir, is_animation
             path = kwargs.pop("path", str(uuid4()))
             save = kwargs.pop("save", False)
             ext = kwargs.pop("ext", default_ext)
@@ -143,7 +153,9 @@ def saveable(
             close = kwargs.pop("auto_close", False)
             display = kwargs.pop("display", False)
             display_auto_close = kwargs.pop("display_auto_close", True)
+            fps = kwargs.pop("fps", default_fps)
 
+            ani = None
             # Get interactive mode.
             is_interactive = mpl.is_interactive()
 
@@ -151,6 +163,10 @@ def saveable(
                 mpl.interactive(set_interactive_mode)
             try:
                 out = function(*args, **kwargs)
+                if is_animation:
+                    sa = out[0]
+                    ani = out[1]
+                    out = sa
             finally:
                 mpl.interactive(is_interactive)
 
@@ -185,7 +201,10 @@ def saveable(
                 for p in paths:
                     if not override:
                         p = numerated_file_name(p)
-                    out.savefig(p, transparent=transparent, dpi=dpi)
+                    if not is_animation:
+                        out.savefig(p, transparent=transparent, dpi=dpi)
+                    else:
+                        ani.save(p, fps=fps, dpi=dpi)
             if open:
                 try:
                     open_in_default_program(paths[0])
@@ -749,6 +768,58 @@ def plot_as_image(data: VEC_TYPE,
 
     if title is not None:
         fig.suptitle(title)
+    return fig
+
+
+@saveable()
+def plot_vectors(x: VEC_TYPE, label: Optional[Union[str, List[str]]] = None, mode: Literal["plot", "scatter"] = "plot") -> Figure:
+    """Gets a matplotlib line figure with a plot of vectors.
+
+    Parameters
+    ----------
+    x : VEC_TYPE
+        Data to be plotted. Shape should be ([..., N], D)
+        Batch dimensions will be flattened.
+        Plots D lines with N points each.
+
+    label : Optional[Union[str, List[str]]], optional
+        Label or each dimension. If None just numerates the dimensions, by default None
+
+    Returns
+    -------
+    Figure
+        Matplotlib figure with the plot.
+
+    Raises
+    ------
+    ValueError
+        If label does not match the number of dimensions.
+    """
+    from tools.util.numpy import flatten_batch_dims
+
+    x = numpyify(x)
+    x, shape = flatten_batch_dims(x, -2)
+
+    if label is None:
+        label = [str(i) for i in range(x.shape[-1])]
+    else:
+        if not isinstance(label, Iterable):
+            label = [label]
+        if len(label) != x.shape[-1]:
+            raise ValueError(
+                "Number of labels should match the last dimension of the input data.")
+
+    y = np.arange(x.shape[0])
+    fig, ax = get_mpl_figure(1, 1)
+
+    for i in range(x.shape[-1]):
+        if mode == "plot":
+            ax.plot(y, x[:, i], label=label[i])
+        elif mode == "scatter":
+            ax.scatter(y, x[:, i], label=label[i])
+        else:
+            raise ValueError("Mode should be either plot or scatter.")
+    ax.legend()
     return fig
 
 
