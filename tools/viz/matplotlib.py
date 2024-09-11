@@ -1087,7 +1087,8 @@ def plot_mask(image: VEC_TYPE,
         if labels is not None:
             if isinstance(labels, Iterable):
                 label = labels[i]
-            label = str(labels)
+            else:
+                label = str(labels)
 
         if lined_contours:
             ax.contour(
@@ -1160,6 +1161,44 @@ def plot_mask(image: VEC_TYPE,
         ax.set_axis_on()
         ax.set_xlabel("Coordinates [x]")
         ax.set_ylabel("Coordinates [y]")
+    return fig
+
+
+def plot_mask_overview(image: VEC_TYPE, mask: VEC_TYPE):
+    import matplotlib.patches as mpatches
+    from tools.transforms import ToNumpyImage
+    from matplotlib.colors import to_rgba, to_rgb
+    from collections.abc import Iterable
+
+    to_numpy = ToNumpyImage()
+
+    if image is None and mask is None:
+        raise ValueError("At least one of image or mask should be provided")
+
+    mask = to_numpy(mask) if mask is not None else None
+    image = to_numpy(image) if image is not None else None
+    if image is None:
+        image = np.zeros(mask.shape[:2] + (3,))
+
+    mask = mask.squeeze()
+    if len(mask.shape) == 2:
+        mask = mask[..., None]
+    H, W, C = mask.shape
+    ratio = H / W
+    cols = 5
+    rows = math.ceil(C / cols)
+    size = 3
+    fig, ax = get_mpl_figure(
+        rows, cols, ratio_or_img=mask[..., 0], size=size, tight=True, ax_mode="2d")
+    for row in range(rows):
+        for col in range(cols):
+            i = row * cols + col
+            if i >= C:
+                ax[row, col].axis("off")
+                continue
+            else:
+                plot_mask(image, mask[:, :, i], ax=ax[row, col], labels=[
+                          str(i)], lined_contours=False, filled_contours=True)
     return fig
 
 

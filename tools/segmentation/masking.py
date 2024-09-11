@@ -1,3 +1,4 @@
+from matplotlib.colors import to_rgba
 from typing import Any, Dict, List, Optional, Literal, Tuple, Union
 from tools.util.format import parse_enum
 from tools.util.reflection import class_name
@@ -14,6 +15,10 @@ from tools.util.path_tools import read_directory
 import os
 from tools.io.image import create_image_exif, load_image_exif
 from tools.transforms.to_numpy_image import ToNumpyImage
+import cv2
+from matplotlib.colors import to_rgba
+import matplotlib.pyplot as plt
+from multiprocessing import Pool
 
 
 def split_overlap_channel_masks(masks: VEC_TYPE) -> List[np.ndarray]:
@@ -724,3 +729,267 @@ def merge_value_masks_to_channel_mask(
     channel_masks = channel_masks[..., reordered_indices]
     channel_ids = lgids[reordered_indices]
     return channel_masks, channel_ids
+
+
+def _inpaint_mask(image: np.ndarray,
+                  mask: np.ndarray,
+                  color: np.ndarray,
+                  ) -> np.ndarray:
+    """Inpaint the mask on the input image by alpha blending the color.
+
+    Parameters
+    ----------
+    image : np.ndarray
+        The input image.
+    mask : np.ndarray
+        Mask to be inpainted. Should be in the format (h, w).
+        Will be thresholded at 0.5.
+    color : np.ndarray
+        Color to be inpainted. Should be in the format (4,).
+        Where the first 3 values are the RGB values and the last value is the alpha value.
+
+    Returns
+    -------
+    np.ndarray
+        The inpainted image.
+    """
+    mask = mask > 0.5
+    image = image.copy()
+    alpha = color[3]
+    color = color[:3]
+    # Color to 255
+    color = np.round((color * 255)).astype('uint8')
+    image[mask] = image[mask] * (1-alpha) + color * alpha
+    return image.astype('uint8')
+
+
+def inpaint_mask_image(
+        input_image: np.ndarray,
+        input_mask: np.ndarray,
+        mask_color: Any = "tab:blue",
+        contour_color: np.ndarray = "black",
+        contour_width: int = 5) -> np.ndarray:
+    """Inpaint the mask on the input image.
+
+    Parameters
+    ----------
+    input_image : np.ndarray
+        Input image of shape H x W x C in range [0, 255] uint8
+    input_mask : np.ndarray
+        Mask to be inpainted. Should be in the format H x W. Will be thresholded at 0.5.
+    mask_color : Any, optional
+        Mask color to be used for inpainting, by default "tab:blue"
+    contour_color : np.ndarray, optional
+        A contour color for the mask, by default "black"
+    contour_width : int, optional
+        A contour width for the mask, by default 5
+
+    Returns
+    -------
+    np.ndarray
+        The inpainted image.
+    """
+    assert input_image.shape[:2] == input_mask.shape, 'different shape between image and mask'
+    # 0: background, 1: foreground
+    mask = np.clip(input_mask, 0, 1)
+    # paint mask
+    painted_image = _inpaint_mask(
+        input_image, mask, np.array(to_rgba(mask_color)))
+    # paint contour
+    if contour_width > 0:
+        contour_radius = (contour_width - 1) // 2
+        dist_transform_fore = cv2.distanceTransform(
+            mask.astype(np.uint8), cv2.DIST_L2, 3)
+        dist_transform_back = cv2.distanceTransform(
+            1-mask.astype(np.uint8), cv2.DIST_L2, 3)
+        dist_map = dist_transform_fore - dist_transform_back
+        contour_radius += 2
+        contour_mask = np.abs(
+            np.clip(dist_map, -contour_radius, contour_radius))
+        contour_mask = contour_mask / np.max(contour_mask)
+        contour_mask[contour_mask > 0.5] = 1.
+        painted_image = _inpaint_mask(
+            painted_image, 1-contour_mask, np.array(to_rgba(contour_color)))
+    return painted_image
+
+
+def inpaint_masks(image: np.ndarray, masks: np.ndarray,
+                  colors: Optional[np.ndarray] = None,
+                  contour_colors: Optional[np.ndarray] = None,
+                  contour_width: int = 0) -> np.ndarray:
+    """Inpaint an image with multiple masks.
+
+    Parameters
+    ----------
+    image : np.ndarray
+        Input image of shape H x W x C in range [0, 255] uint8
+    masks : np.ndarray
+        Channel masks to be inpainted. Should be in the format H x W x C. Will be thresholded at 0.5.
+    colors : np.ndarray
+        The colors to be used for inpainting. Should be in the format C x 4.
+    contour_colors : np.ndarray
+        The contour colors for the masks. Should be in the format C x 4.
+    contour_width : int
+        The contour width for the masks.
+
+    Returns
+    -------
+    np.ndarray
+        Masked image.
+    """
+    H, W, C = masks.shape
+    image = image.copy()
+    if colors is None:
+        cmap = plt.get_cmap("tab10" if C <= 10 else "tab20")
+        colors = [np.array(to_rgba(cmap(i % cmap.N))) for i in range(C)]
+    if contour_colors is None:
+        if contour_width == 0:
+            contour_colors = ["black"] * C
+        else:
+            black_alpha = 0.5
+            black = np.array(to_rgba("black"))
+            contour_colors = [black_alpha * black[:3] +
+                              (1 - black_alpha) * c[:3] for c in colors]
+    for i in range(C):
+        mask = masks[..., i]
+        image = inpaint_mask_image(
+            image, mask, colors[i], contour_colors[i], contour_width)
+    return image
+
+
+def inpaint_mask_video(
+    images: np.ndarray,
+    masks: np.ndarray,
+    colors: Optional[List[str]] = None,
+    contour_colors: Optional[List[str]] = None,
+    contour_width: int = 5,
+    num_workers: int = 8
+) -> np.ndarray:
+    """Inpaints masks on a video.
+
+    Parameters
+    ----------
+    images : np.ndarray
+        Input images of shape B x H x W x C in range [0, 255] uint8
+    masks : np.ndarray
+        Masks to be inpainted. Should be in the format B x H x W x C. Will be thresholded at 0.5.
+    colors : Optional[List[str]], optional
+        Colors to be used for inpainting, by default None
+    contour_colors : Optional[List[str]], optional
+        Contour colors for the masks, by default None
+    contour_width : int, optional
+        Contour width for the masks, by default 5
+
+    Returns
+    -------
+    np.ndarray
+        The inpainted video. In shape B x H x W x C
+    """
+    N, H, W, C = masks.shape
+    if colors is None:
+        cmap = plt.get_cmap("tab10" if C <= 10 else "tab20")
+        colors = [np.array(to_rgba(cmap(i % cmap.N))) for i in range(C)]
+    if contour_colors is None:
+        if contour_width == 0:
+            contour_colors = ["black"] * C
+        else:
+            black_alpha = 0.5
+            black = np.array(to_rgba("black"))
+            contour_colors = [black_alpha * black[:3] +
+                              (1 - black_alpha) * c[:3] for c in colors]
+    if colors is None:
+        colors = ["tab:blue"] * masks.shape[0]
+    if contour_colors is None:
+        contour_colors = ["black"] * masks.shape[0]
+
+    if num_workers > 1:
+        with Pool(num_workers) as p:
+            inpainted_images = p.starmap(inpaint_masks, [
+                (images[i], masks[i], colors, contour_colors, contour_width) for i in range(N)])
+        return np.stack(inpainted_images, axis=0)
+    else:
+        inpainted_images = np.zeros_like(images)
+        for i in range(N):
+            inpainted_images[i] = inpaint_masks(
+                images[i], masks[i], colors, contour_colors, contour_width)
+        return inpainted_images
+
+
+def fuse_masks(masks: np.ndarray, fuse_indices: List[List[int]], ignore_indices: Optional[List[int]] = None) -> np.ndarray:
+    """Fuses masks together, based on the given indices.
+
+    Parameters
+    ----------
+    masks : np.ndarray
+        Stack of channel masks of shape H x W x C
+    fuse_indices : List[List[int]]
+        The indices to fuse together. Each list in the list represents a group of masks to fuse.
+        Indices which are not in the list will be appended, unless they are in the ignore_indices list.
+        Shape is (N, M) where N is the number of groups and M is the number of masks to fuse in each group.
+
+    ignore_indices : Optional[List[int]], optional
+        Ignore indices which should be not in the result mask., by default None
+
+    Returns
+    -------
+    np.ndarray
+        H x W x N + ? mask, where N is the number of groups and ? is the number of masks which are not in the groups and also not ignored.
+    """
+    H, W, C = masks.shape
+    # Count the number of masks to fuse
+    indices_in_channel = []
+    covered_channels = set()
+    for indices in fuse_indices:
+        covered_channels.update(indices)
+        indices_in_channel.append(indices)
+    mask_indices = np.arange(C)
+    indices_to_ignore = set(
+        ignore_indices) if ignore_indices is not None else set()
+    indices_to_fuse = set(mask_indices) - covered_channels - indices_to_ignore
+    for single_idx in list(indices_to_fuse):
+        indices_in_channel.append([single_idx])
+    # Create the fused mask
+    fused_masks = np.zeros((H, W, len(indices_in_channel)), dtype=np.bool_)
+    for i, indices in enumerate(indices_in_channel):
+        fused_masks[:, :, i] = np.any(masks[:, :, indices], axis=2)
+    return fused_masks, indices_in_channel
+
+
+def fuse_timed_stack(masks: np.ndarray, fuse_indices: List[List[int]], ignore_indices: Optional[List[int]] = None, ignore_all_others: bool = False) -> np.ndarray:
+    """Given a stack of masks, fuses them together based on the given indices.
+    Masks can now have a time dimension.
+
+    Parameters
+    ----------
+    masks : np.ndarray
+        Masks to fuse of shape T x H x W x C
+    fuse_indices : List[List[int]]
+        The indices to fuse together. Each list in the list represents a group of masks to fuse.
+    ignore_indices : Optional[List[int]], optional
+        Indices which should be ignored, by default None
+    ignore_all_others : bool, optional
+        If the function should only return the masks fused, by default False
+
+    Returns
+    -------
+    np.ndarray
+        T x H x W x C fused masks
+    """
+    T, H, W, _ = masks.shape
+    t = 0
+    init_fuse, indices_in_channel = fuse_masks(
+        masks[t], fuse_indices, ignore_indices)
+    if ignore_all_others:
+        init_fuse = init_fuse[..., :len(fuse_indices)]
+        indices_in_channel = indices_in_channel[:len(fuse_indices)]
+        used_indices = set(
+            [x for sublist in indices_in_channel for x in sublist])
+        all_indices = set(range(masks.shape[-1]))
+        ignore_indices = list(all_indices - used_indices)
+    C = init_fuse.shape[-1]
+    ret = np.zeros((T, H, W, C), dtype=np.bool_)
+    ret[t] = init_fuse
+    for t in range(1, T):
+        fused_mask, _ = fuse_masks(masks[t], fuse_indices, ignore_indices)
+        ret[t] = fused_mask
+    return ret
