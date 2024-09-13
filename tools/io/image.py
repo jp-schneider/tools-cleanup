@@ -364,6 +364,7 @@ def resize_image(
     """
     from torchvision.transforms import Compose, Resize, ToTensor
     from tools.transforms.to_numpy_image import ToNumpyImage
+    dtype = image.dtype
     if len(image.shape) == 4:
         B, H, W, C = image.shape
     elif len(image.shape) == 3:
@@ -379,9 +380,10 @@ def resize_image(
     if max_size is not None:
         new_size = compute_new_size((H, W), max_size)
         transforms = Compose([ToTensor()] + ([Resize(new_size)]
-                             if (H > max_size or W > max_size) else []) + [ToNumpyImage()])
+                             if (H > max_size or W > max_size) else []) + [ToNumpyImage(output_dtype=dtype)])
     else:
-        transforms = Compose([ToTensor(), Resize(size), ToNumpyImage()])
+        transforms = Compose(
+            [ToTensor(), Resize(size), ToNumpyImage(output_dtype=dtype)])
     return transforms(image)
 
 

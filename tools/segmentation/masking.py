@@ -119,10 +119,13 @@ def channel_masks_to_value_mask(masks: VEC_TYPE,
     masks = numpyify_image(masks)
     object_values = numpyify(
         object_values) if object_values is not None else None
-
     if object_values is None:
         object_values = np.arange(1, masks.shape[-1] + 1)
     else:
+        if (object_values == base_value).any():
+            raise ValueError(
+                f"Object values must not contain the base value {base_value}, as this would remove the mask!")
+
         if object_values.shape != (masks.shape[-1],):
             raise ValueError(
                 f"Object values shape {object_values.shape} does not match number of masks {masks.shape[-1]}")
@@ -578,7 +581,7 @@ def save_channel_masks(
         True
     """
     if oids is None:
-        oids = np.arange(masks.shape[-1])
+        oids = np.arange(1, masks.shape[-1] + 1)
 
     overlap_free_comb, overlap_free_comb_ids = split_overlap_channel_masks(
         masks)
@@ -863,7 +866,8 @@ def inpaint_mask_video(
     colors: Optional[List[str]] = None,
     contour_colors: Optional[List[str]] = None,
     contour_width: int = 5,
-    num_workers: int = 8
+    num_workers: int = 8,
+    sort_mask_by_size: bool = True
 ) -> np.ndarray:
     """Inpaints masks on a video.
 
@@ -879,7 +883,8 @@ def inpaint_mask_video(
         Contour colors for the masks, by default None
     contour_width : int, optional
         Contour width for the masks, by default 5
-
+    sort_mask_by_size : bool, optional
+        If the masks should be sorted by size, by default True
     Returns
     -------
     np.ndarray
@@ -901,6 +906,16 @@ def inpaint_mask_video(
         colors = ["tab:blue"] * masks.shape[0]
     if contour_colors is None:
         contour_colors = ["black"] * masks.shape[0]
+
+    # Calculate the size of each mask
+    mask_size = masks.sum(axis=(-3, -2))
+    # Sort mask by
+    if sort_mask_by_size:
+        # Mean size of the mask
+        mean_size = mask_size.mean(axis=0)
+        # Sort the masks by size
+        mask_indices = np.argsort(mean_size)[::-1]  # Large first
+        masks = masks[..., mask_indices]
 
     if num_workers > 1:
         with Pool(num_workers) as p:

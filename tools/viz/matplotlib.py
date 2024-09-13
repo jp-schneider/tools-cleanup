@@ -1164,6 +1164,7 @@ def plot_mask(image: VEC_TYPE,
     return fig
 
 
+@saveable(default_dpi=150)
 def plot_mask_overview(image: VEC_TYPE, mask: VEC_TYPE):
     import matplotlib.patches as mpatches
     from tools.transforms import ToNumpyImage

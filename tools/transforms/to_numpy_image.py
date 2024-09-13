@@ -1,4 +1,4 @@
-from typing import Union
+from typing import Union, Optional
 from tools.transforms.to_numpy import ToNumpy
 from tools.util.typing import NUMERICAL_TYPE, VEC_TYPE
 try:
@@ -14,6 +14,13 @@ class ToNumpyImage(ToNumpy):
     So the output will be a numpy array with shape (H, W[, C]) or (B, H, W[, C]).
     """
 
+    output_dtype: np.dtype
+    """The output dtype of the numpy array. After transformation."""
+
+    def __init__(self, output_dtype: Optional[np.dtype] = None):
+        super().__init__()
+        self.output_dtype = output_dtype
+
     def transform(self, x: Union[NUMERICAL_TYPE, VEC_TYPE], **kwargs) -> np.ndarray:
         if isinstance(x, torch.Tensor):
             # Check if the tensor is a image tensor
@@ -24,7 +31,18 @@ class ToNumpyImage(ToNumpy):
                 pass
             else:
                 raise ValueError(f"Input tensor has invalid shape: {x.shape}")
-        return super().transform(x, **kwargs)
+        return self.convert_dtype(super().transform(x, **kwargs))
+
+    def convert_dtype(self, x: np.ndarray) -> np.ndarray:
+        if self.output_dtype is None:
+            return x
+        if self.output_dtype == x.dtype:
+            return x
+        if self.output_dtype == np.uint8 and x.dtype in [np.float32, np.float64, np.float16]:
+            return (x * 255).astype(np.uint8)
+        else:
+            raise ValueError(
+                f"Cannot convert dtype {x.dtype} to {self.output_dtype}")
 
 
 numpyify_image = ToNumpyImage()

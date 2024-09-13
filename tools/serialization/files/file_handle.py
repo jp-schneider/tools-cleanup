@@ -1,5 +1,5 @@
 
-from typing import Any, Optional
+from typing import Any, Optional, Union
 from tools.serialization.json_convertible import JsonConvertible
 import os
 from io import BytesIO
@@ -70,7 +70,7 @@ class FileHandle(JsonConvertible):
         """
         return file
 
-    def to_file_conversion(self, obj: Any) -> Optional[str | bytes | BytesIO]:
+    def to_file_conversion(self, obj: Any) -> Optional[Union[str, bytes, BytesIO]]:
         """
         Convert the object to a string or bytes representation.
 
