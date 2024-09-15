@@ -877,6 +877,10 @@ def compute_ray_plane_intersections_from_position_matrix(
         plane_position, normal)[..., :3, 3]  # (B, 3)
     plane_normals = plane_normal_target - plane_position[..., :3, 3]
     plane_origin = plane_position[..., :3, 3]
+    if len(plane_normals.shape) == 2 and plane_normals.shape[0] == 1:
+        RB = ray_origins.shape[0]
+        plane_normals = plane_normals.repeat(RB, 1)
+        plane_origin = plane_origin.repeat(RB, 1)
     return unflatten_batch_dims(compute_ray_plane_intersections(
         plane_origins=plane_origin,
         plane_normals=plane_normals,

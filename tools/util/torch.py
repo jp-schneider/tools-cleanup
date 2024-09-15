@@ -18,6 +18,7 @@ from tools.util.format import _custom_traceback
 from tools.logger.logging import tools_logger as logger
 from traceback import FrameSummary, extract_stack
 
+
 def set_jit_enabled(enabled: bool):
     """Enables or disables JIT.
 
@@ -354,67 +355,6 @@ def detach_module(module: torch.nn.Module) -> torch.nn.Module:
     for param in module.parameters():
         param.requires_grad = False
     return module
-
-
-@torch.jit.script
-def flatten_batch_dims(tensor: torch.Tensor, end_dim: int) -> Tuple[torch.Tensor, List[int]]:
-    """
-
-    Utility function: flatten multiple batch dimensions into a single one, or add a batch dimension if there is none.
-
-    Parameters
-    ----------
-    tensor : torch.Tensor
-        Tensor to flatten.
-    end_dim : int
-        Maximum batch dimension to flatten (inclusive).
-
-    Returns
-    -------
-    Tuple[torch.Tensor, Tuple[int]]
-        The flattend tensor and the original batch shape.
-    """
-    ed = end_dim + 1 if end_dim != -1 else None
-    batch_shape = tensor.shape[:ed]
-
-    expected_dim = -1 if end_dim >= 0 else abs(end_dim)
-
-    if len(batch_shape) > 0:
-        flattened = tensor.flatten(end_dim=end_dim)
-    else:
-        flattened = tensor.unsqueeze(0)
-        if expected_dim > 0:
-            missing = expected_dim - len(flattened.shape)
-            for _ in range(missing):
-                flattened = flattened.unsqueeze(0)
-    return flattened, batch_shape
-
-
-@torch.jit.script
-def unflatten_batch_dims(tensor: torch.Tensor, batch_shape: List[int]) -> torch.Tensor:
-    """Method to unflatten a tensor, which was previously flattened using flatten_batch_dims.
-
-    Parameters
-    ----------
-    tensor : torch.Tensor
-        Tensor to unflatten.
-    batch_shape : List[int]
-        Batch shape to unflatten.
-
-    Returns
-    -------
-    torch.Tensor
-        The unflattened tensor.
-    """
-
-    if len(batch_shape) > 0:
-        if not isinstance(batch_shape, list):
-            batch_shape = list(batch_shape)
-        cur_dim = list(tensor.shape[1:])
-        new_dims = batch_shape + cur_dim
-        return tensor.reshape(new_dims)
-    else:
-        return tensor.squeeze(0)
 
 
 def batched_exec(*input,
@@ -838,3 +778,65 @@ def shadow_identity_2d(x: torch.Tensor) -> torch.Tensor:
     B = xf.shape[0]
     eye = torch.eye(x.shape[-1], dtype=dtype, device=device).unsqueeze(0).repeat(B, 1, 1)
     return unflatten_batch_dims(eye, bd)
+
+
+
+@torch.jit.script
+def flatten_batch_dims(tensor: torch.Tensor, end_dim: int) -> Tuple[torch.Tensor, List[int]]:
+    """
+
+    Utility function: flatten multiple batch dimensions into a single one, or add a batch dimension if there is none.
+
+    Parameters
+    ----------
+    tensor : torch.Tensor
+        Tensor to flatten.
+    end_dim : int
+        Maximum batch dimension to flatten (inclusive).
+
+    Returns
+    -------
+    Tuple[torch.Tensor, Tuple[int]]
+        The flattend tensor and the original batch shape.
+    """
+    ed = end_dim + 1 if end_dim != -1 else None
+    batch_shape = tensor.shape[:ed]
+
+    expected_dim = -1 if end_dim >= 0 else abs(end_dim)
+
+    if len(batch_shape) > 0:
+        flattened = tensor.flatten(end_dim=end_dim)
+    else:
+        flattened = tensor.unsqueeze(0)
+        if expected_dim > 0:
+            missing = expected_dim - len(flattened.shape)
+            for _ in range(missing):
+                flattened = flattened.unsqueeze(0)
+    return flattened, batch_shape
+
+
+@torch.jit.script
+def unflatten_batch_dims(tensor: torch.Tensor, batch_shape: List[int]) -> torch.Tensor:
+    """Method to unflatten a tensor, which was previously flattened using flatten_batch_dims.
+
+    Parameters
+    ----------
+    tensor : torch.Tensor
+        Tensor to unflatten.
+    batch_shape : List[int]
+        Batch shape to unflatten.
+
+    Returns
+    -------
+    torch.Tensor
+        The unflattened tensor.
+    """
+
+    if len(batch_shape) > 0:
+        if not isinstance(batch_shape, list):
+            batch_shape = list(batch_shape)
+        cur_dim = list(tensor.shape[1:])
+        new_dims = batch_shape + cur_dim
+        return tensor.reshape(new_dims)
+    else:
+        return tensor.squeeze(0)
