@@ -33,8 +33,8 @@ def convert_string_to_array(value: str) -> np.ndarray:
     ValueError
         If the value does not match the allowed pattern.
     """
-    allowed_pattern = r"^( )*\[[\[\d\+\.\se\-\]\n\r]+\]( )*$"
-    replace_with_comma = r"(?<=[\d\.])( )(?=( )*[\d\-\+])"
+    allowed_pattern = r"^( )*\[[\[\d\+\.\se\-\]\n\rnan]+\]( )*$"
+    replace_with_comma = r"(?<=[\d\.n])( )(?=( )*[\d\-\+n])"
     line_feed_comma = r"(?<=\])(\r)?\n(?=(\s)*\[)"
     sub_line = ","
     sub_line_feed = r",\n"
@@ -44,7 +44,10 @@ def convert_string_to_array(value: str) -> np.ndarray:
 
     value = re.sub(replace_with_comma, sub_line, value)
     value = re.sub(line_feed_comma, sub_line_feed, value)
-    return np.array(eval(value))
+    # Replace nan with np.nan
+    value = value.replace("nan", "np.nan")
+    arr = np.array(eval(value))
+    return arr
 
 
 class DataFrameCSVFileHandle(FileHandle):
