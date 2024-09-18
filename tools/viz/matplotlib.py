@@ -217,7 +217,10 @@ def saveable(
                     plt.close(out)
             if close and not (display and display_auto_close):
                 plt.close(out)
-            return out
+            if is_animation:
+                return out, ani
+            else:
+                return out
         return wrapper
     return decorator
 
