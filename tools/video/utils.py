@@ -2,6 +2,8 @@ import numpy as np
 import cv2
 from tqdm.auto import tqdm
 from tools.util.path_tools import filer
+from tools.util.numpy import numpyify_image
+import sys
 
 @filer(default_ext='mp4')
 def write_mp4(frames: np.ndarray,
@@ -26,6 +28,11 @@ def write_mp4(frames: np.ndarray,
     ValueError
         If wrong number of channels in frames.
     """
+    if "torch" in sys.modules:
+        import torch
+        if isinstance(frames, torch.Tensor):
+            frames = numpyify_image(frames)
+
     if len(frames.shape) not in [3, 4]:
         raise ValueError(f"Unsupported frame shape: {frames.shape}.")
 

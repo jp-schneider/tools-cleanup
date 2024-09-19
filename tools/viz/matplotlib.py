@@ -1022,6 +1022,7 @@ def plot_mask(image: VEC_TYPE,
               filled_contours: bool = False,
               axes_description: bool = False,
               image_cmap: Optional[Any] = None,
+              sort: bool = False,
               **kwargs) -> Figure:  # type: ignore
     import matplotlib.patches as mpatches
     from tools.transforms import ToNumpyImage
@@ -1062,6 +1063,13 @@ def plot_mask(image: VEC_TYPE,
     background_mask = np.logical_not(any_fg_mask).astype(float)
 
     cmap_name = 'Blues'
+    if sort:
+        # Order masks by size, descending
+        mask_sizes = np.sum(channel_mask, axis=(0, 1))
+        order = np.argsort(mask_sizes)[::-1]
+        channel_mask = channel_mask[..., order]
+        if labels is not None:
+            labels = [labels[i] for i in order]
 
     if ax is None:
         fig, ax = get_mpl_figure(
