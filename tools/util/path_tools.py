@@ -222,7 +222,8 @@ def open_in_default_program(path_to_file: Union[str, Path]) -> None:
         Path to open in default program.
     """
     from sys import platform
-    path_to_file: Path = process_path(path_to_file, need_exist=False, variable_name="path_to_file")
+    path_to_file: Path = process_path(
+        path_to_file, need_exist=False, variable_name="path_to_file")
     path_to_file = path_to_file.resolve()
     if path_to_file.exists():
         if platform == "linux" or platform == "linux2":
@@ -472,6 +473,7 @@ def filer(
     # type: ignore
     def decorator(function: Callable[[Any], Union[str, Path]]) -> Callable[[Any], Union[str, Path]]:
         # Get which is the positional paramter corresponding to the path
+        nonlocal default_ext
         import inspect
 
         sig = inspect.signature(function)
@@ -482,9 +484,8 @@ def filer(
                 break
         if path_param_index is None:
             raise ValueError(
-                f"Could not find path parameter {path_param} in function signature.
-                Please specify the correct parameter name as path_param.")
-        
+                f"Could not find path parameter {path_param} in function signature. Please specify the correct parameter name as path_param.")
+
         # Check extension
         if default_ext.startswith("."):
             default_ext = default_ext[1:]
@@ -499,9 +500,10 @@ def filer(
             if path_param in kwargs:
                 return kwargs[path_param]
             return NOTSET
-        
+
         @wraps(function)
         def wrapper(*args, **kwargs):
+            nonlocal default_ext
             open = kwargs.pop("open", False),
             ext = kwargs.pop("ext", default_ext)
 
@@ -512,7 +514,7 @@ def filer(
                 path = os.path.join(default_output_dir, base + "." + ext)
                 # Push the path in kwargs
                 kwargs[path_param] = path
-            
+
             try:
                 out = function(*args, **kwargs)
             finally:
