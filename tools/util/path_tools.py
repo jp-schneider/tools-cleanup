@@ -1,8 +1,11 @@
+from functools import wraps
 import os
 from pathlib import Path
 import re
 import subprocess
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Callable, Dict, List, Optional, Union
+
+from tools.util.typing import _NOTSET, NOTSET
 
 
 def relpath(from_: str, to: str, is_from_file: bool = True, is_to_file: bool = True) -> str:
@@ -210,7 +213,7 @@ def read_directory_recursive(
     return read_directory(path, pattern, parser, path_key)
 
 
-def open_in_default_program(path_to_file: str) -> None:
+def open_in_default_program(path_to_file: Union[str, Path]) -> None:
     """Opens the given file in the systems default program.
 
     Parameters
@@ -219,8 +222,9 @@ def open_in_default_program(path_to_file: str) -> None:
         Path to open in default program.
     """
     from sys import platform
-    path = os.path.abspath(os.path.normpath(path_to_file))
-    if os.path.exists(path):
+    path_to_file: Path = process_path(path_to_file, need_exist=False, variable_name="path_to_file")
+    path_to_file = path_to_file.resolve()
+    if path_to_file.exists():
         if platform == "linux" or platform == "linux2":
             # linux
             raise NotImplementedError()
@@ -439,3 +443,107 @@ def process_path(
     if make_exist and not p.exists():
         p.mkdir(parents=True, exist_ok=True)
     return p
+
+
+def filer(
+    default_ext: str,
+    default_output_dir: Optional[str] = "./temp",
+    path_param: Optional[str] = "path",
+):
+    """Decorator to handle file functions which return paths and optionally open them.
+
+    Can also automatically create a temporary path if no path is given, and forward it to the function.
+
+    Parameters
+    ----------
+    default_ext : str
+        The default extension for the file.
+        E.g. "mp4", "png", "jpg", etc.
+
+    default_output_dir : Optional[str], optional
+        The default output directory for the file, by default "./temp"
+
+    path_param : Optional[str], optional
+        The name of the parameter which is the path, by default "path"
+        Must be supplied.
+    """
+    from uuid import uuid4
+
+    # type: ignore
+    def decorator(function: Callable[[Any], Union[str, Path]]) -> Callable[[Any], Union[str, Path]]:
+        # Get which is the positional paramter corresponding to the path
+        import inspect
+
+        sig = inspect.signature(function)
+        path_param_index = None
+        for i, param in enumerate(sig.parameters):
+            if param == path_param:
+                path_param_index = i
+                break
+        if path_param_index is None:
+            raise ValueError(
+                f"Could not find path parameter {path_param} in function signature.
+                Please specify the correct parameter name as path_param.")
+        
+        # Check extension
+        if default_ext.startswith("."):
+            default_ext = default_ext[1:]
+        # If the default extension contains a dot raise an error
+        if "." in default_ext:
+            raise ValueError(
+                f"Default extension {default_ext} should not contain a dot.")
+
+        def get_path(args, kwargs) -> Union[str, Path, _NOTSET]:
+            if path_param_index < len(args):
+                return args[path_param_index]
+            if path_param in kwargs:
+                return kwargs[path_param]
+            return NOTSET
+        
+        @wraps(function)
+        def wrapper(*args, **kwargs):
+            open = kwargs.pop("open", False),
+            ext = kwargs.pop("ext", default_ext)
+
+            path = get_path(args, kwargs)
+            if path is NOTSET:
+                # Create a temporary path
+                base = str(uuid4())
+                path = os.path.join(default_output_dir, base + "." + ext)
+                # Push the path in kwargs
+                kwargs[path_param] = path
+            
+            try:
+                out = function(*args, **kwargs)
+            finally:
+                pass
+
+            is_path = isinstance(out, (str, Path))
+            path = None
+            if is_path:
+                path = out if isinstance(out, Path) else Path(out)
+
+            if is_path and open:
+                try:
+                    open_in_default_program(path)
+                except Exception as err:
+                    pass
+            return out
+        return wrapper
+    return decorator
+
+
+def is_path_only_basename(path: str) -> bool:
+    """Checks if the given path is only a basename.
+
+    Parameters
+    ----------
+    path : str
+        The path to check.
+
+    Returns
+    -------
+    bool
+        If the path is only a basename.
+    """
+    return any([(x in path) for x in ["/", "\\", os.sep]])

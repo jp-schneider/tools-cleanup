@@ -1,8 +1,9 @@
 import numpy as np
 import cv2
 from tqdm.auto import tqdm
+from tools.util.path_tools import filer
 
-
+@filer(default_ext='mp4')
 def write_mp4(frames: np.ndarray,
               path: str = 'test.mp4',
               fps: float = 24.0,
@@ -61,3 +62,4 @@ def write_mp4(frames: np.ndarray,
 
     cv2.destroyAllWindows()
     video.release()
+    return path
