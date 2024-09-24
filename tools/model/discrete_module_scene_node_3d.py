@@ -43,7 +43,7 @@ class DiscreteModuleSceneNode3D(ModuleSceneNode3D):
                  _orientation: Optional[torch.Tensor] = None,
                  **kwargs
                  ):
-        super().__init__(name=name, children=children, decoding=decoding, **kwargs)
+        super().__init__(name=name, children=children, decoding=decoding, dtype=dtype, **kwargs)
         if position is not None:
             if translation is not None or orientation is not None:
                 raise ValueError(
@@ -51,7 +51,7 @@ class DiscreteModuleSceneNode3D(ModuleSceneNode3D):
             translation, orientation = self._parse_position(position)
         self._init_position(translation=translation,
                             orientation=orientation,
-                            dtype=dtype,
+                            dtype=self.dtype,
                             _translation=_translation,
                             _orientation=_orientation
                             )
