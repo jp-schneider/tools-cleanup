@@ -6,7 +6,6 @@ import numpy as np
 import torch
 import torch.nn as nn
 from matplotlib.axes import Axes
-from tools.mixin.torch_dtype_mixin import TorchDtypeMixin
 from tools.model.module_scene_node import ModuleSceneNode
 from tools.model.visual_node_3d import VisualNode3D
 from tools.serialization.json_convertible import JsonConvertible
@@ -21,7 +20,7 @@ from tools.util.torch import tensorify
 from tools.viz.matplotlib import saveable
 
 
-class ModuleSceneNode3D(ModuleSceneNode, VisualNode3D, TorchDtypeMixin):
+class ModuleSceneNode3D(ModuleSceneNode, VisualNode3D):
     """Pytorch Module class for nodes within a scene."""
 
     def __init__(self,
