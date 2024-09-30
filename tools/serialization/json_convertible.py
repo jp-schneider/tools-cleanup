@@ -53,6 +53,19 @@ class JsonConvertible:
                        '__memo__', '__serializer_args__']
 
     @classmethod
+    def ignore_on_repr(cls) -> Set[str]:
+        """Function to ignore fields on the current type during repr.
+        Can be overriden.
+
+        Returns
+        -------
+        Set[str]
+            The property names to ignore.
+        """
+        ignore = []
+        return set(cls.TEMP_PROPERTIES)
+
+    @classmethod
     def get_decode_property_aliases(cls) -> Optional[Dict[str, str]]:
         """Returns a dictionary of property aliases.
         When converting from json to object, the keys of the dictionary
