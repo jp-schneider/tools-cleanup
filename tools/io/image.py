@@ -1,3 +1,4 @@
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Literal, Tuple, Union
 
 import torch
@@ -183,10 +184,10 @@ def load_image(
 
 
 def save_image(image: VEC_TYPE,
-               path: str,
+               path: Union[str, Path],
                override: bool = False,
                mkdirs: bool = True,
-               metadata: Optional[Dict[Union[str, ExifTagsBase], Any]] = None) -> str:
+               metadata: Optional[Dict[Union[str, ExifTagsBase], Any]] = None) -> Union[str, Path]:
     """Saves numpy array or torch tensor as an image.
 
     Parameters
@@ -194,7 +195,7 @@ def save_image(image: VEC_TYPE,
     data : VEC_TYPE
         Data to be saved as an image. Should be in the shape (H, W, C)
         for numpy arrays or (C, H, W) torch tensors.
-    path : str
+    path : Union[str, Path]
         Path to save the image to.
     override : bool, optional
         If an existing image should be overriden, by default False
@@ -205,10 +206,14 @@ def save_image(image: VEC_TYPE,
         Will be saved as exif data.
     Returns
     -------
-    str
+    Union[str, Path]
         The path where the image was saved.
     """
     from PIL import Image
+    is_path = False
+    if isinstance(path, Path):
+        is_path = True
+        path = str(path)
     img = numpyify_image(image)
     if not override:
         path = numerated_file_name(path)
@@ -242,6 +247,8 @@ def save_image(image: VEC_TYPE,
         np.save(base, img)
     else:
         Image.fromarray(img).save(path, **args)
+    if is_path:
+        return Path(path)
     return path
 
 
@@ -480,7 +487,7 @@ def load_image_stack(
 
 
 def save_image_stack(images: VEC_TYPE,
-                     format_string_path: str,
+                     format_string_path: Union[str, Path],
                      override: bool = False, mkdirs: bool = True,
                      metadata: Optional[Dict[Union[str,
                                                    ExifTagsBase], Any]] = None,
@@ -498,7 +505,7 @@ def save_image_stack(images: VEC_TYPE,
         Image stack to save.
         Should be in the shape B x H x W x C for numpy or B x C x H x W if tensor.
 
-    format_string_path : str
+    format_string_path : Union[str, Path]
         Path format string to save the images.
         Example: "path/to/save/image_{index}.png"
         Index will be replaced with the index of the image in the stack.
@@ -542,6 +549,9 @@ def save_image_stack(images: VEC_TYPE,
         d = dict(d)
         d.pop("index", None)
         return d
+
+    if isinstance(format_string_path, Path):
+        format_string_path = str(format_string_path)
 
     filenames = parse_format_string(format_string_path, [
         dict(index=i, **from_optional_list_index(additional_filename_variables_list, i)) for i in range(images.shape[0])

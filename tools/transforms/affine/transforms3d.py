@@ -810,6 +810,23 @@ def position_quaternion_to_affine_matrix(position: torch.Tensor, quaternion: tor
     rotation_matrix = unitquat_to_rotmat(quaternion)
     return _compose_transformation_matrix(position, rotation_matrix[..., :3, :3])
 
+def _calculate_rotation_matrix(a: torch.Tensor, b: torch.Tensor):
+     # Check for opposite directions and flip if necessary
+    dot_products = torch.sum(a * b, dim=-1)
+    opposite_directions = dot_products < 0
+    a[opposite_directions] = -a[opposite_directions]  # Flip vectors in a
+
+    # Calculate the cross-product matrix for each vector pair
+    A = torch.cross(a, b, dim=-1)
+
+    # Calculate the dot product for each vector pair
+    dot_product = torch.sum(a * b, dim=-1)
+
+    # Calculate the rotation matrix using the Rodrigues formula for each vector pair
+    R = torch.eye(3)[None, :, :] + torch.cross(A[:, :, None], torch.eye(3)[None, :, :], dim=-2) + \
+        torch.einsum('ij,ik->ijk', A, A) * (1 - dot_product[:, None, None]) / (
+            torch.linalg.norm(A, dim=-1)[:, None, None] ** 2)
+    return R
 
 def calculate_rotation_matrix(a: torch.Tensor, b: torch.Tensor):
     """
@@ -841,21 +858,9 @@ def calculate_rotation_matrix(a: torch.Tensor, b: torch.Tensor):
     a, batch_shape = flatten_batch_dims(a, end_dim=-2)
     b, _ = flatten_batch_dims(b, end_dim=-2)
 
-    # Check for opposite directions and flip if necessary
-    dot_products = torch.sum(a * b, dim=-1)
-    opposite_directions = dot_products < 0
-    a[opposite_directions] = -a[opposite_directions]  # Flip vectors in a
-
-    # Calculate the cross-product matrix for each vector pair
-    A = torch.cross(a, b, dim=-1)
-
-    # Calculate the dot product for each vector pair
-    dot_product = torch.sum(a * b, dim=-1)
-
-    # Calculate the rotation matrix using the Rodrigues formula for each vector pair
-    R = torch.eye(3)[None, :, :] + torch.cross(A[:, :, None], torch.eye(3)[None, :, :], dim=-2) + \
-        torch.einsum('ij,ik->ijk', A, A) * (1 - dot_product[:, None, None]) / (
-            torch.linalg.norm(A, dim=-1)[:, None, None] ** 2)
+    nonequal = torch.all(a != b, dim=-1)
+    R = torch.eye(3, device=a.device, dtype=a.dtype).repeat(a.shape[0], 1, 1)
+    R[nonequal] = _calculate_rotation_matrix(a[nonequal], b[nonequal])
 
     return unflatten_batch_dims(R, batch_shape)
 
