@@ -703,7 +703,7 @@ class JsonConvertible:
         Parameters
         ----------
         obj : Dict[str, Any]
-            Nested dictionary of the objects. Eventuially with __class__ attribute.
+            Nested dictionary of the objects. Eventually with __class__ attribute.
 
         on_error : Literal[&#39;raise&#39;, &#39;ignore&#39;, &#39;warning&#39;], optional
             How to behave if an error is raised on deserialization.

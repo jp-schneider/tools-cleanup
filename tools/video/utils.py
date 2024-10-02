@@ -44,8 +44,9 @@ def write_mp4(frames: np.ndarray,
     else:
         raise ValueError(f"Unsupported frame shape: {frames.shape}.")
 
-    frames = frames - frames.min()
-    frames = (frames / frames.max() * 255).astype(np.uint8)
+    if frames.dtype != np.uint8:
+        frames = frames - frames.min()
+        frames = (frames / frames.max() * 255).astype(np.uint8)
 
     fourcc = cv2.VideoWriter_fourcc(*'avc1')
     video = cv2.VideoWriter(path, fourcc, fps, (width, height))

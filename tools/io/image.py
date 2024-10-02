@@ -347,7 +347,7 @@ def compute_max_resolution(image_shape: Tuple[int, int], max_size: int) -> Tuple
 
 
 def resize_image(
-        image: np.ndarray,
+        image: VEC_TYPE,
         max_size: Optional[int] = None,
         size: Optional[Tuple[int, int]] = None
 ) -> np.ndarray:
@@ -372,6 +372,7 @@ def resize_image(
     from torchvision.transforms import Compose, Resize, ToTensor
     from tools.transforms.to_numpy_image import ToNumpyImage
     dtype = image.dtype
+    is_tensor = torch.is_tensor(image)
     if len(image.shape) == 4:
         B, H, W, C = image.shape
     elif len(image.shape) == 3:
@@ -386,11 +387,20 @@ def resize_image(
             "Either max_size or size should be provided, not both.")
     if max_size is not None:
         new_size = compute_new_size((H, W), max_size)
-        transforms = Compose([ToTensor()] + ([Resize(new_size)]
-                             if (H > max_size or W > max_size) else []) + [ToNumpyImage(output_dtype=dtype)])
+        transforms = Compose(
+                            ([ToTensor()] if not is_tensor else [])
+                             + ([Resize(new_size)]
+                             if (H > max_size or W > max_size) else []) + 
+                             ([ToNumpyImage(output_dtype=dtype)] if not is_tensor else [])
+                             )
     else:
         transforms = Compose(
-            [ToTensor(), Resize(size), ToNumpyImage(output_dtype=dtype)])
+            ([ToTensor()] if not is_tensor else [])
+             +[Resize(size)]
+             +([ToNumpyImage(output_dtype=dtype)] if not is_tensor else [])
+             )
+    if len(transforms.transforms) == 0:
+        return image
     return transforms(image)
 
 

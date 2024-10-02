@@ -3,7 +3,7 @@ import os
 from pathlib import Path
 import re
 import subprocess
-from typing import Any, Callable, Dict, List, Optional, Union
+from typing import Any, Callable, Dict, List, Optional, Set, Union
 
 from tools.util.typing import _NOTSET, NOTSET
 
@@ -150,7 +150,8 @@ def read_directory(
 def read_directory_recursive(
     path: str,
     parser: Optional[Dict[str, callable]] = None,
-    path_key: str = "path"
+    path_key: str = "path",
+    memo: Optional[Set[str]] = None
 ) -> List[Dict[str, Any]]:
     """Reads a directory for files matching a regex pattern and returns a
     list of dictionaries with the readed groups and full filepath.
@@ -174,10 +175,18 @@ def read_directory_recursive(
         List of dictionaries with the readed groups and full filepath.
 
     """
+    if memo is None:
+        memo = set()
+    abspath = os.path.abspath(os.path.normpath(path))
+    if abspath in memo:
+        return []
+    memo.add(abspath)
+
     directory = path.split("/")
     # Check to what extend the path is a regex
     p = []
     special_chars = set(list(regex_special_chars()))
+    special_chars.remove('.')
     pattern_start = -1
     for i, d in enumerate(directory):
         if d == "." or d == "..":
@@ -204,7 +213,7 @@ def read_directory_recursive(
             sub_path = result.pop(path_key)
             patterns = "/".join(next_patterns)
             new_path = sub_path + "/" + patterns
-            rec_results = read_directory_recursive(new_path, parser, path_key)
+            rec_results = read_directory_recursive(new_path, parser, path_key, memo=memo)
             for rec_result in rec_results:
                 rec_result.update(result)
                 super_results.append(rec_result)
@@ -504,7 +513,7 @@ def filer(
         @wraps(function)
         def wrapper(*args, **kwargs):
             nonlocal default_ext
-            open = kwargs.pop("open", False),
+            open = kwargs.pop("open", False)
             ext = kwargs.pop("ext", default_ext)
 
             path = get_path(args, kwargs)

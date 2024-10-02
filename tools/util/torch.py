@@ -420,6 +420,40 @@ def batched_exec(*input,
             bar.update(1)
     return torch.cat(results, dim=0)
 
+def index_of_first(values: torch.Tensor, search: torch.Tensor) -> torch.Tensor:
+    """Searches for the index of the first occurence of the search tensor in the values tensor.
+
+    Tested for 1D tensors. Returns -1 if the search tensor is not found in the values tensor.
+
+    Example:
+    values = torch.tensor([1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
+    search = torch.tensor([5, 6, 7, 12])
+
+    index_of_first(values, search) -> torch.tensor([4, 5, 6, -1])
+
+    Parameters
+    ----------
+    values : torch.Tensor
+        Values tensor to search in.
+    search : torch.Tensor
+        Search tensor to search for.
+
+    Returns
+    -------
+    torch.Tensor
+        Index tensor of the first occurence of the search tensor in the values tensor.
+    """
+    E = values.shape
+    S = search.shape
+    res = values[..., None].repeat(*tuple(1 for _ in range(len(E))), *S) == search[None, ...].repeat(*E, *tuple((1 for _ in range(len(S)))))
+    out = torch.zeros(tuple(S), dtype=torch.int)
+    out.fill_(-1)
+    aw = torch.argwhere(res)
+    search_found, where_inverse = torch.unique(aw[:, -1], return_inverse=True)
+    for i, s in enumerate(search_found):
+        widx = aw[where_inverse == i][0] # Select first match
+        out[s] = widx[0]
+    return out
 
 class TensorUtil():
     """Static class for using complex tensor calculations and tensor related utilities"""

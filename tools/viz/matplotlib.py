@@ -139,7 +139,7 @@ def saveable(
     # type: ignore
     def decorator(function: Callable[[Any], Union[Figure, FuncAnimation]]) -> Callable[[Any], Union[Figure, FuncAnimation]]:
         @wraps(function)
-        def wrapper(*args, **kwargs):
+        def wrapper( *args, **kwargs):
             nonlocal default_output_dir, is_animation
             path = kwargs.pop("path", str(uuid4()))
             save = kwargs.pop("save", False)
