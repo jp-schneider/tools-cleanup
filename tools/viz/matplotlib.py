@@ -685,8 +685,11 @@ def plot_as_image(data: VEC_TYPE,
 
             color_mapping = None
 
-            vmin = _image.min()
-            vmax = _image.max()
+            def op_wo_bad(x, fnc):
+                return fnc(x[(~np.isnan(x)) & (~np.isinf(x))])
+
+            vmin = op_wo_bad(_image, np.min)
+            vmax = op_wo_bad(_image, np.max)
             _cmap = cmaps[row][col]
             if isinstance(_cmap, str):
                 _cmap = plt.get_cmap(_cmap)
@@ -715,11 +718,11 @@ def plot_as_image(data: VEC_TYPE,
             if "vmin" in imshow_kw:
                 vmin = imshow_kw.pop("vmin")
             else:
-                vmin = _image.min()
+                vmin = op_wo_bad(_image, np.min)
             if "vmax" in imshow_kw:
                 vmax = imshow_kw.pop("vmax")
             else:
-                vmax = _image.max()
+                vmax = op_wo_bad(_image, np.max)
             if "cmap" in imshow_kw:
                 _cmap = imshow_kw.pop("cmap")
             if "interpolation" in imshow_kw:
@@ -734,6 +737,11 @@ def plot_as_image(data: VEC_TYPE,
                 vmin = _norm.new_min
                 vmax = _norm.new_max
 
+            # Check if contains bad values
+            if np.any(np.isnan(_image)) or np.any(np.isinf(_image)):
+                if interpolation is None:
+                    interpolation = 'nearest'
+                _cmap.set_bad(color='white')
             ax.imshow(_image, vmin=vmin, vmax=vmax, cmap=_cmap,
                       interpolation=interpolation, **imshow_kw)
 
@@ -825,6 +833,59 @@ def plot_vectors(x: VEC_TYPE, label: Optional[Union[str, List[str]]] = None, mod
     ax.legend()
     return fig
 
+@saveable()
+def plot_histogram(
+    x: VEC_TYPE, 
+    label: Optional[Union[str, List[str]]] = None, 
+    bins: Any = None,
+    filter_nan: bool = False
+    ) -> Figure:
+    """Gets a matplotlib histogram figure with a plot of vectors.
+
+    Parameters
+    ----------
+    x : VEC_TYPE
+        Data to be plotted. Shape should be ([..., N], D)
+        Batch dimensions will be flattened.
+        Plots histogram for each dimension D.
+
+    label : Optional[Union[str, List[str]]], optional
+        Label or each dimension. If None just numerates the dimensions, by default None
+
+    Returns
+    -------
+    Figure
+        Matplotlib figure with the plot.
+
+    Raises
+    ------
+    ValueError
+        If label does not match the number of dimensions.
+    """
+    from tools.util.numpy import flatten_batch_dims
+
+    x = numpyify(x)
+    x, shape = flatten_batch_dims(x, -2)
+
+    if label is None:
+        label = [str(i) for i in range(x.shape[-1])]
+    else:
+        if not isinstance(label, Iterable):
+            label = [label]
+        if len(label) != x.shape[-1]:
+            raise ValueError(
+                "Number of labels should match the last dimension of the input data.")
+
+    fig, ax = get_mpl_figure(1, 1)
+
+    for i in range(x.shape[-1]):
+        l = label[i] if label is not None else None
+        vals = x[:, i]
+        if filter_nan:
+            vals = vals[~np.isnan(vals)]
+        ax.hist(vals, label=l, bins=bins)
+    ax.legend()
+    return fig
 
 def figure_to_numpy(fig: Figure, dpi: int = 300, transparent: bool = True) -> np.ndarray:
     """Converts a matplotlib figure to a numpy array.
