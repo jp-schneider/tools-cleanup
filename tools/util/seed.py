@@ -3,7 +3,8 @@ import sys
 from typing import Any
 import numpy as np
 
-def seed_all(seed: int) -> None:
+
+def seed_all(seed: int, deterministic: bool = False, warn_only: bool = False) -> None:
     """Seed all random number generators.
 
     Parameters
@@ -19,4 +20,4 @@ def seed_all(seed: int) -> None:
         torch.manual_seed(seed)
         torch.cuda.manual_seed_all(seed)
         torch.cuda.manual_seed(seed)
-        torch.backends.cudnn.deterministic = True
+        torch.use_deterministic_algorithms(deterministic, warn_only=warn_only)

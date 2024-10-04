@@ -33,6 +33,21 @@ import numpy as np
 import math
 import sys
 import matplotlib.text as mtext
+from tools.util.typing import DEFAULT, _DEFAULT
+
+
+def set_default_output_dir(output_dir: Optional[str] = None):
+    """Sets the default output directory for saving figures.
+
+    Parameters
+    ----------
+    output_dir : str
+        The default output directory.
+    """
+    if output_dir is not None:
+        os.environ["PLOT_OUTPUT_DIR"] = output_dir
+    else:
+        os.environ.pop("PLOT_OUTPUT_DIR", None)
 
 
 class WrapText(mtext.Text):
@@ -54,7 +69,8 @@ class WrapText(mtext.Text):
 
 def saveable(
     default_ext: Union[str, List[str]] = "png",
-    default_output_dir: Optional[str] = "./temp",
+    default_output_dir: Optional[Union[str, _DEFAULT]] = DEFAULT,
+    default_name: Optional[Union[str, _DEFAULT]] = DEFAULT,
     default_transparent: bool = False,
     default_dpi: int = 300,
     default_override: bool = False,
@@ -121,6 +137,8 @@ def saveable(
         Output directory of figures when path did not contain directory information,
         If the Environment Variable "PLOT_OUTPUT_DIR" is set, it will be used as destination.
         by default "./temp"
+    default_name : Optional[str], optional
+        Default name of the figure if no path is specified, by default a uuid4 string
     default_transparent : bool, optional
         If the function should output the figures with transparent background, by default False
     default_dpi : int, optional
@@ -139,9 +157,10 @@ def saveable(
     # type: ignore
     def decorator(function: Callable[[Any], Union[Figure, FuncAnimation]]) -> Callable[[Any], Union[Figure, FuncAnimation]]:
         @wraps(function)
-        def wrapper( *args, **kwargs):
+        def wrapper(*args, **kwargs):
             nonlocal default_output_dir, is_animation
-            path = kwargs.pop("path", str(uuid4()))
+            path = kwargs.pop(
+                "path", default_name if default_name != DEFAULT else str(uuid4()))
             save = kwargs.pop("save", False)
             ext = kwargs.pop("ext", default_ext)
             transparent = kwargs.pop("transparent", default_transparent)
@@ -180,7 +199,7 @@ def saveable(
                     path = os.path.abspath(path)
                 else:
                     default_output_dir = os.environ.get(
-                        "PLOT_OUTPUT_DIR", default_output_dir)
+                        "PLOT_OUTPUT_DIR", default_output_dir if default_output_dir != DEFAULT else "./temp")
                     path = os.path.join(
                         os.path.abspath(default_output_dir), path)
                 # Check if path has extension
@@ -833,13 +852,14 @@ def plot_vectors(x: VEC_TYPE, label: Optional[Union[str, List[str]]] = None, mod
     ax.legend()
     return fig
 
+
 @saveable()
 def plot_histogram(
-    x: VEC_TYPE, 
-    label: Optional[Union[str, List[str]]] = None, 
+    x: VEC_TYPE,
+    label: Optional[Union[str, List[str]]] = None,
     bins: Any = None,
     filter_nan: bool = False
-    ) -> Figure:
+) -> Figure:
     """Gets a matplotlib histogram figure with a plot of vectors.
 
     Parameters
@@ -886,6 +906,7 @@ def plot_histogram(
         ax.hist(vals, label=l, bins=bins)
     ax.legend()
     return fig
+
 
 def figure_to_numpy(fig: Figure, dpi: int = 300, transparent: bool = True) -> np.ndarray:
     """Converts a matplotlib figure to a numpy array.
