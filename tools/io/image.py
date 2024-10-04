@@ -8,7 +8,7 @@ from tools.util.torch import tensorify_image
 from tools.util.typing import VEC_TYPE
 import numpy as np
 from tools.transforms.to_numpy import numpyify
-from tools.transforms.to_numpy_image import numpyify_image
+from tools.transforms.to_numpy_image import ToNumpyImage, numpyify_image
 from tools.serialization.json_convertible import JsonConvertible
 from tools.logger.logging import logger
 from PIL.Image import Exif, Image
@@ -19,7 +19,7 @@ from tools.util.path_tools import numerated_file_name, read_directory
 import os
 from torch.nn.functional import grid_sample
 from tools.util.progress_factory import ProgressFactory
-
+import cv2 as cv
 
 def create_image_exif(metadata: Dict[Union[str, ExifTagsBase], Any]) -> Exif:
     """Creates an Exif object from the given metadata.
@@ -577,3 +577,142 @@ def save_image_stack(images: VEC_TYPE,
                         mkdirs=False, metadata=metadata)
         saved_files.append(sf)
     return saved_files
+
+
+
+def get_origin(
+        text: str,
+        vertical_alignment: str = "center",
+        horizontal_alignment: str = "center",
+        family: int = cv.FONT_HERSHEY_SIMPLEX,
+        size: float = 1,
+        thickness: int = 1,
+
+) -> Tuple[float, float]:
+    # Opencv Assumes text origin to be bottom left
+    text_width, text_height = cv.getTextSize(text, family, size, thickness)[0]
+
+    x = 0
+    y = 0
+
+    if vertical_alignment == "center":
+        # Add half of the text height to center the text
+        y += text_height // 2
+    elif vertical_alignment == "top":
+        y += text_height
+    elif vertical_alignment == "bottom":
+        y = 0
+    else:
+        raise ValueError(f"Unknown vertical alignment: {vertical_alignment}")
+
+    if horizontal_alignment == "center":
+        # Add half of the text width to center the text
+        x -= text_width // 2
+    elif horizontal_alignment == "left":
+        x = 0
+    elif horizontal_alignment == "right":
+        x -= text_width
+    else:
+        raise ValueError(f"Unknown horizontal alignment: {horizontal_alignment}")
+    return x, y
+
+
+def rgba_to_rgb(img: VEC_TYPE, base_color: VEC_TYPE) -> np.ndarray:
+    reorderd = False
+    if isinstance(img, torch.Tensor):
+        img = img.permute(1, 2, 0)
+    dtype = img.dtype
+    base_color = numpyify(base_color)
+    color_converted = False
+    if dtype == np.uint8:
+        img = img.astype(float) / 255
+        base_color = base_color.astype(float) / 255
+        color_converted = True
+    if img.shape[-1] == 4:
+        img = img[..., :3] * img[..., -1][..., None] + (1 - img[..., -1][..., None]) * (base_color)
+    if reorderd:
+        img = img.permute(2, 0, 1)
+    if color_converted:
+        img = (img * 255).astype(np.uint8)
+    return img
+
+def put_text(
+        img: VEC_TYPE,
+        text: str,
+        placement: Optional[str] = "top-center",
+        position: Optional[Tuple[int, int]] = None,
+        vertical_alignment: str = "top",
+        horizontal_alignment: str = "center",
+        family: int = cv.FONT_HERSHEY_DUPLEX,
+        size: float = 1,
+        thickness: int = 1,
+        color: Any = "black",
+        placement_margin: int = 5,
+        background_color: Any = "white",
+        background_stroke: Optional[int] = None,
+        background_stroke_color: Any = "black",
+        background_margin: int = 5,
+) -> np.ndarray:
+    from tools.viz.matplotlib import parse_color_rgb
+    from matplotlib.pyplot import figure
+    if background_stroke_color is not None:
+        background_stroke_color = (parse_color_rgb(background_stroke_color) * 255).astype(np.uint8).tolist()
+    if background_color is not None:
+        background_color = (parse_color_rgb(background_color) * 255).astype(np.uint8).tolist()
+    color = (parse_color_rgb(color) * 255).astype(np.uint8).tolist()
+    numpyify_image = ToNumpyImage(output_dtype=np.uint8)
+    img = numpyify_image(img)
+
+    if len(img.shape) == 2:
+        img = img[..., None]
+
+    if img.shape[-1] == 1:
+        img = np.repeat(img, 3, axis=0)
+
+    if img.shape[-1] == 4:
+        img = rgba_to_rgb(img, (255, 255, 255))
+
+    if placement is not None:
+        position = position or (img.shape[1] // 2, img.shape[0] // 2)
+        vertical_alignment, horizontal_alignment = placement.split("-")
+        if vertical_alignment == "top":
+            position = (position[0], 0 + placement_margin)
+        elif vertical_alignment == "bottom":
+            position = (position[0], img.shape[0] - placement_margin)
+        elif vertical_alignment == "center":
+            position = (position[0], img.shape[0] // 2)
+        if horizontal_alignment == "left":
+            position = (0 + placement_margin, position[1])
+        elif horizontal_alignment == "right":
+            position = (img.shape[1] - placement_margin, position[1])
+        elif horizontal_alignment == "center":
+            position = (img.shape[1] // 2, position[1])
+
+    offset = get_origin(text, vertical_alignment, horizontal_alignment, family, size, thickness)
+
+    position = (position[0] + offset[0], position[1] + offset[1])
+
+    if background_color is not None:
+        text_width, text_height = cv.getTextSize(text, family, size, thickness)[0]
+        p = np.array(position)
+        bl = p + np.array([-background_margin, background_margin])
+        tr = p + np.array([text_width, -text_height]) + np.array([background_margin, -background_margin])
+        img = cv.rectangle(img, bl, tr, background_color, -1)
+    if background_stroke is not None and background_stroke > 0 and background_stroke_color is not None:
+        text_width, text_height = cv.getTextSize(text, family, size, thickness)[0]
+        p = np.array(position)
+        bl = p + np.array([-background_margin, background_margin])
+        tr = p + np.array([text_width, -text_height]) + np.array([background_margin, -background_margin])
+        img = cv.rectangle(img, bl, tr, background_stroke_color, background_stroke)
+
+    img = cv.putText(
+        img,
+        text,
+        position,
+        family,
+        size,
+        color,
+        thickness,
+        cv.LINE_AA,
+    )
+    return img

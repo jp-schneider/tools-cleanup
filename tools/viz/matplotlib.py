@@ -277,37 +277,48 @@ def render_text(text: str,
     return fig
 
 
-def get_mpl_figure(
-        rows: int = 1,
-        cols: int = 1,
-        size: float = 5,
-        ratio_or_img: Optional[Union[float, np.ndarray]] = None,
-        tight: bool = False,
-        subplot_kw: Optional[Dict[str, Any]] = None,
-        ax_mode: Literal["1d", "2d"] = "1d",
-) -> Tuple[Figure, Union[Axes, List[Axes]]]:  # type: ignore
-    """Create a eventually tight matplotlib figure with axes.
+def parse_color_rgb(color: Any) -> np.ndarray:
+    """Parses a color to RGB values.
 
     Parameters
     ----------
-    rows : int, optional
-        Number of rows for the figure, by default 1
-    cols : int, optional
-        Nombuer of columns, by default 1
-    size : float, optional
-        Size of the axes in inches, by default 5
-    ratio_or_img : float | np.ndarray, optional
-        Ratio of Y w.r.t X  (Height / Width) can also be an Image / np.ndarray which will compute it from the axis, by default 1.0
-    tight : bool, optional
-        If the figure should be tight => No axis spacing and borders, by default False
-    subplot_kw : Optional[Dict[str, Any]], optional
-        Optional kwargs for the subplots, by default None
-        Only used if tight is False
+    color : Any
+        Color to parse.
+        Can be a string, a tuple, a list or a np.ndarray.
+        Strings should be valid color names or hex values.
 
     Returns
     -------
-    Tuple[Figure, Axes | List[Axes]]
-        Figure and axes.
+    np.ndarray
+        RGB values of the color in [0, 1] range.
+    """
+    from matplotlib.colors import to_rgb
+    if not isinstance(color, str) and isinstance(color, Iterable):
+        color = np.array(color)
+        if len(color) == 3:
+            if color.max() > 1:
+                color = color / 255
+            return color
+        else:
+            trgb = to_rgb(color)
+            return np.array(trgb)
+    else:
+        trgb = to_rgb(color)
+        return np.array(trgb)
+
+def compute_ratio(ratio_or_img: Optional[Union[float, np.ndarray]] = None) -> float:
+    """Computes the ratio of an image or a given ratio.
+
+    Parameters
+    ----------
+    ratio_or_img : Optional[Union[float, np.ndarray]], optional
+        Ratio of Y w.r.t X  (Height / Width) can also be an Image / np.ndarray which will compute it from the axis, 
+        by default None
+
+    Returns
+    -------
+    float
+        The computed ratio.
     """
     if ratio_or_img is None:
         ratio_or_img = 1.0
@@ -328,9 +339,43 @@ def get_mpl_figure(
             ratio_or_img = ratio_or_img.shape[-2] / ratio_or_img.shape[-1]
         elif len(ratio_or_img.shape) == 3:
             ratio_or_img = ratio_or_img.shape[-3] / ratio_or_img.shape[-2]
+    return ratio_or_img
 
+
+def get_mpl_figure(
+        rows: int = 1,
+        cols: int = 1,
+        size: float = 5,
+        ratio_or_img: Optional[Union[float, np.ndarray]] = None,
+        tight: bool = False,
+        subplot_kw: Optional[Dict[str, Any]] = None,
+        ax_mode: Literal["1d", "2d"] = "1d",
+) -> Tuple[Figure, Union[Axes, List[Axes]]]:  # type: ignore
+    """Create a eventually tight matplotlib figure with axes.
+
+    Parameters
+    ----------
+    rows : int, optional
+        Number of rows for the figure, by default 1
+    cols : int, optional
+        Number of columns, by default 1
+    size : float, optional
+        Size of the axes in inches, by default 5
+    ratio_or_img : float | np.ndarray, optional
+        Ratio of Y w.r.t X  (Height / Width) can also be an Image / np.ndarray which will compute it from the axis, by default 1.0
+    tight : bool, optional
+        If the figure should be tight => No axis spacing and borders, by default False
+    subplot_kw : Optional[Dict[str, Any]], optional
+        Optional kwargs for the subplots, by default None
+        Only used if tight is False
+
+    Returns
+    -------
+    Tuple[Figure, Axes | List[Axes]]
+        Figure and axes.
+    """
     ratio_x = 1
-    ratio_y = ratio_or_img
+    ratio_y = compute_ratio(ratio_or_img)
     dpi = 300
     axes = []
     if tight:

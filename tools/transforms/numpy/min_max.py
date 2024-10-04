@@ -41,7 +41,7 @@ class MinMax(InvertableTransform, FittableTransform):
             return x
         else:
             for d in axis:
-                x = op(x, axis=d, keepdim=True)
+                x = op(x, axis=d, keepdims=True)
                 if not isinstance(x, np.ndarray) and not isinstance(x, np.generic):
                     x = x.values
             return x
