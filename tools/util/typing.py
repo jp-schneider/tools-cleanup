@@ -41,6 +41,12 @@ class _DEFAULT():
         if isinstance(other, _DEFAULT):
             return True
         return False
+    
+    def __repr__(self) -> str:
+        return "DEFAULT"
+    
+    def __str__(self) -> str:
+        return "DEFAULT"
 
 
 DEFAULT = _DEFAULT()
@@ -53,6 +59,12 @@ class _NOCHANGE:
         if isinstance(other, _NOCHANGE):
             return True
         return False
+    
+    def __repr__(self) -> str:
+        return "NOCHANGE"
+    
+    def __str__(self) -> str:
+        return "NOCHANGE"
 
 
 class _CYCLE:
@@ -60,6 +72,12 @@ class _CYCLE:
         if isinstance(other, _CYCLE):
             return True
         return False
+    
+    def __repr__(self) -> str:
+        return "CYCLE"
+    
+    def __str__(self) -> str:
+        return "CYCLE"
 
 
 class _MISSING:
@@ -67,6 +85,12 @@ class _MISSING:
         if isinstance(other, _MISSING):
             return True
         return False
+    
+    def __repr__(self) -> str:
+        return "MISSING"
+    
+    def __str__(self) -> str:
+        return "MISSING"
 
 
 NOCHANGE = _NOCHANGE()
@@ -79,6 +103,13 @@ class _NOTSET():
         if isinstance(other, _NOTSET):
             return True
         return False
+    
+    def __repr__(self) -> str:
+        return "NOTSET"
+    
+    def __str__(self) -> str:
+        return "NOTSET"
+    
 
 
 class _PATHNONE():
@@ -86,6 +117,12 @@ class _PATHNONE():
         if isinstance(other, _PATHNONE):
             return True
         return False
+    
+    def __repr__(self) -> str:
+        return "PATHNONE"
+    
+    def __str__(self) -> str:
+        return "PATHNONE"
 
 
 NOTSET = _NOTSET()

@@ -79,6 +79,7 @@ def saveable(
     default_override: bool = False,
     default_tight_layout: bool = False,
     is_animation: bool = False,
+    is_figure_collection: bool = False,
     default_fps: int = 24,
 ):
     """Declares a matplotlib figure producing function as saveable so the functions
@@ -193,7 +194,11 @@ def saveable(
                 mpl.interactive(is_interactive)
 
             if tight_layout:
-                out.tight_layout()
+                if is_figure_collection:
+                    for f in out:
+                        f.tight_layout()
+                else:
+                    out.tight_layout()
 
             paths = []
             if save or open:
@@ -220,13 +225,27 @@ def saveable(
                 for d in dirs:
                     os.makedirs(d, exist_ok=True)
 
-                for p in paths:
+                def save_fig_or_ani(path, fig, ani = None):
                     if not override:
-                        p = numerated_file_name(p)
-                    if not is_animation:
-                        out.savefig(p, transparent=transparent, dpi=dpi)
+                        path = numerated_file_name(path)
+                    if is_animation:
+                        ani.save(path, fps=fps, dpi=dpi)
                     else:
-                        ani.save(p, fps=fps, dpi=dpi)
+                        fig.savefig(path, transparent=transparent, dpi=dpi)
+                    return path
+                save_paths = []
+                for p in paths:
+                    if is_figure_collection:
+                        # Parse format string#
+                        sub_p = parse_format_string(p, [x for x in out])
+                        for i, s in enumerate(sub_p):
+                            ai = None
+                            if is_animation:
+                                ai = ani[i]
+                            save_paths.append(save_fig_or_ani(s, out[i], ai))
+                    else:
+                        save_paths.append(save_fig_or_ani(p, out, ani))
+                paths = save_paths
             if open:
                 try:
                     open_in_default_program(paths[0])
