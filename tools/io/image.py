@@ -617,7 +617,24 @@ def get_origin(
     return x, y
 
 
-def rgba_to_rgb(img: VEC_TYPE, base_color: VEC_TYPE) -> np.ndarray:
+def rgba_to_rgb(img: VEC_TYPE, base_color: VEC_TYPE) -> VEC_TYPE:
+    """
+    Converts an RGBA image to RGB using the given base color.
+    by blending the image with the base color using the alpha channel (alpha-matting).
+
+    Parameters
+    ----------
+    img : VEC_TYPE
+        Image to convert. Should be in the shape H x W x C if numpy or C x H x W if tensor.
+    base_color : VEC_TYPE
+        Base color to use for the alpha channel. Should be in the shape C.
+
+    Returns
+    -------
+    VEC_TYPE
+        The converted image. Will be in the shape H x W x C if numpy or C x H x W if tensor
+    """
+
     reorderd = False
     if isinstance(img, torch.Tensor):
         img = img.permute(1, 2, 0)
@@ -647,12 +664,81 @@ def put_text(
         size: float = 1,
         thickness: int = 1,
         color: Any = "black",
-        placement_margin: int = 5,
+        margin: int = 5,
         background_color: Any = "white",
         background_stroke: Optional[int] = None,
         background_stroke_color: Any = "black",
-        background_margin: int = 5,
+        padding: int = 5,
 ) -> np.ndarray:
+    """Renders text on an image with a given placement or absolute position and alignment.
+
+    Parameters
+    ----------
+    img : VEC_TYPE
+        Image to render the text on.
+        Can be a numpy array or a torch tensor. Should be in the shape H x W x C if numpy or C x H x W if tensor.
+
+    text : str
+        The text to render.
+        Can be arbitrary text, but will be rendered as a single line.
+
+    placement : Optional[str], optional
+        Automatic placement for the text. In format [vertical]-[horizontal], by default "top-center"
+        Can be top, center, bottom for vertical and left, center, right for horizontal.
+        Takes precedence over position an alignment if specified.
+        
+    position : Optional[Tuple[int, int]], optional
+        The Text position in image coordinates (x, y) ([0, width), [0, height)), by default None
+        If placement is specified, this will be ignored.
+    
+    vertical_alignment : str, optional
+        Vertical alignment of the Text w.r.t to position, by default "top"
+        Can be top, center or bottom.
+        If placement is specified, this will be ignored.
+    
+    horizontal_alignment : str, optional
+        Horizontal alignment of the Text w.r.t to position, by default "center"
+        Can be left, center or right.
+        If placement is specified, this will be ignored.
+    
+    family : int, optional
+        One of the opencv supported font families, by default cv.FONT_HERSHEY_DUPLEX
+    
+    size : float, optional
+        The size / scaling of the text. Is a multiplier of the fonts default size, by default 1    
+    
+    thickness : int, optional
+        Thickness of the font lines, by default 1
+
+    color : Any, optional
+        Foreground or text color, by default "black"
+        Can be any color supported by matplotlib.
+        E.g. Hex, RGB, RGBA, or color names.
+
+    margin : int, optional
+        Outside margin when placement is used, by default 5
+        Defines the distance from the edge of the image in pixels.
+
+    background_color : Any, optional
+        Background color of the text, by default "white"
+        If specified, a background rectangle will be drawn behind the text in the specified color.
+
+    background_stroke : Optional[int], optional
+        Stroke thickness of the background in pixels, by default None
+        If specified, a stroke will be drawn around the background rectangle.
+
+    background_stroke_color : Any, optional
+        Color of the stroke around the background rectangle, by default "black"
+        
+    padding : int, optional
+        Inner padding of the background stroke w.r.t the drawn text, by default 5
+
+    Returns
+    -------
+    np.ndarray
+        The image with the rendered text. Will be in the shape H x W x C.
+        The dtype will be np.uint8.
+    """
     from tools.viz.matplotlib import parse_color_rgb
     from matplotlib.pyplot import figure
     if background_stroke_color is not None:
@@ -676,15 +762,15 @@ def put_text(
         position = position or (img.shape[1] // 2, img.shape[0] // 2)
         vertical_alignment, horizontal_alignment = placement.split("-")
         if vertical_alignment == "top":
-            position = (position[0], 0 + placement_margin)
+            position = (position[0], 0 + margin)
         elif vertical_alignment == "bottom":
-            position = (position[0], img.shape[0] - placement_margin)
+            position = (position[0], img.shape[0] - margin)
         elif vertical_alignment == "center":
             position = (position[0], img.shape[0] // 2)
         if horizontal_alignment == "left":
-            position = (0 + placement_margin, position[1])
+            position = (0 + margin, position[1])
         elif horizontal_alignment == "right":
-            position = (img.shape[1] - placement_margin, position[1])
+            position = (img.shape[1] - margin, position[1])
         elif horizontal_alignment == "center":
             position = (img.shape[1] // 2, position[1])
 
@@ -695,14 +781,14 @@ def put_text(
     if background_color is not None:
         text_width, text_height = cv.getTextSize(text, family, size, thickness)[0]
         p = np.array(position)
-        bl = p + np.array([-background_margin, background_margin])
-        tr = p + np.array([text_width, -text_height]) + np.array([background_margin, -background_margin])
+        bl = p + np.array([-padding, padding])
+        tr = p + np.array([text_width, -text_height]) + np.array([padding, -padding])
         img = cv.rectangle(img, bl, tr, background_color, -1)
     if background_stroke is not None and background_stroke > 0 and background_stroke_color is not None:
         text_width, text_height = cv.getTextSize(text, family, size, thickness)[0]
         p = np.array(position)
-        bl = p + np.array([-background_margin, background_margin])
-        tr = p + np.array([text_width, -text_height]) + np.array([background_margin, -background_margin])
+        bl = p + np.array([-padding, padding])
+        tr = p + np.array([text_width, -text_height]) + np.array([padding, -padding])
         img = cv.rectangle(img, bl, tr, background_stroke_color, background_stroke)
 
     img = cv.putText(
