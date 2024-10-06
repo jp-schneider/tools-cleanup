@@ -34,9 +34,10 @@ import math
 import sys
 import matplotlib.text as mtext
 from tools.util.typing import DEFAULT, _DEFAULT
+from pathlib import Path
 
 
-def set_default_output_dir(output_dir: Optional[str] = None):
+def set_default_output_dir(output_dir: Optional[Union[str, Path]] = None):
     """Sets the default output directory for saving figures.
 
     Parameters
@@ -45,6 +46,8 @@ def set_default_output_dir(output_dir: Optional[str] = None):
         The default output directory.
     """
     if output_dir is not None:
+        if isinstance(output_dir, Path):
+            output_dir = str(output_dir)
         os.environ["PLOT_OUTPUT_DIR"] = output_dir
     else:
         os.environ.pop("PLOT_OUTPUT_DIR", None)
@@ -306,13 +309,14 @@ def parse_color_rgb(color: Any) -> np.ndarray:
         trgb = to_rgb(color)
         return np.array(trgb)
 
+
 def compute_ratio(ratio_or_img: Optional[Union[float, np.ndarray]] = None) -> float:
     """Computes the ratio of an image or a given ratio.
 
     Parameters
     ----------
     ratio_or_img : Optional[Union[float, np.ndarray]], optional
-        Ratio of Y w.r.t X  (Height / Width) can also be an Image / np.ndarray which will compute it from the axis, 
+        Ratio of Y w.r.t X  (Height / Width) can also be an Image / np.ndarray which will compute it from the axis,
         by default None
 
     Returns
