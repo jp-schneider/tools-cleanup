@@ -870,15 +870,22 @@ def plot_as_image(data: VEC_TYPE,
 
 
 @saveable()
-def plot_vectors(x: VEC_TYPE, label: Optional[Union[str, List[str]]] = None, mode: Literal["plot", "scatter"] = "plot") -> Figure:
+def plot_vectors(y: VEC_TYPE, 
+                 x: Optional[VEC_TYPE] = None,
+                 label: Optional[Union[str, List[str]]] = None, 
+                 mode: Literal["plot", "scatter"] = "plot") -> Figure:
     """Gets a matplotlib line figure with a plot of vectors.
 
     Parameters
     ----------
-    x : VEC_TYPE
+    y : VEC_TYPE
         Data to be plotted. Shape should be ([..., N], D)
         Batch dimensions will be flattened.
         Plots D lines with N points each.
+
+    x : Optional[VEC_TYPE], optional
+        X values for the plot. If None, x will be the range of y.shape[0], by default None
+        Shape should be (N, )
 
     label : Optional[Union[str, List[str]]], optional
         Label or each dimension. If None just numerates the dimensions, by default None
@@ -894,27 +901,29 @@ def plot_vectors(x: VEC_TYPE, label: Optional[Union[str, List[str]]] = None, mod
         If label does not match the number of dimensions.
     """
     from tools.util.numpy import flatten_batch_dims
-
-    x = numpyify(x)
-    x, shape = flatten_batch_dims(x, -2)
+    y = numpyify(y)
+    
+    if len(y.shape) == 1:
+        y = y[:, None]
+    y, shape = flatten_batch_dims(y, -2)
 
     if label is None:
-        label = [str(i) for i in range(x.shape[-1])]
+        label = [str(i) for i in range(y.shape[-1])]
     else:
         if not isinstance(label, Iterable):
             label = [label]
-        if len(label) != x.shape[-1]:
+        if len(label) != y.shape[-1]:
             raise ValueError(
                 "Number of labels should match the last dimension of the input data.")
-
-    y = np.arange(x.shape[0])
+    if x is None:
+        x = np.arange(y.shape[0])
     fig, ax = get_mpl_figure(1, 1)
 
-    for i in range(x.shape[-1]):
+    for i in range(y.shape[-1]):
         if mode == "plot":
-            ax.plot(y, x[:, i], label=label[i])
+            ax.plot(x, y[:, i], label=label[i])
         elif mode == "scatter":
-            ax.scatter(y, x[:, i], label=label[i])
+            ax.scatter(x, y[:, i], label=label[i])
         else:
             raise ValueError("Mode should be either plot or scatter.")
     ax.legend()

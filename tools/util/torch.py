@@ -1,4 +1,5 @@
 import decimal
+from functools import wraps
 import logging
 import os
 from types import FrameType
@@ -874,3 +875,72 @@ def unflatten_batch_dims(tensor: torch.Tensor, batch_shape: List[int]) -> torch.
         return tensor.reshape(new_dims)
     else:
         return tensor.squeeze(0)
+
+
+
+
+def grad_cached(
+        device: torch.device = "cpu",
+        return_key: str = "return",
+        retrieve_key: str = "get_cache",
+        clear_key: str = "clear_cache"
+        ) -> bool:
+    import inspect
+    func_exec_cache = dict()
+    if isinstance(device, str):
+        device = torch.device(device)
+
+    def format_output(out: Dict[str, List[torch.Tensor]]) -> Dict[str, Union[List[Any], torch.Tensor]]:
+        ret = {}
+        for k, v in out.items():
+            if len(v) == 0:
+                continue
+            if not isinstance(v[0], torch.Tensor):
+                continue
+            ret[k] = torch.stack(v, dim=0)
+        return ret
+
+    def process_value(value: Any) -> Any:
+        if isinstance(value, torch.Tensor):
+            return value.detach().clone().to(device)
+        return value
+
+    def decorator(grad_hook: Callable[[torch.Tensor, Any], torch.Tensor]) -> Callable[[torch.Tensor, Any], torch.Tensor]:
+        nonlocal func_exec_cache
+        params = inspect.signature(grad_hook).parameters
+        
+        order_name_mapping = dict()
+        for i, (k, v) in enumerate(params.items()):
+            order_name_mapping[i] = str(k)
+            func_exec_cache[str(k)] = [] 
+
+        func_exec_cache[return_key] = []
+
+        @wraps(grad_hook)
+        def wrapper(*args, **kwargs):
+            nonlocal func_exec_cache, order_name_mapping
+            if retrieve_key in kwargs and kwargs[retrieve_key]:
+                return format_output(func_exec_cache)
+            if clear_key in kwargs and kwargs[clear_key]:
+                for k in func_exec_cache.keys():
+                    func_exec_cache[k] = []
+                return None
+            for i, a in enumerate(args):
+                func_exec_cache[order_name_mapping[i]].append(process_value(a))
+            for k, v in kwargs.items():
+                func_exec_cache[k].append(process_value(v))
+
+            try:
+                fnc_out = grad_hook(*args, **kwargs)
+            except Exception as err:
+                # Remove already added values
+                for i, a in enumerate(args):
+                    del func_exec_cache[order_name_mapping[i]][-1]
+                for k, v in kwargs.items():
+                    del func_exec_cache[k][-1]
+                raise err
+            
+            func_exec_cache[return_key].append(process_value(fnc_out))
+            return fnc_out
+        return wrapper
+    return decorator
