@@ -421,6 +421,7 @@ def batched_exec(*input,
             bar.update(1)
     return torch.cat(results, dim=0)
 
+
 def index_of_first(values: torch.Tensor, search: torch.Tensor) -> torch.Tensor:
     """Searches for the index of the first occurence of the search tensor in the values tensor.
 
@@ -446,15 +447,17 @@ def index_of_first(values: torch.Tensor, search: torch.Tensor) -> torch.Tensor:
     """
     E = values.shape
     S = search.shape
-    res = values[..., None].repeat(*tuple(1 for _ in range(len(E))), *S) == search[None, ...].repeat(*E, *tuple((1 for _ in range(len(S)))))
+    res = values[..., None].repeat(*tuple(1 for _ in range(len(E))), *
+                                   S) == search[None, ...].repeat(*E, *tuple((1 for _ in range(len(S)))))
     out = torch.zeros(tuple(S), dtype=torch.int)
     out.fill_(-1)
     aw = torch.argwhere(res)
     search_found, where_inverse = torch.unique(aw[:, -1], return_inverse=True)
     for i, s in enumerate(search_found):
-        widx = aw[where_inverse == i][0] # Select first match
+        widx = aw[where_inverse == i][0]  # Select first match
         out[s] = widx[0]
     return out
+
 
 class TensorUtil():
     """Static class for using complex tensor calculations and tensor related utilities"""
@@ -708,8 +711,10 @@ class TensorUtil():
                     v, fnc=fnc, memo=memo, path=path + f".{k}"))
         return obj
 
+
 SHADOW_TENSOR_WARNING = False
 SHADOW_TENSOR_USAGES: FrameSummary = []
+
 
 def shadow_zeros(x: torch.Tensor) -> torch.Tensor:
     """Debug function which replaces the given Tensor with
@@ -733,7 +738,7 @@ def shadow_zeros(x: torch.Tensor) -> torch.Tensor:
     if not SHADOW_TENSOR_WARNING:
         # Warn that shadowing is active.
         filename = relpath(os.getcwd(), frame.filename, is_from_file=False)
-        logger.warning("Some tensor(s) are beeing shadowed, check SHADOW_TENSOR_USAGES for all code positions.\n" + 
+        logger.warning("Some tensor(s) are beeing shadowed, check SHADOW_TENSOR_USAGES for all code positions.\n" +
                        f"First position: {filename} Line: {frame.lineno}.")
         SHADOW_TENSOR_WARNING = True
     SHADOW_TENSOR_USAGES.append(frame)
@@ -742,6 +747,7 @@ def shadow_zeros(x: torch.Tensor) -> torch.Tensor:
     device = x.device
     dtype = x.dtype
     return torch.zeros(shape, dtype=dtype, device=device)
+
 
 def shadow_ones(x: torch.Tensor) -> torch.Tensor:
     """Debug function which replaces the given Tensor with
@@ -765,7 +771,7 @@ def shadow_ones(x: torch.Tensor) -> torch.Tensor:
     if not SHADOW_TENSOR_WARNING:
         # Warn that shadowing is active.
         filename = relpath(os.getcwd(), frame.filename, is_from_file=False)
-        logger.warning("Some tensor(s) are beeing shadowed, check SHADOW_TENSOR_USAGES for all code positions.\n" + 
+        logger.warning("Some tensor(s) are beeing shadowed, check SHADOW_TENSOR_USAGES for all code positions.\n" +
                        f"First position: {filename} Line: {frame.lineno}.")
         SHADOW_TENSOR_WARNING = True
     SHADOW_TENSOR_USAGES.append(frame)
@@ -800,7 +806,7 @@ def shadow_identity_2d(x: torch.Tensor) -> torch.Tensor:
     if not SHADOW_TENSOR_WARNING:
         # Warn that shadowing is active.
         filename = relpath(os.getcwd(), frame.filename, is_from_file=False)
-        logger.warning("Some tensor(s) are beeing shadowed, check SHADOW_TENSOR_USAGES for all code positions.\n" + 
+        logger.warning("Some tensor(s) are beeing shadowed, check SHADOW_TENSOR_USAGES for all code positions.\n" +
                        f"First position: {filename} Line: {frame.lineno}.")
         SHADOW_TENSOR_WARNING = True
     SHADOW_TENSOR_USAGES.append(frame)
@@ -811,9 +817,9 @@ def shadow_identity_2d(x: torch.Tensor) -> torch.Tensor:
     dtype = x.dtype
     xf, bd = flatten_batch_dims(x, -3)
     B = xf.shape[0]
-    eye = torch.eye(x.shape[-1], dtype=dtype, device=device).unsqueeze(0).repeat(B, 1, 1)
+    eye = torch.eye(x.shape[-1], dtype=dtype,
+                    device=device).unsqueeze(0).repeat(B, 1, 1)
     return unflatten_batch_dims(eye, bd)
-
 
 
 @torch.jit.script
@@ -877,14 +883,12 @@ def unflatten_batch_dims(tensor: torch.Tensor, batch_shape: List[int]) -> torch.
         return tensor.squeeze(0)
 
 
-
-
 def grad_cached(
         device: torch.device = "cpu",
         return_key: str = "return",
         retrieve_key: str = "get_cache",
         clear_key: str = "clear_cache"
-        ) -> bool:
+) -> bool:
     import inspect
     func_exec_cache = dict()
     if isinstance(device, str):
@@ -907,12 +911,14 @@ def grad_cached(
 
     def decorator(grad_hook: Callable[[torch.Tensor, Any], torch.Tensor]) -> Callable[[torch.Tensor, Any], torch.Tensor]:
         nonlocal func_exec_cache
+        if grad_hook is None:
+            return None
         params = inspect.signature(grad_hook).parameters
-        
+
         order_name_mapping = dict()
         for i, (k, v) in enumerate(params.items()):
             order_name_mapping[i] = str(k)
-            func_exec_cache[str(k)] = [] 
+            func_exec_cache[str(k)] = []
 
         func_exec_cache[return_key] = []
 
@@ -939,7 +945,7 @@ def grad_cached(
                 for k, v in kwargs.items():
                     del func_exec_cache[k][-1]
                 raise err
-            
+
             func_exec_cache[return_key].append(process_value(fnc_out))
             return fnc_out
         return wrapper
