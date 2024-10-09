@@ -772,11 +772,11 @@ def plot_as_image(data: VEC_TYPE,
 
             color_mapping = None
 
-            def op_wo_bad(x, fnc):
+            def op_only_finite(x, fnc):
                 return fnc(x[(~np.isnan(x)) & (~np.isinf(x))])
 
-            vmin = op_wo_bad(_image, np.min)
-            vmax = op_wo_bad(_image, np.max)
+            vmin = op_only_finite(_image, np.min)
+            vmax = op_only_finite(_image, np.max)
             _cmap = cmaps[row][col]
             if isinstance(_cmap, str):
                 _cmap = plt.get_cmap(_cmap)
@@ -790,7 +790,10 @@ def plot_as_image(data: VEC_TYPE,
                         _image.numpy()) else None
                 if _cscale is not None:
                     if _cscale == 'log':
+                        zeros = _image == 0
+                        _image = np.where(zeros, 1, _image)
                         _image = np.log(_image)
+                        _image = np.where(zeros, np.nan, _image)
                         _title = f"log({_title})"
                 if _cscale == "count":
                     color_mapping = dict()
@@ -805,11 +808,11 @@ def plot_as_image(data: VEC_TYPE,
             if "vmin" in imshow_kw:
                 vmin = imshow_kw.pop("vmin")
             else:
-                vmin = op_wo_bad(_image, np.min)
+                vmin = op_only_finite(_image, np.min)
             if "vmax" in imshow_kw:
                 vmax = imshow_kw.pop("vmax")
             else:
-                vmax = op_wo_bad(_image, np.max)
+                vmax = op_only_finite(_image, np.max)
             if "cmap" in imshow_kw:
                 _cmap = imshow_kw.pop("cmap")
             if "interpolation" in imshow_kw:

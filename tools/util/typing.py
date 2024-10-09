@@ -47,6 +47,9 @@ class _DEFAULT():
     
     def __str__(self) -> str:
         return "DEFAULT"
+    
+    def __hash__(self) -> int:
+        return 0
 
 
 DEFAULT = _DEFAULT()
@@ -65,6 +68,9 @@ class _NOCHANGE:
     
     def __str__(self) -> str:
         return "NOCHANGE"
+    
+    def __hash__(self) -> int:
+        return 0
 
 
 class _CYCLE:
@@ -78,6 +84,9 @@ class _CYCLE:
     
     def __str__(self) -> str:
         return "CYCLE"
+    
+    def __hash__(self) -> int:
+        return 0
 
 
 class _MISSING:
@@ -91,6 +100,9 @@ class _MISSING:
     
     def __str__(self) -> str:
         return "MISSING"
+    
+    def __hash__(self) -> int:
+        return 0
 
 
 NOCHANGE = _NOCHANGE()
@@ -110,6 +122,9 @@ class _NOTSET():
     def __str__(self) -> str:
         return "NOTSET"
     
+    def __hash__(self) -> int:
+        return 0
+    
 
 
 class _PATHNONE():
@@ -123,6 +138,9 @@ class _PATHNONE():
     
     def __str__(self) -> str:
         return "PATHNONE"
+    
+    def __hash__(self) -> int:
+        return 0
 
 
 NOTSET = _NOTSET()

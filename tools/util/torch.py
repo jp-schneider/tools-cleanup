@@ -950,3 +950,71 @@ def grad_cached(
             return fnc_out
         return wrapper
     return decorator
+
+
+def plot_weight(x: torch.Tensor, title: str = "Weights", cmap: str = "viridis", colorbar: bool = True, **kwargs) -> Any:
+    """Plots a 1D or 2D tensor as an image.
+
+    Including the gradients if available.
+
+    Parameters
+    ----------
+    x : torch.Tensor
+        Tensor to plot.
+    
+    title : str, optional
+        Title of the plot, by default "Weights"
+
+    cmap : str, optional
+        Colormap to use, by default "viridis"
+
+    colorbar : bool, optional
+        If a colorbar should be displayed, by default True
+
+    Returns
+    -------
+    Any
+        The matplotlib figure.
+    """
+    org_shape = tuple(x.shape)
+    from tools.viz.matplotlib import get_mpl_figure, plot_as_image
+    grad = None
+    weight = x.detach().clone().cpu().numpy()
+    if x.requires_grad or x.grad is not None:
+        grad = x.grad.detach().clone().cpu().numpy()
+    if len(x.shape) not in [1, 2]:
+        raise ValueError("Only 1D or 2D tensors are supported.")
+    H, W = None, None
+    if len(x.shape) == 1:
+        from sympy import divisors
+        B = x.shape[0]
+        d = torch.tensor(divisors(B)).unsqueeze(1)
+        times = torch.tensor(B).unsqueeze(0) / d
+        min_d = (times - d).abs().argmin().squeeze()
+        if len(min_d.shape) > 0:
+            min_d = min_d[0]
+        H = d[min_d].squeeze().item()
+        W = times[min_d].squeeze().int().item()
+        weight = weight.reshape(H, W)
+        if grad is not None:
+            grad = grad.reshape(H, W)
+    else:
+        H, W = weight.shape
+    target_shape = (H, W)
+    rows = 1
+    cols = (2 if grad is not None else 1)
+    fig, axes = get_mpl_figure(rows=rows, cols=cols, ratio_or_img=H / W, ax_mode="1d")
+    if not isinstance(axes, np.ndarray):
+        axes = [axes]
+    plot_as_image(weight, axes=axes[0], colorbar=colorbar, cmap=cmap, variable_name="Weights", **kwargs)
+    if grad is not None:
+        plot_as_image(grad, axes=axes[1], colorbar=colorbar, cmap=cmap, variable_name="Gradients", **kwargs)
+    
+    axw = fig.add_subplot(rows, 1, 1, frameon=False)
+    if org_shape != target_shape:
+        shape_change = f"[{', '.join([str(s) for s in org_shape])}] -> [{', '.join([str(s) for s in target_shape])}]"
+        title = f"{title} {shape_change}"
+    axw.set_title(title)
+    axw.axis("off")
+
+    return fig
