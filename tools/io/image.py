@@ -21,6 +21,7 @@ from torch.nn.functional import grid_sample
 from tools.util.progress_factory import ProgressFactory
 import cv2 as cv
 
+
 def create_image_exif(metadata: Dict[Union[str, ExifTagsBase], Any]) -> Exif:
     """Creates an Exif object from the given metadata.
     Metadata can contain any key-value pair, if key is a regular Exif tag, it will be displayed as such, other keys will be wrapped
@@ -362,7 +363,7 @@ def resize_image(
         Max size of the longest side of the image.
     size : Optional[Tuple[int, int]], optional
         If a specific size should be used instead of max size, by default None
-        Is exclusive with max_size.
+        Is exclusive with max_size. Has format (H, W)
 
     Returns
     -------
@@ -389,16 +390,16 @@ def resize_image(
         new_size = compute_new_size((H, W), max_size)
         transforms = Compose(
                             ([ToTensor()] if not is_tensor else [])
-                             + ([Resize(new_size)]
-                             if (H > max_size or W > max_size) else []) + 
-                             ([ToNumpyImage(output_dtype=dtype)] if not is_tensor else [])
-                             )
+            + ([Resize(new_size)]
+                                if (H > max_size or W > max_size) else []) +
+            ([ToNumpyImage(output_dtype=dtype)] if not is_tensor else [])
+        )
     else:
         transforms = Compose(
             ([ToTensor()] if not is_tensor else [])
-             +[Resize(size)]
-             +([ToNumpyImage(output_dtype=dtype)] if not is_tensor else [])
-             )
+            + [Resize(size)]
+            + ([ToNumpyImage(output_dtype=dtype)] if not is_tensor else [])
+        )
     if len(transforms.transforms) == 0:
         return image
     return transforms(image)
@@ -579,7 +580,6 @@ def save_image_stack(images: VEC_TYPE,
     return saved_files
 
 
-
 def get_origin(
         text: str,
         vertical_alignment: str = "center",
@@ -613,7 +613,8 @@ def get_origin(
     elif horizontal_alignment == "right":
         x -= text_width
     else:
-        raise ValueError(f"Unknown horizontal alignment: {horizontal_alignment}")
+        raise ValueError(
+            f"Unknown horizontal alignment: {horizontal_alignment}")
     return x, y
 
 
@@ -646,12 +647,14 @@ def rgba_to_rgb(img: VEC_TYPE, base_color: VEC_TYPE) -> VEC_TYPE:
         base_color = base_color.astype(float) / 255
         color_converted = True
     if img.shape[-1] == 4:
-        img = img[..., :3] * img[..., -1][..., None] + (1 - img[..., -1][..., None]) * (base_color)
+        img = img[..., :3] * img[..., -1][..., None] + \
+            (1 - img[..., -1][..., None]) * (base_color)
     if reorderd:
         img = img.permute(2, 0, 1)
     if color_converted:
         img = (img * 255).astype(np.uint8)
     return img
+
 
 def put_text(
         img: VEC_TYPE,
@@ -686,27 +689,27 @@ def put_text(
         Automatic placement for the text. In format [vertical]-[horizontal], by default "top-center"
         Can be top, center, bottom for vertical and left, center, right for horizontal.
         Takes precedence over position an alignment if specified.
-        
+
     position : Optional[Tuple[int, int]], optional
         The Text position in image coordinates (x, y) ([0, width), [0, height)), by default None
         If placement is specified, this will be ignored.
-    
+
     vertical_alignment : str, optional
         Vertical alignment of the Text w.r.t to position, by default "top"
         Can be top, center or bottom.
         If placement is specified, this will be ignored.
-    
+
     horizontal_alignment : str, optional
         Horizontal alignment of the Text w.r.t to position, by default "center"
         Can be left, center or right.
         If placement is specified, this will be ignored.
-    
+
     family : int, optional
         One of the opencv supported font families, by default cv.FONT_HERSHEY_DUPLEX
-    
+
     size : float, optional
-        The size / scaling of the text. Is a multiplier of the fonts default size, by default 1    
-    
+        The size / scaling of the text. Is a multiplier of the fonts default size, by default 1
+
     thickness : int, optional
         Thickness of the font lines, by default 1
 
@@ -729,7 +732,7 @@ def put_text(
 
     background_stroke_color : Any, optional
         Color of the stroke around the background rectangle, by default "black"
-        
+
     padding : int, optional
         Inner padding of the background stroke w.r.t the drawn text, by default 5
 
@@ -742,9 +745,11 @@ def put_text(
     from tools.viz.matplotlib import parse_color_rgb
     from matplotlib.pyplot import figure
     if background_stroke_color is not None:
-        background_stroke_color = (parse_color_rgb(background_stroke_color) * 255).astype(np.uint8).tolist()
+        background_stroke_color = (parse_color_rgb(
+            background_stroke_color) * 255).astype(np.uint8).tolist()
     if background_color is not None:
-        background_color = (parse_color_rgb(background_color) * 255).astype(np.uint8).tolist()
+        background_color = (parse_color_rgb(background_color)
+                            * 255).astype(np.uint8).tolist()
     color = (parse_color_rgb(color) * 255).astype(np.uint8).tolist()
     numpyify_image = ToNumpyImage(output_dtype=np.uint8)
     img = numpyify_image(img)
@@ -774,22 +779,28 @@ def put_text(
         elif horizontal_alignment == "center":
             position = (img.shape[1] // 2, position[1])
 
-    offset = get_origin(text, vertical_alignment, horizontal_alignment, family, size, thickness)
+    offset = get_origin(text, vertical_alignment,
+                        horizontal_alignment, family, size, thickness)
 
     position = (position[0] + offset[0], position[1] + offset[1])
 
     if background_color is not None:
-        text_width, text_height = cv.getTextSize(text, family, size, thickness)[0]
+        text_width, text_height = cv.getTextSize(
+            text, family, size, thickness)[0]
         p = np.array(position)
         bl = p + np.array([-padding, padding])
-        tr = p + np.array([text_width, -text_height]) + np.array([padding, -padding])
+        tr = p + np.array([text_width, -text_height]) + \
+            np.array([padding, -padding])
         img = cv.rectangle(img, bl, tr, background_color, -1)
     if background_stroke is not None and background_stroke > 0 and background_stroke_color is not None:
-        text_width, text_height = cv.getTextSize(text, family, size, thickness)[0]
+        text_width, text_height = cv.getTextSize(
+            text, family, size, thickness)[0]
         p = np.array(position)
         bl = p + np.array([-padding, padding])
-        tr = p + np.array([text_width, -text_height]) + np.array([padding, -padding])
-        img = cv.rectangle(img, bl, tr, background_stroke_color, background_stroke)
+        tr = p + np.array([text_width, -text_height]) + \
+            np.array([padding, -padding])
+        img = cv.rectangle(
+            img, bl, tr, background_stroke_color, background_stroke)
 
     img = cv.putText(
         img,

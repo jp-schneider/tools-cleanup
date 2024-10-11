@@ -200,57 +200,18 @@ def saveable(
                 else:
                     out.tight_layout()
 
-            paths = []
             if save or open:
-                if any([(x in path) for x in ["/", "\\", os.sep]]):
-                    # Treat path as abspath
-                    path = os.path.abspath(path)
-                else:
-                    default_output_dir = os.environ.get(
-                        "PLOT_OUTPUT_DIR", default_output_dir if default_output_dir != DEFAULT else "./temp")
-                    path = os.path.join(
-                        os.path.abspath(default_output_dir), path)
-                # Check if path has extension
-                _, has_ext = os.path.splitext(path)
-                if len(has_ext) == 0:
-                    if isinstance(ext, str):
-                        ext = [ext]
-                    for e in ext:
-                        paths.append(path + "." + e)
-                else:
-                    paths = [path]
+                paths = get_figure_path(
+                    path, default_output_dir=default_output_dir, ext=ext)
 
-                # Create parent dirs
-                dirs = set([os.path.dirname(p) for p in paths])
-                for d in dirs:
-                    os.makedirs(d, exist_ok=True)
-
-                def save_fig_or_ani(path, fig, ani = None):
-                    if not override:
-                        path = numerated_file_name(path)
-                    if is_animation:
-                        ani.save(path, fps=fps, dpi=dpi)
-                    else:
-                        fig.savefig(path, transparent=transparent, dpi=dpi)
-                    return path
-                save_paths = []
-                for p in paths:
-                    if is_figure_collection:
-                        # Parse format string#
-                        sub_p = parse_format_string(p, [x for x in out])
-                        for i, s in enumerate(sub_p):
-                            ai = None
-                            if is_animation:
-                                ai = ani[i]
-                            save_paths.append(save_fig_or_ani(s, out[i], ai))
-                    else:
-                        save_paths.append(save_fig_or_ani(p, out, ani))
-                paths = save_paths
-            if open:
-                try:
-                    open_in_default_program(paths[0])
-                except Exception as err:
-                    pass
+                paths = save_figure_or_animation(
+                    out, paths, is_animation=is_animation, ani=ani, is_figure_collection=is_figure_collection,
+                    override=override, dpi=dpi, transparent=transparent, fps=fps)
+                if open:
+                    try:
+                        open_in_default_program(paths[0])
+                    except Exception as err:
+                        pass
             if display:
                 from IPython.display import display
                 display(out)
@@ -264,6 +225,113 @@ def saveable(
                 return out
         return wrapper
     return decorator
+
+
+def save_and_open_figure(
+        fig: Figure,
+        path: Optional[str] = None,
+        ext: Union[str, List[str]] = "png",
+        dpi: int = 300,
+        transparent: bool = False):
+    """Saves a figure and opens it in the default program of the operating system.
+
+    Parameters
+    ----------
+    fig : Figure
+        Figure to save.
+
+    path : Optional[str], optional
+        Path to save the figure, by default None
+        If None, a uuid4 string will be used as filename.
+
+    ext : Union[str, List[str]], optional
+        Extension of the file, by default "png"
+
+    dpi : int, optional
+        Dots per inch of the figure, by default 300
+
+    transparent : bool, optional
+        If the figure should be saved with transparent background, by default False
+    """
+    if path is None:
+        path = get_figure_path(path, ext=ext)
+    save_paths = save_figure_or_animation(
+        fig, path, dpi=dpi, transparent=transparent)
+    open_in_default_program(save_paths[0])
+
+
+def save_figure_or_animation(
+    fig: Any,
+    paths: Union[str, List[str]],
+    is_animation: bool = False,
+    ani: Optional[FuncAnimation] = None,
+    is_figure_collection: bool = False,
+    override: bool = False,
+    dpi: int = 300,
+    transparent: bool = False,
+    fps: int = 24
+) -> List[str]:
+    out = fig
+    if isinstance(paths, str):
+        paths = [paths]
+
+    def save_fig_or_ani(path, fig, ani=None):
+        if not override:
+            path = numerated_file_name(path)
+        if is_animation:
+            ani.save(path, fps=fps, dpi=dpi)
+        else:
+            fig.savefig(path, transparent=transparent, dpi=dpi)
+        return path
+
+    save_paths = []
+    for p in paths:
+        if is_figure_collection:
+            # Parse format string#
+            sub_p = parse_format_string(p, [x for x in out])
+            for i, s in enumerate(sub_p):
+                ai = None
+                if is_animation:
+                    ai = ani[i]
+                save_paths.append(save_fig_or_ani(s, out[i], ai))
+        else:
+            save_paths.append(save_fig_or_ani(p, out, ani))
+    return save_paths
+
+
+def get_figure_path(
+        path: Optional[str] = None,
+        default_output_dir: Union[str, _DEFAULT] = DEFAULT,
+        ext: Union[str, List[str]] = "png"
+) -> List[str]:
+    from uuid import uuid4
+    import os
+    if path is None:
+        path = str(uuid4())
+    paths = []
+    if any([(x in path) for x in ["/", "\\", os.sep]]):
+        # Treat path as abspath
+        path = os.path.abspath(path)
+    else:
+        default_output_dir = os.environ.get(
+            "PLOT_OUTPUT_DIR", default_output_dir if default_output_dir != DEFAULT else "./temp")
+        path = os.path.join(
+            os.path.abspath(default_output_dir), path)
+    # Check if path has extension
+    _, has_ext = os.path.splitext(path)
+    if len(has_ext) == 0:
+        if isinstance(ext, str):
+            ext = [ext]
+        for e in ext:
+            paths.append(path + "." + e)
+    else:
+        paths = [path]
+
+    dirs = set([os.path.dirname(p) for p in paths])
+    for d in dirs:
+        os.makedirs(d, exist_ok=True)
+
+    return paths
 
 
 def render_text(text: str,
@@ -873,9 +941,9 @@ def plot_as_image(data: VEC_TYPE,
 
 
 @saveable()
-def plot_vectors(y: VEC_TYPE, 
+def plot_vectors(y: VEC_TYPE,
                  x: Optional[VEC_TYPE] = None,
-                 label: Optional[Union[str, List[str]]] = None, 
+                 label: Optional[Union[str, List[str]]] = None,
                  mode: Literal["plot", "scatter"] = "plot") -> Figure:
     """Gets a matplotlib line figure with a plot of vectors.
 
@@ -905,7 +973,7 @@ def plot_vectors(y: VEC_TYPE,
     """
     from tools.util.numpy import flatten_batch_dims
     y = numpyify(y)
-    
+
     if len(y.shape) == 1:
         y = y[:, None]
     y, shape = flatten_batch_dims(y, -2)

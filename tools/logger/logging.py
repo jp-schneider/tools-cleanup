@@ -3,8 +3,12 @@ import sys
 from typing import Optional
 from tools.util.package_tools import get_package_name, get_invoked_package_name, get_project_root_path
 
+ONE_TIME_MESSAGES = dict()
+"""Dictionary to store one time messages."""
+
 _loggers = dict()
 """Dictionary to store loggers for other packages."""
+
 
 def get_logger(package_name: Optional[str] = None) -> logging.Logger:
     """Gets the logger for the given package name.
@@ -30,11 +34,14 @@ def get_logger(package_name: Optional[str] = None) -> logging.Logger:
         _loggers[package_name] = logging.getLogger(package_name)
     return _loggers[package_name]
 
+
 logger: logging.Logger = get_logger()
 """Default logger for the invoked package."""
 
-tools_logger: logging.Logger = get_logger(get_package_name(get_project_root_path()))
+tools_logger: logging.Logger = get_logger(
+    get_package_name(get_project_root_path()))
 """Logger for the tools package."""
+
 
 def basic_config(level: int = logging.INFO):
     """Basic logging configuration with sysout logger.
@@ -58,3 +65,24 @@ def basic_config(level: int = logging.INFO):
         logger = logging.getLogger("matplotlib")
         logger.setLevel(logging.WARNING)
 
+
+def get_messaged(key: str) -> bool:
+    """Gets whether a message with the given key was already messaged.
+
+    Parameters
+    ----------
+    key : str
+        The key to check for.
+
+    Returns
+    -------
+    bool
+        Whether the message was already messaged.
+    """
+    global ONE_TIME_MESSAGES
+    if key not in ONE_TIME_MESSAGES:
+        ONE_TIME_MESSAGES[key] = 1
+        return False
+    else:
+        ONE_TIME_MESSAGES[key] += 1
+        return True

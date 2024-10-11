@@ -1,7 +1,10 @@
 import decimal
 from functools import wraps
+import inspect
 import logging
+import math
 import os
+import sys
 from types import FrameType
 from typing import Any, Callable, Dict, List, Optional, Set, TypeVar, Union
 from collections import OrderedDict
@@ -356,6 +359,183 @@ def detach_module(module: torch.nn.Module) -> torch.nn.Module:
     for param in module.parameters():
         param.requires_grad = False
     return module
+
+
+def get_index_tuple(shape: tuple, slice_or_indexer: Any, dim: int) -> tuple:
+    idx = [slice(None) for _ in range(len(shape))]
+    idx[dim] = slice_or_indexer
+    return tuple(idx)
+
+
+def batched_generator_exec(
+        batched_params: List[Union[str, dict]],
+        default_batch_size: int = 1,
+        default_multiprocessing: bool = False,
+        default_num_workers: int = 4
+) -> callable:
+    """Decorator for executing a function in batches.
+    The wrapped function will be executed in batches based on the batched_params.
+
+    Example:
+    ---------
+
+    >>> @batched_generator_exec(['t', dict(name='other_arg', batch_dim=1)], default_batch_size=3)
+        def some_op(resolution: tuple, t: torch.Tensor, other_arg: torch.Tensor) -> torch.Tensor:
+            return torch.rand(*resolution).unsqueeze(0).repeat(len(t), 1, 1)
+
+    >>> my_ts = torch.rand(10, 5)
+        other_arg = torch.rand(9, 10)
+        resolution = (10, 20)
+        combined_result = torch.cat((list(some_op(resolution, t=my_ts, batch_size=3, other_arg=other_arg))), dim=0).shape
+
+
+    Parameters
+    ----------
+    batched_params : List[Union[str, dict]]
+        List of parameters that should be batched. Each parameter can be a string or a dictionary.
+        If a string is given, the parameter will be batched with the default batch dimension.
+        If a dictionary is given, it must contain the key 'name' with the parameter name and optionally 'batch_dim' with the batch dimension.
+
+    default_batch_size : int, optional
+        Default batch size to use, by default 1
+
+    Returns
+    -------
+    callable
+        The decorator.
+
+    """
+    def _define_batched_params(
+            param: Union[str, dict],
+            default_batch_dim: int = 0,
+    ) -> dict:
+        param_dict = dict()
+        if isinstance(param, str):
+            param_dict['name'] = param
+        elif isinstance(param, dict):
+            param_dict = param
+        else:
+            raise ValueError(
+                f"param must be either str or dict, got {type(param)}")
+        if 'name' not in param_dict:
+            raise ValueError("param must contain 'name' key")
+        if 'batch_dim' not in param_dict:
+            param_dict['batch_dim'] = default_batch_dim
+        return param_dict
+
+    def map_args_to_kwargs(
+        list_args: List,
+        function_params: Dict[str, inspect.Parameter],
+    ) -> Dict[str, Any]:
+        if len(list_args) == 0:
+            return dict()
+        return dict(zip(function_params.keys(), list_args))
+
+    def get_batch_size(
+            value: Any,
+            param_spec: dict) -> int:
+        if isinstance(value, (list, tuple)):
+            if param_spec['batch_dim'] != 0:
+                raise ValueError(
+                    f"For list or tuple, batch_dim must be 0, got {param_spec['batch_dim']}")
+            return len(value)
+        if not isinstance(value, (torch.Tensor, np.ndarray)):
+            raise ValueError(
+                f"Expected torch.Tensor or np.ndarray, got {type(value)} for parameter {param_spec['name']}")
+        if param_spec['batch_dim'] >= len(value.shape):
+            raise ValueError(
+                f"Batch dimension {param_spec['batch_dim']} is out of bounds for tensor of shape {value.shape}")
+        return value.shape[param_spec['batch_dim']]
+
+    def slice_value(value: Any, s: slice, batch_dim: int) -> Any:
+        if isinstance(value, (torch.Tensor, np.ndarray)):
+            idx = get_index_tuple(value.shape, s, batch_dim)
+            return value[idx]
+        if isinstance(value, (list, tuple)):
+            return value[s]
+        raise ValueError(f"Unsupported type {type(value)}")
+
+    def assembled_batched_params(batched_params: List[dict],
+                                 args: List,
+                                 kwargs: Dict[str, Any],
+                                 function_params: Dict[str, inspect.Parameter],
+                                 batch_size: int = 1
+                                 ) -> List[Dict[str, Any]]:
+        ret_kwargs = list()
+        input_args = map_args_to_kwargs(args, function_params)
+        # Check if overlapping keys
+        intersection = set(input_args.keys()) & set(kwargs.keys())
+        if len(intersection) > 0:
+            raise ValueError(
+                f"Multiple values for argument(s): {list(intersection)}")
+        combined_kwargs = {**input_args, **kwargs}
+        batch_sizes = {x: get_batch_size(
+            v, batched_params[x]) for x, v in combined_kwargs.items() if x in batched_params}
+        # Check if batch sizes are the same
+        if len(set(batch_sizes.values())) > 1:
+            raise ValueError(
+                f"Batch dimension size are not the same: {batch_sizes}.")
+        batch_dimension_size = list(batch_sizes.values())[0]
+        num_batches = math.ceil(batch_dimension_size / batch_size)
+        slices = [slice(i * batch_size, min((i + 1) * batch_size,
+                        batch_dimension_size)) for i in range(num_batches)]
+        ret_kwargs = [dict() for _ in range(num_batches)]
+
+        for k, v in combined_kwargs.items():
+            if k in batched_params:
+                for i, s in enumerate(slices):
+                    ret_kwargs[i][k] = slice_value(
+                        v, s, batched_params[k]['batch_dim'])
+            else:
+                for i in range(num_batches):
+                    ret_kwargs[i][k] = v
+        return ret_kwargs
+
+    _batched_params: Dict[str, Dict[str, Any]] = dict()
+    for p in batched_params:
+        def_p = _define_batched_params(p)
+        _batched_params[def_p['name']] = def_p
+
+    def decorator(function: callable) -> callable:
+        function_params = dict(inspect.signature(function).parameters)
+
+        @wraps(function)
+        def wrapper(*args, **kwargs) -> Any:
+            nonlocal _batched_params
+            mod_kwargs = kwargs.copy()
+            batch_size = mod_kwargs.pop('batch_size', default_batch_size)
+            use_multiprocessing = mod_kwargs.pop(
+                'multiprocessing', default_multiprocessing)
+
+            if use_multiprocessing:
+                try:
+                    import pathos
+                except (ImportError, ModuleNotFoundError) as e:
+                    logger.warning(
+                        "Multiprocessing is enabled, but pathos is not available. Disabling multiprocessing.")
+                    use_multiprocessing = False
+
+            num_workers = mod_kwargs.pop('num_workers', default_num_workers)
+
+            batched_kwargs = assembled_batched_params(
+                _batched_params, args=args, kwargs=mod_kwargs, function_params=function_params, batch_size=batch_size)
+
+            if not use_multiprocessing:
+                for batch_idx, batch_kwargs in enumerate(batched_kwargs):
+                    yield function(**batch_kwargs)
+            else:
+                from pathos.pools import ProcessPool
+
+                listed_args = [list((bkw[k] for bkw in batched_kwargs))
+                               for k in function_params if k in batched_kwargs[0]]
+
+                with ProcessPool(num_workers) as p:
+                    results = p.imap(function, *listed_args)
+                    for r in results:
+                        yield r
+
+        return wrapper
+    return decorator
 
 
 def batched_exec(*input,
@@ -1097,3 +1277,11 @@ def is_non_finite(x: torch.Tensor, info: bool = False) -> Union[bool, Tuple[bool
         grad=grad_info
     )
     return non_finite or grad_non_finite, combined_info
+
+
+@batched_generator_exec(['t', dict(name='other_arg', batch_dim=1)], default_batch_size=3, default_multiprocessing=True)
+def some_op(resolution: tuple, t: torch.Tensor, other_arg: torch.Tensor) -> torch.Tensor:
+    import torch
+    import time
+    time.sleep(5)
+    return torch.rand(*resolution).unsqueeze(0).repeat(len(t), 1, 1)

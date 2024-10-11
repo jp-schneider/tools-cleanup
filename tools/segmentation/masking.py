@@ -226,6 +226,7 @@ def load_mask(
     path: str,
     is_stack: bool = False,
     read_directory_kwargs: Optional[Dict[str, Any]] = None,
+    size: Optional[Tuple[int, int]] = None,
     progress_bar: bool = False
 ) -> np.ndarray:
     """Loads a mask from the given path.
@@ -236,15 +237,29 @@ def load_mask(
     path : str
         Path to the mask.
 
+    is_stack : bool, optional
+        Whether the mask is a stack of masks, by default False
+
+    read_directory_kwargs : Optional[Dict[str, Any]], optional
+        Optional keyword arguments to pass to the read_directory function, by default None
+
+    size : Optional[Tuple[int, int]], optional
+        Size to resize the mask to, by default None
+        Should be (H, W)
+
     Returns
     -------
     np.ndarray
         Numpy array of the mask.
     """
     from PIL import Image
+    from PIL.Image import Resampling
 
     def _read_path(path):
         mask_pil = Image.open(path)
+        if size is not None:
+            mask_pil = mask_pil.resize(
+                (size[1], size[0]), resample=Resampling.BILINEAR)
         # Load metadata
         metadata = load_image_exif(mask_pil, safe_load=True)
         spread = metadata.get('spread', None)
@@ -648,7 +663,8 @@ def load_channel_masks(
     mask_directory: str,
     filename_pattern: str = r"img_(?P<index>[0-9]+)_ov_(?P<ov_index>[0-9]+).png",
     output_format: Literal['channel', 'value'] = 'channel',
-    overlapping_mask_paths: Optional[Dict[int, List[str]]] = None
+    overlapping_mask_paths: Optional[Dict[int, List[str]]] = None,
+    size: Optional[Tuple[int, int]] = None
 ) -> Union[List[np.ndarray], Tuple[np.ndarray, np.ndarray]]:
     """Loads overlapping value masks from a directory.
 
@@ -668,6 +684,9 @@ def load_channel_masks(
         Optional dictionary of overlapping mask paths, by default None
         This can be an already indexed dictionary of mask paths, if not provided, the function will index the mask directory.
 
+    size : Optional[Tuple[int, int]], optional
+        Size to resize the mask to, by default None
+        Should be (H, W)
 
     Returns
     -------
@@ -687,7 +706,7 @@ def load_channel_masks(
     overlapping_masks = {k: [] for k in overlapping_mask_paths}
     for ov_index, path_dict_list in overlapping_mask_paths.items():
         for p in path_dict_list:
-            overlapping_masks[ov_index].append(load_mask(p))
+            overlapping_masks[ov_index].append(load_mask(p, size=size))
     # Stack masks
     for k in overlapping_masks:
         overlapping_masks[k] = np.stack(overlapping_masks[k], axis=0)

@@ -155,7 +155,9 @@ class ProgressFactory:
             total: Optional[int] = None,
             desc: Optional[str] = None,
             tag: Optional[str] = None,
-            is_reusable: bool = False, **kwargs) -> ProgressElement:
+            is_reusable: bool = False,
+            delay: float = 1.,
+            **kwargs) -> ProgressElement:
         """Return a new or existing progress element.
 
         Alias for tqdm.
@@ -175,6 +177,9 @@ class ProgressFactory:
         is_reusable : bool, optional
             If the bar should be reusable, by default False
 
+        delay : float, optional
+            Delay in seconds before which needs to expire before a bar is displayed, by default 1.
+
         kwargs : dict
             Additional arguments to pass to tqdm
 
@@ -183,4 +188,4 @@ class ProgressFactory:
         ProgressElement
             The progress element
         """
-        return self.tqdm(iterable, total=total, desc=desc, tag=tag, is_reusable=is_reusable, **kwargs)
+        return self.tqdm(iterable, total=total, desc=desc, tag=tag, is_reusable=is_reusable, delay=delay, **kwargs)
