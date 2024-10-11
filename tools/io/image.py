@@ -813,3 +813,41 @@ def put_text(
         cv.LINE_AA,
     )
     return img
+
+
+def alpha_background_grid(
+    resolution: Tuple[int, int],
+    square_size: int = 10,
+    primary_color: Any = (153, 153, 153, 255),
+    secondary_color: Any = (102, 102, 102, 255),
+) -> np.ndarray:
+    """Creates a grid pattern with a checkerboard pattern.
+
+    Parameters
+    ----------
+    resolution : Tuple[int, int]
+        Resolution of the grid in pixels.
+        Shape is (H, W) where H is the height and W is the width.
+
+    Returns
+    -------
+    np.ndarray
+        The grid pattern in shape H x W x C.
+    """
+    from tools.viz.matplotlib import parse_color_rgba
+    primary_color = (parse_color_rgba(primary_color)
+                     * 255).astype(np.uint8).tolist()
+    secondary_color = (parse_color_rgba(secondary_color)
+                       * 255).astype(np.uint8).tolist()
+    img = np.zeros((resolution[0], resolution[1], 4), dtype=np.uint8)
+    img[...] = primary_color
+
+    x = np.arange(resolution[1])
+    y = np.arange(resolution[0])
+
+    coords = np.stack(np.meshgrid(x, y), axis=-1).reshape(-1, 2)
+    # XOR to get the checkerboard pattern
+    second_color_mask = ((np.floor(coords / square_size) %
+                         2) == 1).sum(axis=-1) == 1
+    img.reshape(-1, 4)[second_color_mask] = secondary_color
+    return img

@@ -397,6 +397,36 @@ def parse_color_rgb(color: Any) -> np.ndarray:
         return np.array(trgb)
 
 
+def parse_color_rgba(color: Any) -> np.ndarray:
+    """Parses a color to RGBA values.
+
+    Parameters
+    ----------
+    color : Any
+        Color to parse.
+        Can be a string, a tuple, a list or a np.ndarray.
+        Strings should be valid color names or hex values.
+
+    Returns
+    -------
+    np.ndarray
+        RGBA values of the color in [0, 1] range.
+    """
+    from matplotlib.colors import to_rgba
+    if not isinstance(color, str) and isinstance(color, Iterable):
+        color = np.array(color)
+        if len(color) == 4:
+            if color.max() > 1:
+                color = color / 255
+            return color
+        else:
+            trgb = to_rgba(color)
+            return np.array(trgb)
+    else:
+        trgb = to_rgba(color)
+        return np.array(trgb)
+
+
 def compute_ratio(ratio_or_img: Optional[Union[float, np.ndarray]] = None) -> float:
     """Computes the ratio of an image or a given ratio.
 
