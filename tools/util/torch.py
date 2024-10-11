@@ -961,7 +961,7 @@ def plot_weight(x: torch.Tensor, title: str = "Weights", cmap: str = "viridis", 
     ----------
     x : torch.Tensor
         Tensor to plot.
-    
+
     title : str, optional
         Title of the plot, by default "Weights"
 
@@ -1003,13 +1003,16 @@ def plot_weight(x: torch.Tensor, title: str = "Weights", cmap: str = "viridis", 
     target_shape = (H, W)
     rows = 1
     cols = (2 if grad is not None else 1)
-    fig, axes = get_mpl_figure(rows=rows, cols=cols, ratio_or_img=H / W, ax_mode="1d")
+    fig, axes = get_mpl_figure(
+        rows=rows, cols=cols, ratio_or_img=H / W, ax_mode="1d")
     if not isinstance(axes, np.ndarray):
         axes = [axes]
-    plot_as_image(weight, axes=axes[0], colorbar=colorbar, cmap=cmap, variable_name="Weights", **kwargs)
+    plot_as_image(weight, axes=axes[0], colorbar=colorbar,
+                  cmap=cmap, variable_name="Weights", **kwargs)
     if grad is not None:
-        plot_as_image(grad, axes=axes[1], colorbar=colorbar, cmap=cmap, variable_name="Gradients", **kwargs)
-    
+        plot_as_image(grad, axes=axes[1], colorbar=colorbar,
+                      cmap=cmap, variable_name="Gradients", **kwargs)
+
     axw = fig.add_subplot(rows, 1, 1, frameon=False)
     if org_shape != target_shape:
         shape_change = f"[{', '.join([str(s) for s in org_shape])}] -> [{', '.join([str(s) for s in target_shape])}]"
@@ -1018,3 +1021,79 @@ def plot_weight(x: torch.Tensor, title: str = "Weights", cmap: str = "viridis", 
     axw.axis("off")
 
     return fig
+
+
+def _is_non_finite(x: torch.Tensor, info: bool = False) -> Union[bool, Tuple[bool, torch.Tensor]]:
+    """Checks if a tensor contains non-finite values.
+
+    Parameters
+    ----------
+    x : torch.Tensor
+        Tensor to check.
+        Shape: ([..., B])
+    Returns
+    -------
+    Union[bool, Tuple[bool, torch.Tensor]]
+
+    bool
+        True if the tensor contains non-finite values.
+
+
+    """
+    finite = torch.isfinite(x)
+    non_finite = not finite.all()
+    if not info:
+        return non_finite
+    # Get argwhere and return the values
+    idx = torch.argwhere(~finite)
+
+    values = x[tuple(idx[:, j] for j in range(len(idx.shape)))]
+    if values.shape[0] != 0:
+        values = values.unsqueeze(1)
+    info = torch.cat([idx, values], dim=-1)
+    return non_finite, info
+
+
+def is_non_finite(x: torch.Tensor, info: bool = False) -> Union[bool, Tuple[bool, Dict[str, torch.Tensor]]]:
+    """Checks if a tensor contains non-finite values.
+    Will also check the gradients if available.
+
+    Parameters
+    ----------
+    x : torch.Tensor
+        Tensor to check.
+        Shape: ([..., B])
+    Returns
+    -------
+    Union[bool, Tuple[bool, torch.Tensor]]
+
+    bool
+        True if the tensor contains non-finite values.
+        E.g. if any value is nan or inf.
+
+    Tuple[bool, Dict[str, torch.Tensor]]
+        If info is True, a dictionary with the keys "data" and "grad" will be returned.
+        The values are the non-finite values of the data and gradients.
+        Shape: ([N, D+1])
+        Where N is the number of non-finite values and D is the number of dimensions of the tensor.
+        Last column is the value itself.
+    """
+    non_finite = _is_non_finite(x, info=info)
+    value_info = None
+    if info:
+        value_info = non_finite[1]
+        non_finite = non_finite[0]
+    grad_non_finite = False
+    grad_info = None
+    if x.grad is not None:
+        grad_non_finite = _is_non_finite(x.grad, info=info)
+        if info:
+            grad_info = grad_non_finite[1]
+            grad_non_finite = grad_non_finite[0]
+    if not info:
+        return non_finite or grad_non_finite
+    combined_info = dict(
+        data=value_info,
+        grad=grad_info
+    )
+    return non_finite or grad_non_finite, combined_info
