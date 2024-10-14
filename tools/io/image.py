@@ -151,37 +151,40 @@ def load_image(
     """
     from PIL import Image
     base, ext = os.path.splitext(path)
-    if ext.lower() == ".npy":
-        return np.load(path)
-    elif ext.lower() in [".tiff", ".tif"]:
-        try:
-            import cv2
-            image = cv2.imread(path, cv2.IMREAD_UNCHANGED)
-            # Convert to RGB if 3 channel
-            if image.shape[-1] == 3:
-                image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+    try:
+        if ext.lower() == ".npy":
+            return np.load(path)
+        elif ext.lower() in [".tiff", ".tif"]:
+            try:
+                import cv2
+                image = cv2.imread(path, cv2.IMREAD_UNCHANGED)
+                # Convert to RGB if 3 channel
+                if image.shape[-1] == 3:
+                    image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+                if max_size is not None or size is not None:
+                    channel_added = False
+                    if len(image.shape) == 2:
+                        image = np.expand_dims(image, axis=-1)
+                        channel_added = True
+                    image = resize_image(image, max_size=max_size, size=size)
+                    if channel_added:
+                        image = np.squeeze(image, axis=-1)
+                return image
+            except ImportError as err:
+                raise ImportError(
+                    "OpenCV is not installed, but is required to load tiff images.")
+        else:
+            mask_pil = Image.open(path)
+            image = np.array(mask_pil)
             if max_size is not None or size is not None:
-                channel_added = False
-                if len(image.shape) == 2:
-                    image = np.expand_dims(image, axis=-1)
-                    channel_added = True
                 image = resize_image(image, max_size=max_size, size=size)
-                if channel_added:
-                    image = np.squeeze(image, axis=-1)
-            return image
-        except ImportError as err:
-            raise ImportError(
-                "OpenCV is not installed, but is required to load tiff images.")
-    else:
-        mask_pil = Image.open(path)
-        image = np.array(mask_pil)
-        if max_size is not None or size is not None:
-            image = resize_image(image, max_size=max_size, size=size)
-        if not load_metadata:
-            return image
-        # Load metadata
-        metadata = load_image_exif(mask_pil, safe_load=safe_metadata_load)
-        return image, metadata
+            if not load_metadata:
+                return image
+            # Load metadata
+            metadata = load_image_exif(mask_pil, safe_load=safe_metadata_load)
+            return image, metadata
+    except FileNotFoundError as err:
+        raise err
 
 
 def save_image(image: VEC_TYPE,
@@ -322,6 +325,21 @@ def resample(
 
 
 def compute_new_size(image_shape: Tuple[int, int], max_size: int) -> Tuple[int, int]:
+    """"Computes the new size of the image while maintaining aspect ratio.
+
+    Parameters
+    ----------
+    image_shape : Tuple[int, int]
+        Shape of the image in format (H, W)
+
+    max_size : int
+        Max size of the longest side of the image.
+
+    Returns
+    -------
+    Tuple[int, int]
+        New size of the image in format (H, W)
+    """
     aspect = image_shape[1] / image_shape[0]
     # Get if in landscape or portrait
     if image_shape[1] > image_shape[0]:
