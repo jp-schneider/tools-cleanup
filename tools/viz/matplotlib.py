@@ -838,9 +838,9 @@ def plot_as_image(data: VEC_TYPE,
             else:
                 _col_cmaps.append(cmap)
 
-            images.append(_col_images)
-            img_title.append(_col_titles)
-            cmaps.append(_col_cmaps)
+        images.append(_col_images)
+        img_title.append(_col_titles)
+        cmaps.append(_col_cmaps)
 
         rows += 1
 
@@ -974,7 +974,9 @@ def plot_as_image(data: VEC_TYPE,
 def plot_vectors(y: VEC_TYPE,
                  x: Optional[VEC_TYPE] = None,
                  label: Optional[Union[str, List[str]]] = None,
-                 mode: Literal["plot", "scatter"] = "plot") -> Figure:
+                 mode: Literal["plot", "scatter", "bar"] = "plot",
+                 ax: Optional[Axes] = None
+                 ) -> Figure:
     """Gets a matplotlib line figure with a plot of vectors.
 
     Parameters
@@ -1018,13 +1020,18 @@ def plot_vectors(y: VEC_TYPE,
                 "Number of labels should match the last dimension of the input data.")
     if x is None:
         x = np.arange(y.shape[0])
-    fig, ax = get_mpl_figure(1, 1)
+    if ax is None:
+        fig, ax = get_mpl_figure(1, 1)
+    else:
+        fig = ax.figure
 
     for i in range(y.shape[-1]):
         if mode == "plot":
             ax.plot(x, y[:, i], label=label[i])
         elif mode == "scatter":
             ax.scatter(x, y[:, i], label=label[i])
+        elif mode == "bar":
+            ax.bar(x, y[:, i], label=label[i])
         else:
             raise ValueError("Mode should be either plot or scatter.")
     ax.legend()

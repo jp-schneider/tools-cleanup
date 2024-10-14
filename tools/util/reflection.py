@@ -300,6 +300,7 @@ def propagate_init_kwargs(cls_or_obj: Type, type_in_mro: Type, kwargs: Dict[str,
         return kwargs, dict()
     return accepted_params, left_params
 
+
 def _get_nested_value(obj: Any, path: str, default: Any = NOTSET) -> Any:
     if obj is None and len(path) > 0:
         return PATHNONE
@@ -308,7 +309,8 @@ def _get_nested_value(obj: Any, path: str, default: Any = NOTSET) -> Any:
         return _get_nested_value(getattr(obj, path, default), rest, default)
     else:
         return getattr(obj, path, default)
-    
+
+
 def _set_nested_value(obj: Any, path: str, value: Any):
     if value == PATHNONE:
         return
@@ -321,11 +323,12 @@ def _set_nested_value(obj: Any, path: str, value: Any):
         else:
             setattr(obj, path, value)
 
+
 def set_nested_value(obj: Any, path: str, value: Any):
     """Set a nested value in an object by a path / chain of attributes to the value.
 
     Only supports setting attributes, not items in lists or dictionaries.
-    
+
     Parameters
     ----------
     obj : Any
@@ -338,11 +341,12 @@ def set_nested_value(obj: Any, path: str, value: Any):
     """
     _set_nested_value(obj, path, value)
 
+
 def get_nested_value(obj: Any, path: str, default: Any = NOTSET) -> Any:
     """Get a nested value in an object by a path / chain of attributes to the value.
 
     Only supports getting attributes, not items in lists or dictionaries.
-    
+
     Parameters
     ----------
     obj : Any
@@ -362,3 +366,30 @@ def get_nested_value(obj: Any, path: str, default: Any = NOTSET) -> Any:
         Returns NOTSET if the last attribute does not exist.
     """
     return _get_nested_value(obj, path, default)
+
+
+def check_package(package_name: str, silent: bool = True) -> Optional[ModuleType]:
+    """Checks if a package is installed.
+
+    Parameters
+    ----------
+    package_name : str
+        The name of the package to check.
+
+    silent : bool, optional
+        If set, no exception is raised if the package is not installed, by default True
+        If false, an ImportError or is raised if the package is not installed.
+
+    Returns
+    -------
+    Optional[ModuleType]
+        The module if the package is installed, otherwise None.
+
+    """
+    try:
+        module = importlib.import_module(package_name)
+        return module
+    except (ImportError, ModuleNotFoundError) as e:
+        if not silent:
+            raise e
+        return None

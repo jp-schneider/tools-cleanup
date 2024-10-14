@@ -156,7 +156,7 @@ class ProgressFactory:
             desc: Optional[str] = None,
             tag: Optional[str] = None,
             is_reusable: bool = False,
-            delay: float = 1.,
+            delay: float = 2.,
             **kwargs) -> ProgressElement:
         """Return a new or existing progress element.
 

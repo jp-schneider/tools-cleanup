@@ -15,8 +15,8 @@ from tools.error.argument_none_type_suggestion_error import ArgumentNoneTypeSugg
 from tools.util.path_tools import format_os_independent
 from tools.util.typing import DEFAULT, MISSING
 from tools.util.reflection import dynamic_import
-from traceback import extract_stack
-from types import TracebackType
+from traceback import FrameSummary, extract_stack
+from types import FrameType, TracebackType
 
 CAMEL_SEPERATOR_PATTERN = re.compile(
     r'((?<!^)(?<!_))((?=[A-Z][a-z])|((?<=[a-z])(?=[A-Z])))')
@@ -600,6 +600,26 @@ def raise_on_none(obj: Any, shadow_function_in_exception_trace: bool = True) -> 
             raise ex
     else:
         return obj
+
+
+def get_frame_summary(stack_position: int = 0) -> FrameSummary:
+    """Gets information of the current call stack.
+
+    Parameters
+    ----------
+    stack_position : int, optional
+        Position in the call to get the frame from, by default 0
+        0 is the call to get_frame_summary, 1 is the caller of the function, 2 is the caller of the caller and so on.
+
+    Returns
+    -------
+    FrameSummary
+        The frame summary object.
+    """
+
+    tb = extract_stack()
+    position = -1 - (stack_position + 1)
+    return tb[position]
 
 
 def _custom_traceback(stack_position: int = 0) -> TracebackType:

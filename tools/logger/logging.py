@@ -1,6 +1,7 @@
 import logging
 import sys
 from typing import Optional
+from tools.util.reflection import check_package
 from tools.util.package_tools import get_package_name, get_invoked_package_name, get_project_root_path
 
 ONE_TIME_MESSAGES = dict()
@@ -61,7 +62,7 @@ def basic_config(level: int = logging.INFO):
     fmt = logging.Formatter(_fmt, _date_fmt)
     root.handlers[0].setFormatter(fmt)
     # Set default for other loggers
-    if "matplotlib" in sys.modules:
+    if check_package("matplotlib"):
         logger = logging.getLogger("matplotlib")
         logger.setLevel(logging.WARNING)
 
