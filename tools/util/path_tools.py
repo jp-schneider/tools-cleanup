@@ -140,7 +140,12 @@ def read_directory(
             if parser is not None:
                 for key, value in item.items():
                     if key in parser:
-                        item[key] = parser[key](value)
+                        try:
+                            item[key] = parser[key](value)
+                        except Exception as err:
+                            raise ValueError(
+                                f"Could not parse value '{value}' for key '{key}' with parser '{parser[key]}' within File '{file}' using the pattern '{pattern}'."
+                            ) from err
             _p = format_os_independent(os.path.join(path, file))
             item[path_key] = _p
             res.append(item)
