@@ -449,7 +449,7 @@ def index_image_folder(path, filename_format=r"(?P<index>[0-9]+).png", return_di
 
 def load_image_stack(
         path: Optional[str] = None,
-        filename_format: str = r"(?P<index>[0-9]+).png",
+        filename_format: str = r"(?P<index>[0-9]+)\.((png)|(jpg))",
         max_size: Optional[int] = None,
         sorted_image_paths: Optional[List[int]] = None,
         progress_bar: bool = True,
