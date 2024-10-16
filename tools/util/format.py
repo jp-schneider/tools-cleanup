@@ -417,6 +417,9 @@ def parse_format_string(format_string: str,
         Every variable in the format string will be replaced by the corresponding value of the config.
         Format specified as {variable:formatter} can be used the format the variable with normal string formatting.
 
+        It also supports Environment variables, which can be used with {ENV:variable[:formatter]}.
+        If the environment variable does not exist, an ValueError will be raised.
+        
         Every property of the obj can be used as a variable, in addition to `index_variable` which is the index of the obj in the provided list.
 
     obj_list : List[Any]
@@ -438,14 +441,16 @@ def parse_format_string(format_string: str,
     List[str]
         Formatted strings.
     """
-    pattern = r"\{(?P<variable>[A-z0-9\_]+)(?P<formatter>:[0-9A-z\.\,]+)?\}"
+    pattern = re.compile(r"\{((?P<localizer>(ENV)|(env))\:)?(?P<variable>[A-z0-9\_]+)(?P<formatter>:[0-9A-z\.\,]+)?\}")
+    
+    matches = [m.groupdict() for m in pattern.finditer(format_string)]
     # Check which variables should included in the format string
     variables = re.findall(pattern, format_string)
 
     keys = [variable[0] for variable in variables]
     formats = [variable[1] if len(
         variable) > 1 else None for variable in variables]
-    key_formats = dict(zip(keys, formats))
+    loc_key_formats = [(x.get("localizer", None), x.get("variable"), x.get("formatter", None)) for x in matches]
 
     if additional_variables is None:
         additional_variables = dict()
@@ -460,18 +465,28 @@ def parse_format_string(format_string: str,
     results = []
     for i, obj in enumerate(obj_list):
         name = format_string
-        for key, format in key_formats.items():
+        for loc, key, format in loc_key_formats:
             value = MISSING
             if index_variable is not None and key == index_variable:
                 value = i + index_offset
             else:
-                try:
-                    value = getattr(obj, key)
-                except AttributeError:
-                    if isinstance(obj, dict) and key in obj:
-                        value = obj[key]
-                    elif key in additional_variables:
-                        value = additional_variables[key]
+                if loc is not None:
+                    if loc.lower() != "env":
+                        raise ValueError(f"Unknown localizer: {loc} for key: {key} in format string: {format_string}")
+                    # Try to find the value in the environment
+                    value = os.environ.get(key, MISSING)
+                    if value == MISSING:
+                        raise ValueError(f"Environment variable '{key}' does not exist, but was specified in the format string {format_string}.")
+                else:
+                    # Default localizers
+                    try:
+                        value = getattr(obj, key)
+                    except AttributeError:
+                        if isinstance(obj, dict) and key in obj:
+                            value = obj[key]
+                        elif key in additional_variables:
+                            value = additional_variables[key]
+            
             if value == MISSING:
                 raise AttributeError(
                     f"Object does not have a property: {key}")
@@ -481,8 +496,13 @@ def parse_format_string(format_string: str,
 
             _formatted_value = _format_value(
                 value, format=format, default_formatters=default_formatters)
-
-            name = name.replace("{" + key + format + "}", _formatted_value)
+            if format is None:
+                format = ""
+            if loc is None:
+                loc = ""
+            else:
+                loc = loc + ":"
+            name = name.replace("{" + loc + key + format + "}", _formatted_value)
         results.append(name)
 
     return results

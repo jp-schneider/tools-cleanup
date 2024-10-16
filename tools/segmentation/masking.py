@@ -1,6 +1,7 @@
 from matplotlib.colors import to_rgba
 from typing import Any, Dict, List, Optional, Literal, Tuple, Union
 from tools.util.format import parse_enum
+from tools.util.progress_factory import ProgressFactory
 from tools.util.reflection import class_name
 from tools.util.typing import VEC_TYPE
 import numpy as np
@@ -419,7 +420,7 @@ def masks_to_inpaint_video(
         images: VEC_TYPE,
         masks: VEC_TYPE,
         video_path: Optional[str] = None,
-        mask_alpha: float = 0.5,
+        mask_alpha: float = 0.7,
         cmap: Optional[str] = None,
         fps: float = 24.0
 ) -> str:
@@ -664,7 +665,9 @@ def load_channel_masks(
     filename_pattern: str = r"img_(?P<index>[0-9]+)_ov_(?P<ov_index>[0-9]+).png",
     output_format: Literal['channel', 'value'] = 'channel',
     overlapping_mask_paths: Optional[Dict[int, List[str]]] = None,
-    size: Optional[Tuple[int, int]] = None
+    size: Optional[Tuple[int, int]] = None,
+    progress_bar: bool = False,
+    progress_factory: Optional[ProgressFactory] = None
 ) -> Union[List[np.ndarray], Tuple[np.ndarray, np.ndarray]]:
     """Loads overlapping value masks from a directory.
 
@@ -698,15 +701,26 @@ def load_channel_masks(
             1. The channel mask of shape [..., B x ] H x W x C
             2. The object values of shape (C, ) corresponding to the channel mask index
     """
+    if progress_bar:
+        if progress_factory is None:
+            progress_factory = ProgressFactory()
+
     if overlapping_mask_paths is None:
         overlapping_mask_paths = index_value_masks_folder(
             mask_directory, filename_pattern)
 
     # Read all masks
     overlapping_masks = {k: [] for k in overlapping_mask_paths}
+    bar = None
+    if progress_bar:
+        bar = progress_factory.bar(total=sum([len(x) for x in overlapping_mask_paths.values()]), desc="Loading masks", 
+                                   tag="LOADING_MASKS",
+                                   is_reusable=True)
     for ov_index, path_dict_list in overlapping_mask_paths.items():
         for p in path_dict_list:
             overlapping_masks[ov_index].append(load_mask(p, size=size))
+            if progress_bar:
+                bar.update(1)
     # Stack masks
     for k in overlapping_masks:
         overlapping_masks[k] = np.stack(overlapping_masks[k], axis=0)

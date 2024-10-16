@@ -4,12 +4,15 @@ from tqdm.auto import tqdm
 from tools.util.path_tools import filer
 from tools.util.numpy import numpyify_image
 import sys
+from tools.util.typing import DEFAULT
+import os
 
 @filer(default_ext='mp4')
 def write_mp4(frames: np.ndarray,
               path: str = 'test.mp4',
               fps: float = 24.0,
-              progress_bar: bool = False):
+              progress_bar: bool = False,
+              codec: str = DEFAULT):
     """Writes the frames to a video file.
 
     Parameters
@@ -22,7 +25,10 @@ def write_mp4(frames: np.ndarray,
         Fps in the video, by default 24.0
     progress_bar : bool, optional
         Show progress bar, by default False
-
+    codec : str, optional
+        Codec to use for the video, by default DEFAULT
+        If not set, will use the environment variable VIDEO_CODEC or 'avc1' if not set.
+        
     Raises
     ------
     ValueError
@@ -48,7 +54,10 @@ def write_mp4(frames: np.ndarray,
         frames = frames - frames.min()
         frames = (frames / frames.max() * 255).astype(np.uint8)
 
-    fourcc = cv2.VideoWriter_fourcc(*'avc1')
+    if codec == DEFAULT:
+        codec = os.environ.get('VIDEO_CODEC', 'avc1')
+
+    fourcc = cv2.VideoWriter_fourcc(*codec)
     video = cv2.VideoWriter(path, fourcc, fps, (width, height))
 
     bar = None

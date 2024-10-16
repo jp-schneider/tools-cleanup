@@ -449,7 +449,7 @@ def index_image_folder(path, filename_format=r"(?P<index>[0-9]+).png", return_di
 
 def load_image_stack(
         path: Optional[str] = None,
-        filename_format: str = r"(?P<index>[0-9]+).png",
+        filename_format: str = r"(?P<index>[0-9]+)\.((png)|(jpg))",
         max_size: Optional[int] = None,
         sorted_image_paths: Optional[List[int]] = None,
         progress_bar: bool = True,
@@ -484,9 +484,10 @@ def load_image_stack(
 
     Returns
     -------
-    np.ndarray
+    Optional[np.ndarray]
         Image stack in shape B x H x W x C.
         B order is index order ascending.
+        If no images are found, None will be returned.
     """
     if progress_bar and progress_factory is None:
         progress_factory = ProgressFactory()
@@ -496,6 +497,9 @@ def load_image_stack(
                 "Path must be specified if sorted_image_paths is None")
         sorted_image_paths = index_image_folder(
             path, filename_format=filename_format)
+
+    if len(sorted_image_paths) == 0:
+        return None
 
     img = load_image(sorted_image_paths[0], max_size=max_size, **kwargs)
     images = np.zeros((len(sorted_image_paths), *img.shape), dtype=img.dtype)
