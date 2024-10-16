@@ -397,7 +397,7 @@ def parse_color_rgb(color: Any) -> np.ndarray:
         return np.array(trgb)
 
 
-def parse_color_rgba(color: Any) -> np.ndarray:
+def parse_color_rgba(color: Any, alpha: float = 1.) -> np.ndarray:
     """Parses a color to RGBA values.
 
     Parameters
@@ -420,10 +420,10 @@ def parse_color_rgba(color: Any) -> np.ndarray:
                 color = color / 255
             return color
         else:
-            trgb = to_rgba(color)
+            trgb = to_rgba(color, alpha=alpha)
             return np.array(trgb)
     else:
-        trgb = to_rgba(color)
+        trgb = to_rgba(color, alpha=alpha)
         return np.array(trgb)
 
 
@@ -618,15 +618,25 @@ def should_use_logarithm(x: np.ndarray, magnitudes: int = 2, allow_zero: bool = 
 
 def preserve_legend(ax: Axes,  # type: ignore
                     patches: List[Patch],  # type: ignore
+                    create_if_not_exists: bool = True,
                     **kwargs):
     """Checks if the axis has a legend and appends the patches to the legend.
-    If not, it creates a new legend with the patches.
+    If not, it creates a new legend with the patches if create_if_not_exists is True.
 
     Parameters
     ----------
     ax : Axes
         The axis to check for the legend.
-    """    """"""
+
+    patches : List[Patch]
+        List of patches to append to the legend.
+
+    create_if_not_exists : bool, optional
+        If the legend should be created if it does not exist, by default True
+
+    **kwargs
+        Additional kwargs for the legend
+    """
     if ax.get_legend() is not None:
         lgd = ax.get_legend()
         handles = list(lgd.legend_handles)
@@ -635,7 +645,8 @@ def preserve_legend(ax: Axes,  # type: ignore
         labels.extend([p.get_label() for p in patches])
         ax.legend(handles=handles, labels=labels, **kwargs)
     else:
-        ax.legend(handles=patches, **kwargs)
+        if create_if_not_exists:
+            ax.legend(handles=patches, **kwargs)
 
 
 def create_alpha_colormap(
@@ -1290,11 +1301,15 @@ def plot_mask(image: VEC_TYPE,
               axes_description: bool = False,
               image_cmap: Optional[Any] = None,
               sort: bool = False,
+              reverse: bool = True,
+              inpaint_indices: bool = False,
+              legend: bool = DEFAULT,
               **kwargs) -> Figure:  # type: ignore
     import matplotlib.patches as mpatches
     from tools.transforms import ToNumpyImage
     from matplotlib.colors import to_rgba, to_rgb
     from collections.abc import Iterable
+    from tools.io.image import put_text
 
     to_numpy = ToNumpyImage()
 
@@ -1333,7 +1348,9 @@ def plot_mask(image: VEC_TYPE,
     if sort:
         # Order masks by size, descending
         mask_sizes = np.sum(channel_mask, axis=(0, 1))
-        order = np.argsort(mask_sizes)[::-1]
+        order = np.argsort(mask_sizes)
+        if reverse:
+            order = order[::-1]
         channel_mask = channel_mask[..., order]
         if labels is not None:
             labels = [labels[i] for i in order]
@@ -1353,8 +1370,9 @@ def plot_mask(image: VEC_TYPE,
     if isinstance(color, (list, tuple)) and multi_class:
         colors = color
     else:
-        colors = [color] if not multi_class else plt.get_cmap(
-            cmap)(range(channel_mask.shape[-1]))
+        cmap = plt.get_cmap(cmap)
+        colors = [color] if not multi_class else cmap(
+            [x % cmap.N for x in range(channel_mask.shape[-1])])
 
     m_inv = np.ones(mask.shape[:-1])
 
@@ -1376,6 +1394,23 @@ def plot_mask(image: VEC_TYPE,
             c_img = np.zeros((*m.shape, 4))
             c_img[:, :, :] = _color
             c_img[:, :, -1] = c_img[:, :, -1] * m
+            if inpaint_indices:
+                if np.any(m):
+                    com = np.argwhere(m).mean(axis=0).round().astype(int)[::-1]
+                    background_color = "white" if np.mean(
+                        _color[:3]) < 0.5 else "black"
+                    stroke_color = "black" if np.mean(
+                        _color[:3]) < 0.5 else "white"
+                    inp = put_text(c_img, f"{label}",
+                                   placement=None,
+                                   position=com,
+                                   vertical_alignment='center',
+                                   horizontal_alignment='center',
+                                   background_color=background_color,
+                                   background_stroke_color=stroke_color,
+                                   background_stroke=1,
+                                   color=_color)
+                    c_img = inp
             ax.imshow(c_img)
         if label is not None:
             patches.append(mpatches.Patch(color=colors[i], label=label))
@@ -1393,8 +1428,11 @@ def plot_mask(image: VEC_TYPE,
         _colors.clear()
         _colors.extend(colors)
 
+    if legend == DEFAULT:
+        legend = len(patches) > 0
+
     if patches is not None and len(patches) > 0:
-        preserve_legend(ax, patches)
+        preserve_legend(ax, patches, create_if_not_exists=legend)
 
     origin_marker_color = kwargs.get('origin_marker_color', None)
     origin_marker_opposite_color = kwargs.get(

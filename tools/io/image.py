@@ -706,7 +706,7 @@ def put_text(
     placement : Optional[str], optional
         Automatic placement for the text. In format [vertical]-[horizontal], by default "top-center"
         Can be top, center, bottom for vertical and left, center, right for horizontal.
-        Takes precedence over position an alignment if specified.
+        Takes precedence over position and alignment if specified.
 
     position : Optional[Tuple[int, int]], optional
         The Text position in image coordinates (x, y) ([0, width), [0, height)), by default None
@@ -760,15 +760,21 @@ def put_text(
         The image with the rendered text. Will be in the shape H x W x C.
         The dtype will be np.uint8.
     """
-    from tools.viz.matplotlib import parse_color_rgb
+    from tools.viz.matplotlib import parse_color_rgb, parse_color_rgba
     from matplotlib.pyplot import figure
+    has_alpha = False
+    color_parser = parse_color_rgb
+    if img.shape[-1] == 4:
+        has_alpha = True
+        color_parser = parse_color_rgba
+
     if background_stroke_color is not None:
-        background_stroke_color = (parse_color_rgb(
+        background_stroke_color = (color_parser(
             background_stroke_color) * 255).astype(np.uint8).tolist()
     if background_color is not None:
-        background_color = (parse_color_rgb(background_color)
+        background_color = (color_parser(background_color)
                             * 255).astype(np.uint8).tolist()
-    color = (parse_color_rgb(color) * 255).astype(np.uint8).tolist()
+    color = (color_parser(color) * 255).astype(np.uint8).tolist()
     numpyify_image = ToNumpyImage(output_dtype=np.uint8)
     img = numpyify_image(img)
 
@@ -778,8 +784,8 @@ def put_text(
     if img.shape[-1] == 1:
         img = np.repeat(img, 3, axis=0)
 
-    if img.shape[-1] == 4:
-        img = rgba_to_rgb(img, (255, 255, 255))
+        # img = rgba_to_rgb(img, (255, 255, 255))
+        # Assure all colors have alpha channel
 
     if placement is not None:
         position = position or (img.shape[1] // 2, img.shape[0] // 2)
