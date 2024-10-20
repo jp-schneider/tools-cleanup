@@ -178,7 +178,7 @@ def split_transformation_matrix(_input: VEC_TYPE) -> Tuple[torch.Tensor, torch.T
     Returns
     -------
     Tuple[torch.Tensor, torch.Tensor]
-        The position (3, ) and orientation matrix (3, 3).
+        The position (2, ) and orientation matrix (2, 2).
 
     Raises
     ------
@@ -237,20 +237,13 @@ def component_rotation_matrix(angle: Optional[NUMERICAL_TYPE] = None,
     if mode == "deg":
         angle = torch.deg2rad(angle)
 
-    rot = torch.tensor(np.identity(3), dtype=dtype,
+    rot = torch.eye(3, dtype=dtype,
                        device=device, requires_grad=requires_grad)
-    if dtype is None:
-        rot = rot.to(dtype=torch.float32)  # Default dtype for torch.tensor
     if angle != 0.:
-        r_x = torch.zeros((3, 3), dtype=rot.dtype,
-                          device=rot.device, requires_grad=rot.requires_grad)
-        r_x[0, 0] = 1
-        r_x[1, 1] = torch.cos(angle)
-        r_x[1, 2] = -torch.sin(angle)
-        r_x[2, 1] = torch.sin(angle)
-        r_x[2, 2] = torch.cos(angle)
-        r_x[3, 3] = 1
-        return r_x
+        rot[0, 0] = torch.cos(angle)
+        rot[0, 1] = -torch.sin(angle)
+        rot[1, 0] = torch.sin(angle)
+        rot[1, 1] = torch.cos(angle)
     return rot
 
 
@@ -278,10 +271,8 @@ def component_transformation_matrix(x: Optional[NUMERICAL_TYPE] = None,
     torch.Tensor
         Transformation matrix.
     """
-    mat = torch.tensor(np.identity(3), dtype=dtype,
+    mat = torch.eye(3, dtype=dtype,
                        device=device, requires_grad=requires_grad)
-    if dtype is None:
-        mat = mat.to(dtype=torch.float32)  # Default dtype for torch.tensor
     mat[0, 2] = x if x is not None else 0.
     mat[1, 2] = y if y is not None else 0.
     return mat
@@ -311,10 +302,8 @@ def component_scale_matrix(x: Optional[NUMERICAL_TYPE] = None,
     torch.Tensor
         Transformation matrix.
     """
-    mat = torch.tensor(np.identity(3), dtype=dtype,
+    mat = torch.eye(3, dtype=dtype,
                        device=device, requires_grad=requires_grad)
-    if dtype is None:
-        mat = mat.to(dtype=torch.float32)  # Default dtype for torch.tensor
     mat[0, 0] = x if x is not None else 0.
     mat[1, 1] = y if y is not None else 0.
     return mat
@@ -344,10 +333,8 @@ def transformation_matrix(vector: VEC_TYPE,
     """
     vector = tensorify(vector, dtype=dtype, device=device,
                        requires_grad=requires_grad)
-    mat = torch.tensor(np.identity(3), dtype=dtype,
+    mat = torch.eye(3, dtype=dtype,
                        device=device, requires_grad=requires_grad)
-    if dtype is None:
-        mat = mat.to(dtype=torch.float32)  # Default dtype for torch.tensor
     mat[0:2, 2] = vector[0:2]
     return mat
 
@@ -376,7 +363,7 @@ def scale_matrix(vector: VEC_TYPE,
     """
     vector = tensorify(vector, dtype=dtype, device=device,
                        requires_grad=requires_grad)
-    mat = torch.tensor(np.identity(3), dtype=dtype,
+    mat = torch.eye(3, dtype=dtype,
                        device=device, requires_grad=requires_grad)
     mat[0, 0] = vector[0]
     mat[1, 1] = vector[1]

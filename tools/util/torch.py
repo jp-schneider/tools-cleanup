@@ -1,3 +1,4 @@
+from collections.abc import Generator
 import decimal
 from functools import wraps
 import inspect
@@ -1279,9 +1280,148 @@ def is_non_finite(x: torch.Tensor, info: bool = False) -> Union[bool, Tuple[bool
     return non_finite or grad_non_finite, combined_info
 
 
-@batched_generator_exec(['t', dict(name='other_arg', batch_dim=1)], default_batch_size=3, default_multiprocessing=True)
-def some_op(resolution: tuple, t: torch.Tensor, other_arg: torch.Tensor) -> torch.Tensor:
-    import torch
-    import time
-    time.sleep(5)
-    return torch.rand(*resolution).unsqueeze(0).repeat(len(t), 1, 1)
+def buffered(gen: Generator, 
+           gather_fnc: Callable[[Any], torch.Tensor],
+           execute_fnc: Callable[[torch.Tensor], torch.Tensor],
+           assemble_fnc: Callable[[Any, torch.Tensor], Any],
+           buffer_size: int = -1) -> Generator[Any, None, None]:
+    """Bufferes values of a generator and applies a function to the buffered values.
+    Will itself return a generator that yields the assembled output of the execution.
+
+    Applicable to perform costly operations on a batch of data.
+
+    Parameters
+    ----------
+    gen : Generator
+        The generator function to which the execution will be applied.
+    
+    gather_fnc : Callable[[Any], Union[torch.Tensor, Generator[torch.Tensor, None, None]]]
+        The function that extracts the data from the generator output and converts it to a tensor.
+        
+        Parameters
+        ----------
+        data : Any
+            The data output of the generator.
+
+        Returns
+        -------
+        Union[torch.Tensor, Generator[torch.Tensor, None, None]]
+            The gathered tensor of shape (BI, ...).
+            Or a generator that yields tensors of shape (BI, ...).
+
+    execute_fnc : Callable[[torch.Tensor], torch.Tensor]
+        The function that will be applied to the gathered batched data.
+
+        Parameters
+        -------
+
+        tensor : torch.Tensor
+            The gathered tensor of shape (B, ...).
+            Where B is the batch size / a "cated" version of BI up to the batch size length.. B might be stacked out of multiple BI elements from the generator.
+
+        Returns
+        -------
+        torch.Tensor
+            The executed tensor of shape (B, ...).
+            
+
+        Should accept a tensor of shape (B, ...) and return a tensor of shape (B, ...).
+        
+    
+    assemble_fnc : Callable[[Any, torch.Tensor, int], Any]
+        The function that assembles the output of the execution back to the desired output format.
+
+        Parameters
+        ----------
+        data : Any
+            The original data output of the generator.
+
+        tensor : torch.Tensor
+            The executed tensor of shape (BI, ...).
+            Where BI is the data accociated with the original data output, transformed by gather_fnc and execute_fnc.
+
+        index : int
+            The index of the item in the original data if execute_fnc was a generator itself. Otherwise 0.
+
+        Returns
+        -------
+        Any
+            The assembled output of the execution.
+            Each will be yielded by the generator.
+    
+    buffer_size : int, optional
+        The size of the buffer, by default -1.
+        -1 means a buffer of infinite size, the generator is fully consumed before the execution of execute_fnc.
+
+    Yields
+    -------
+    Any
+        The assembled output of the generator.
+    """
+
+    # Retrieve the first batch of data
+    _current_data = []
+    _current_buffer = []
+    _current_data_gen_index = []
+    _current_item_shape = []
+    _current_buffer_size = 0
+
+    def process_items(
+            _data, 
+            _data_gen_index,
+            _buffer,
+            _item_shape,
+            ):
+        b = torch.cat(_buffer, dim=0)
+        num_batches = 1
+        if buffer_size > 0:
+            num_batches = math.ceil(b.shape[0] / buffer_size)
+        res = []
+        for i in range(num_batches):
+            start = i * buffer_size
+            end = min(start + buffer_size, b.shape[0])
+            exec_b = execute_fnc(b[start:end])
+            res.append(exec_b)
+        res = torch.cat(res, dim=0)
+        start = 0
+        for i, (org_data, idx, shp) in enumerate(zip(_data, _data_gen_index, _item_shape)):
+            item_start = start
+            item_end = start + shp[0]
+            start = item_end
+            yield assemble_fnc(org_data, res[item_start:item_end], idx)
+
+    for i, data in enumerate(gen):
+        
+        extracted_data = gather_fnc(data)
+        if isinstance(extracted_data, torch.Tensor):
+            _current_data.append(data)
+            _current_buffer.append(extracted_data)
+            _current_data_gen_index.append(0)
+            shp = extracted_data.shape
+            _current_item_shape.append(shp)
+            _current_buffer_size += shp[0]
+        elif isinstance(extracted_data, Generator):
+            for j, d in enumerate(extracted_data):
+                _current_data.append(data)
+                _current_data_gen_index.append(j)
+                _current_buffer.append(d)
+                shp = d.shape
+                _current_item_shape.append(shp)
+                _current_buffer_size += shp[0]
+
+        if buffer_size > 0 and _current_buffer_size >= buffer_size:
+            for item in process_items(_current_data, 
+                                      _current_data_gen_index,
+                                      _current_buffer, _current_item_shape):
+                yield item
+            # Reset the buffer
+            _current_data = []
+            _current_data_gen_index = []
+            _current_buffer = []
+            _current_item_shape = []
+            _current_buffer_size = 0
+    
+    # Process the remaining data
+    if len(_current_data) > 0:
+        for item in process_items(_current_data, _current_data_gen_index, _current_buffer, _current_item_shape):
+            yield item

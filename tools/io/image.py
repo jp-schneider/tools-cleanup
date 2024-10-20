@@ -324,7 +324,7 @@ def resample(
         return image[::skips, ::skips, :]
 
 
-def compute_new_size(image_shape: Tuple[int, int], max_size: int) -> Tuple[int, int]:
+def compute_new_size(image_shape: Tuple[int, int], max_size: Optional[int] = None, min_size : Optional[int] = None) -> Tuple[int, int]:
     """"Computes the new size of the image while maintaining aspect ratio.
 
     Parameters
@@ -332,8 +332,13 @@ def compute_new_size(image_shape: Tuple[int, int], max_size: int) -> Tuple[int, 
     image_shape : Tuple[int, int]
         Shape of the image in format (H, W)
 
-    max_size : int
+    max_size : Optional[int]
         Max size of the longest side of the image.
+        Mutually exclusive with min_size.
+
+    min_size : Optional[int]
+        Min size of the shortest side of the image.
+        Mutually exclusive with max_size.
 
     Returns
     -------
@@ -342,12 +347,22 @@ def compute_new_size(image_shape: Tuple[int, int], max_size: int) -> Tuple[int, 
     """
     aspect = image_shape[1] / image_shape[0]
     # Get if in landscape or portrait
-    if image_shape[1] > image_shape[0]:
-        # Landscape
-        new_size = (int(max_size / aspect), max_size)
+    if max_size is not None:
+        if image_shape[1] > image_shape[0]:
+            # Landscape
+            new_size = (int(max_size / aspect), max_size)
+        else:
+            # Portrait
+            new_size = (max_size, int(max_size * aspect))
+    elif min_size is not None:
+        if image_shape[1] > image_shape[0]:
+            # Landscape
+            new_size = (min_size, int(min_size * aspect))
+        else:
+            # Portrait
+            new_size = (int(min_size / aspect), min_size)
     else:
-        # Portrait
-        new_size = (max_size, int(max_size * aspect))
+        raise ValueError("Either max_size or min_size should be provided.")
     return new_size
 
 

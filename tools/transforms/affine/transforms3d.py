@@ -918,22 +918,6 @@ def compute_ray_plane_intersections(
 
     B = plane_origins.shape[0]
 
-    # # Calculate the dot product between the ray directions and plane normals
-    # dot_products = torch.matmul(ray_directions, plane_normals.T)
-
-    # # Find indices where the dot product is non-zero (i.e., the ray is not parallel to the plane)
-    # nonzero_indices = torch.abs(dot_products) > eps
-
-    # # Calculate the intersection points for non-parallel rays
-    # intersection_points = torch.zeros((B, N, 3))
-    # intersection_points[nonzero_indices[:, 0], nonzero_indices[:, 1]] = (
-    #     (torch.matmul(ray_origins[nonzero_indices[:, 1]], plane_normals[nonzero_indices[:, 0], :]) - torch.matmul(plane_origins[nonzero_indices[:, 0], :], plane_normals[nonzero_indices[:, 0], :]))
-    #     / dot_products[nonzero_indices[:, 0], nonzero_indices[:, 1]]
-    # ) * ray_directions[nonzero_indices[:, 1]] + ray_origins[nonzero_indices[:, 1]]
-
-    # # Set intersection points to NaN for parallel rays
-    # intersection_points[dot_products == 0] = float('nan')
-
     # Plane normals to ray_dims
     plane_n = plane_normals  # (B, 3)
     plane_p = plane_origins  # (B, 3)
