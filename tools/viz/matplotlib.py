@@ -13,7 +13,7 @@ from tools.util.format import parse_format_string
 from tools.util.numpy import numpyify_image, numpyify
 from tools.util.torch import VEC_TYPE
 from tools.transforms.numpy.min_max import MinMax
-
+from tools.logger.logging import logger
 try:
     import matplotlib.pyplot as plt
     from matplotlib.axes import Axes
@@ -797,20 +797,41 @@ def plot_as_image(data: VEC_TYPE,
     from matplotlib.axes import Subplot
     import matplotlib as mpl
     from mpl_toolkits.axes_grid1 import make_axes_locatable
+    from tools.util.numpy import flatten_batch_dims as np_flatten_batch_dims
 
     imshow_kw = imshow_kw or dict()
+
+    def flatten_batch(x):
+        if len(x.shape) > 4:
+            if len(d.shape) > 4:
+                logger.warning(
+                    "Reshaping data to 2D for plotting. Data has more than 4 dimensions.")
+            if "torch" in sys.modules:
+                from tools.util.torch import flatten_batch_dims
+                if isinstance(x, Tensor):
+                    return flatten_batch_dims(x, -4)[0]
+            if isinstance(x, np.ndarray):
+                from tools.util.numpy import flatten_batch_dims
+                return flatten_batch_dims(x, -4)
+            else:
+                raise ValueError("Data type not supported. Got: " + str(type(x)))
+        return x
 
     if "torch" in sys.modules:
         from torch import Tensor
         if isinstance(data, Tensor):
             data = data.detach().cpu()
-            if len(data.shape) == 4:
+            if len(data.shape) >= 4:
+                data = flatten_batch(data)
                 data = [data[i] for i in range(data.shape[0])]
+
     if isinstance(data, np.ndarray):
-        if len(data.shape) == 4:
+        if len(data.shape) >= 4:
+            data = flatten_batch(data)
             data = [data[i] for i in range(data.shape[0])]
 
     input_data = []
+    
     if isinstance(data, (List, tuple)):
         for d in data:
             input_data.append(numpyify_image(d))
@@ -854,6 +875,21 @@ def plot_as_image(data: VEC_TYPE,
         cmaps.append(_col_cmaps)
 
         rows += 1
+    
+    images = np.stack(images, axis=0)
+    img_title = np.stack(img_title, axis=0)
+    cmaps = np.stack(cmaps, axis=0)
+
+    if cols == 1:
+        # If just one column, and images are not in landscape mode, flip rows and cols
+        if len(images) > 1 and images[0][0].shape[0] > images[0][0].shape[1]:
+            temp = rows
+            rows = cols
+            cols = temp
+            images = images.swapaxes(0, 1)
+            img_title = img_title.swapaxes(0, 1)
+            cmaps = cmaps.swapaxes(0, 1)
+
 
     if axes is None:
         fig, axes = get_mpl_figure(
