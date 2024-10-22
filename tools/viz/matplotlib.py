@@ -745,7 +745,8 @@ def plot_as_image(data: VEC_TYPE,
                   colorbar: bool = False,
                   colorbar_tick_format: str = None,
                   value_legend: bool = False,
-                  cmap: Optional[str] = None,
+                  cmap: Optional[str] = "viridis",
+                  phase_cmap: Optional[str] = "twilight",
                   axes: Optional[np.ndarray] = None,
                   interpolation: Optional[str] = None,
                   tight: bool = False,
@@ -824,28 +825,34 @@ def plot_as_image(data: VEC_TYPE,
     img_title = []
     cmaps = []
 
-    for data in input_data:
+    for i, data in enumerate(input_data):
         title_num_str = ""
         _col_images = []
         _col_titles = []
         _col_cmaps = []
+        v_name = "?"
+        if isinstance(variable_name, (List, tuple)):
+            if len(variable_name) > i:
+                v_name = variable_name[i]
+        else:
+            v_name = variable_name
 
         if len(input_data) > 1:
             title_num_str = f"{rows + 1}: "
         if 'complex' in str(data.dtype):
             cols = 2
-            _col_titles.append(f"{title_num_str}|{variable_name}|")
+            _col_titles.append(f"{title_num_str}|{v_name}|")
             _col_images.append(np.abs(data))
-            _col_cmaps.append("gray")
+            _col_cmaps.append(cmap)
 
-            _col_titles.append(f"{title_num_str}angle({variable_name})")
+            _col_titles.append(f"{title_num_str}angle({v_name})")
             _col_images.append(np.angle(data))
-            _col_cmaps.append("twilight")
+            _col_cmaps.append(phase_cmap)
         else:
-            _col_titles.append(title_num_str + variable_name)
+            _col_titles.append(title_num_str + v_name)
             _col_images.append(data)
             if cmap is None:
-                _col_cmaps.append("gray")
+                _col_cmaps.append('viridis')
             else:
                 _col_cmaps.append(cmap)
 
@@ -986,7 +993,8 @@ def plot_vectors(y: VEC_TYPE,
                  x: Optional[VEC_TYPE] = None,
                  label: Optional[Union[str, List[str]]] = None,
                  mode: Literal["plot", "scatter", "bar"] = "plot",
-                 ax: Optional[Axes] = None
+                 ax: Optional[Axes] = None,
+                 bar_width: Optional[float] = None
                  ) -> Figure:
     """Gets a matplotlib line figure with a plot of vectors.
 
@@ -1036,13 +1044,19 @@ def plot_vectors(y: VEC_TYPE,
     else:
         fig = ax.figure
 
+    if bar_width is None:
+        bar_width = np.amin((x[1:] - x[:-1])) / (1.5 * y.shape[-1])
+
     for i in range(y.shape[-1]):
         if mode == "plot":
             ax.plot(x, y[:, i], label=label[i])
         elif mode == "scatter":
             ax.scatter(x, y[:, i], label=label[i])
         elif mode == "bar":
-            ax.bar(x, y[:, i], label=label[i])
+            position = x + i * bar_width
+            # Center the bars
+            position = position - bar_width * y.shape[-1] / 2
+            ax.bar(position, y[:, i], width=bar_width, label=label[i])
         else:
             raise ValueError("Mode should be either plot or scatter.")
     ax.legend()
