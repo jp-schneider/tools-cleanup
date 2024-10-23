@@ -13,7 +13,7 @@ from tools.util.format import parse_format_string
 from tools.util.numpy import numpyify_image, numpyify
 from tools.util.torch import VEC_TYPE
 from tools.transforms.numpy.min_max import MinMax
-
+from tools.logger.logging import logger
 try:
     import matplotlib.pyplot as plt
     from matplotlib.axes import Axes
@@ -745,7 +745,8 @@ def plot_as_image(data: VEC_TYPE,
                   colorbar: bool = False,
                   colorbar_tick_format: str = None,
                   value_legend: bool = False,
-                  cmap: Optional[str] = None,
+                  cmap: Optional[str] = "viridis",
+                  phase_cmap: Optional[str] = "twilight",
                   axes: Optional[np.ndarray] = None,
                   interpolation: Optional[str] = None,
                   tight: bool = False,
@@ -797,20 +798,41 @@ def plot_as_image(data: VEC_TYPE,
     from matplotlib.axes import Subplot
     import matplotlib as mpl
     from mpl_toolkits.axes_grid1 import make_axes_locatable
+    from tools.util.numpy import flatten_batch_dims as np_flatten_batch_dims
 
     imshow_kw = imshow_kw or dict()
+
+    def flatten_batch(x):
+        if len(x.shape) > 4:
+            if len(d.shape) > 4:
+                logger.warning(
+                    "Reshaping data to 2D for plotting. Data has more than 4 dimensions.")
+            if "torch" in sys.modules:
+                from tools.util.torch import flatten_batch_dims
+                if isinstance(x, Tensor):
+                    return flatten_batch_dims(x, -4)[0]
+            if isinstance(x, np.ndarray):
+                from tools.util.numpy import flatten_batch_dims
+                return flatten_batch_dims(x, -4)
+            else:
+                raise ValueError("Data type not supported. Got: " + str(type(x)))
+        return x
 
     if "torch" in sys.modules:
         from torch import Tensor
         if isinstance(data, Tensor):
             data = data.detach().cpu()
-            if len(data.shape) == 4:
+            if len(data.shape) >= 4:
+                data = flatten_batch(data)
                 data = [data[i] for i in range(data.shape[0])]
+
     if isinstance(data, np.ndarray):
-        if len(data.shape) == 4:
+        if len(data.shape) >= 4:
+            data = flatten_batch(data)
             data = [data[i] for i in range(data.shape[0])]
 
     input_data = []
+    
     if isinstance(data, (List, tuple)):
         for d in data:
             input_data.append(numpyify_image(d))
@@ -824,28 +846,34 @@ def plot_as_image(data: VEC_TYPE,
     img_title = []
     cmaps = []
 
-    for data in input_data:
+    for i, data in enumerate(input_data):
         title_num_str = ""
         _col_images = []
         _col_titles = []
         _col_cmaps = []
+        v_name = "?"
+        if isinstance(variable_name, (List, tuple)):
+            if len(variable_name) > i:
+                v_name = variable_name[i]
+        else:
+            v_name = variable_name
 
         if len(input_data) > 1:
             title_num_str = f"{rows + 1}: "
         if 'complex' in str(data.dtype):
             cols = 2
-            _col_titles.append(f"{title_num_str}|{variable_name}|")
+            _col_titles.append(f"{title_num_str}|{v_name}|")
             _col_images.append(np.abs(data))
-            _col_cmaps.append("gray")
+            _col_cmaps.append(cmap)
 
-            _col_titles.append(f"{title_num_str}angle({variable_name})")
+            _col_titles.append(f"{title_num_str}angle({v_name})")
             _col_images.append(np.angle(data))
-            _col_cmaps.append("twilight")
+            _col_cmaps.append(phase_cmap)
         else:
-            _col_titles.append(title_num_str + variable_name)
+            _col_titles.append(title_num_str + v_name)
             _col_images.append(data)
             if cmap is None:
-                _col_cmaps.append("gray")
+                _col_cmaps.append('viridis')
             else:
                 _col_cmaps.append(cmap)
 
@@ -854,6 +882,21 @@ def plot_as_image(data: VEC_TYPE,
         cmaps.append(_col_cmaps)
 
         rows += 1
+    
+    images = np.stack(images, axis=0)
+    img_title = np.stack(img_title, axis=0)
+    cmaps = np.stack(cmaps, axis=0)
+
+    if cols == 1:
+        # If just one column, and images are not in landscape mode, flip rows and cols
+        if len(images) > 1 and images[0][0].shape[0] > images[0][0].shape[1]:
+            temp = rows
+            rows = cols
+            cols = temp
+            images = images.swapaxes(0, 1)
+            img_title = img_title.swapaxes(0, 1)
+            cmaps = cmaps.swapaxes(0, 1)
+
 
     if axes is None:
         fig, axes = get_mpl_figure(
@@ -986,7 +1029,8 @@ def plot_vectors(y: VEC_TYPE,
                  x: Optional[VEC_TYPE] = None,
                  label: Optional[Union[str, List[str]]] = None,
                  mode: Literal["plot", "scatter", "bar"] = "plot",
-                 ax: Optional[Axes] = None
+                 ax: Optional[Axes] = None,
+                 bar_width: Optional[float] = None
                  ) -> Figure:
     """Gets a matplotlib line figure with a plot of vectors.
 
@@ -1037,15 +1081,20 @@ def plot_vectors(y: VEC_TYPE,
     else:
         fig = ax.figure
 
-    width_bar = 0.8 / y.shape[-1] if not x_was_none and mode == "bar" else 0.8
+
+    if bar_width is None:
+        bar_width = np.amin((x[1:] - x[:-1])) / (1.5 * y.shape[-1])
+
     for i in range(y.shape[-1]):
         if mode == "plot":
             ax.plot(x, y[:, i], label=label[i])
         elif mode == "scatter":
             ax.scatter(x, y[:, i], label=label[i])
         elif mode == "bar":
-            
-            ax.bar(x[:, i], y[:, i], width=width_bar, label=label[i])
+            position = x + i * bar_width
+            # Center the bars
+            position = position - bar_width * y.shape[-1] / 2
+            ax.bar(position, y[:, i], width=bar_width, label=label[i])
         else:
             raise ValueError("Mode should be either plot or scatter.")
     ax.legend()
