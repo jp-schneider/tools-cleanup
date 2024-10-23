@@ -1123,6 +1123,7 @@ def plot_vectors(y: VEC_TYPE,
         if len(label) != y.shape[-1]:
             raise ValueError(
                 "Number of labels should match the last dimension of the input data.")
+    x_was_none = x is None
     if x is None:
         x = np.arange(y.shape[0])
     if ax is None:
