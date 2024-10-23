@@ -1029,6 +1029,7 @@ def plot_vectors(y: VEC_TYPE,
         if len(label) != y.shape[-1]:
             raise ValueError(
                 "Number of labels should match the last dimension of the input data.")
+    x_was_none = x is None
     if x is None:
         x = np.arange(y.shape[0])
     if ax is None:
@@ -1036,17 +1037,20 @@ def plot_vectors(y: VEC_TYPE,
     else:
         fig = ax.figure
 
+    width_bar = 0.8 / y.shape[-1] if not x_was_none and mode == "bar" else 0.8
     for i in range(y.shape[-1]):
         if mode == "plot":
             ax.plot(x, y[:, i], label=label[i])
         elif mode == "scatter":
             ax.scatter(x, y[:, i], label=label[i])
         elif mode == "bar":
-            ax.bar(x, y[:, i], label=label[i])
+            
+            ax.bar(x[:, i], y[:, i], width=width_bar, label=label[i])
         else:
             raise ValueError("Mode should be either plot or scatter.")
     ax.legend()
     return fig
+
 
 
 @saveable()
