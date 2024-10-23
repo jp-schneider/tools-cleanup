@@ -471,6 +471,7 @@ def get_mpl_figure(
         tight: bool = False,
         subplot_kw: Optional[Dict[str, Any]] = None,
         ax_mode: Literal["1d", "2d"] = "1d",
+        frame_on: bool = False
 ) -> Tuple[Figure, Union[Axes, List[Axes]]]:  # type: ignore
     """Create a eventually tight matplotlib figure with axes.
 
@@ -489,7 +490,9 @@ def get_mpl_figure(
     subplot_kw : Optional[Dict[str, Any]], optional
         Optional kwargs for the subplots, by default None
         Only used if tight is False
-
+    frame_on : bool, optional
+        If the frame should be on, by default False
+        Only used if tight is True.
     Returns
     -------
     Tuple[Figure, Axes | List[Axes]]
@@ -512,7 +515,13 @@ def get_mpl_figure(
             col, row = divmod(i, rows)
             ax = plt.Axes(fig, [col * rel_width, row *
                           rel_height, rel_width, rel_height])
-            ax.set_axis_off()
+            if frame_on:
+                ax.set_frame_on(True)
+                ax.get_xaxis().set_visible(False)
+                ax.get_yaxis().set_visible(False)
+            else:
+                ax.set_frame_on(False)
+                ax.set_axis_off()
             fig.add_axes(ax)
             axes.append(ax)
     else:
@@ -750,8 +759,11 @@ def plot_as_image(data: VEC_TYPE,
                   axes: Optional[np.ndarray] = None,
                   interpolation: Optional[str] = None,
                   tight: bool = False,
+                  frame_on: bool = False,
                   imshow_kw: Optional[Dict[str, Any]] = None,
                   norm: bool = False,
+                  keep_transparency: bool = False,
+                  inpaint_title: Union[bool, _DEFAULT] = DEFAULT,
                   ) -> AxesImage:
     """Plots a 2D (complex) image with matplotib. Supports numpy arrays and torch tensors.
 
@@ -788,6 +800,15 @@ def plot_as_image(data: VEC_TYPE,
     norm : bool, optional
         If the data should be normalized, by default False
         If True, the data will be normalized to [0, 1] using MinMax normalization.
+    keep_transparency : bool, optional
+        If the transparency of the input image should be kept, by default False
+        If the input image is a RGBA image, the transparency will be kept and displayed as white background.
+        If False, the transparency will be removed by composing it with a background grid.
+
+    inpaint_title : Union[bool, _DEFAULT], optional
+        If the title should be inpainted, by default DEFAULT
+        If True, the title will be inpainted, if False it will not be inpainted.
+        If DEFAULT, the title will be inpainted if the title is not empty and tight is True.
 
     Returns
     -------
@@ -815,7 +836,8 @@ def plot_as_image(data: VEC_TYPE,
                 from tools.util.numpy import flatten_batch_dims
                 return flatten_batch_dims(x, -4)
             else:
-                raise ValueError("Data type not supported. Got: " + str(type(x)))
+                raise ValueError(
+                    "Data type not supported. Got: " + str(type(x)))
         return x
 
     if "torch" in sys.modules:
@@ -832,7 +854,7 @@ def plot_as_image(data: VEC_TYPE,
             data = [data[i] for i in range(data.shape[0])]
 
     input_data = []
-    
+
     if isinstance(data, (List, tuple)):
         for d in data:
             input_data.append(numpyify_image(d))
@@ -882,10 +904,14 @@ def plot_as_image(data: VEC_TYPE,
         cmaps.append(_col_cmaps)
 
         rows += 1
-    
+
     images = np.stack(images, axis=0)
     img_title = np.stack(img_title, axis=0)
     cmaps = np.stack(cmaps, axis=0)
+
+    if not keep_transparency and images.shape[-1] == 4:
+        from tools.io.image import alpha_compose_with_background_grid
+        images = alpha_compose_with_background_grid(images)[..., :3]
 
     if cols == 1:
         # If just one column, and images are not in landscape mode, flip rows and cols
@@ -897,10 +923,9 @@ def plot_as_image(data: VEC_TYPE,
             img_title = img_title.swapaxes(0, 1)
             cmaps = cmaps.swapaxes(0, 1)
 
-
     if axes is None:
         fig, axes = get_mpl_figure(
-            rows=rows, cols=cols, size=size, tight=tight, ratio_or_img=images[0][0], ax_mode="2d")
+            rows=rows, cols=cols, size=size, tight=tight, frame_on=frame_on, ratio_or_img=images[0][0], ax_mode="2d")
     else:
         fig = plt.gcf()
 
@@ -984,6 +1009,31 @@ def plot_as_image(data: VEC_TYPE,
                 if interpolation is None:
                     interpolation = 'nearest'
                 _cmap.set_bad(color='white')
+
+            if inpaint_title == True or (inpaint_title == DEFAULT and tight):
+                import torch
+                from tools.io.image import put_text, n_layers_alpha_compositing
+                from tools.transforms.numpy.min_max import MinMax
+                img_shape = _image.shape[-3:]
+                title_img = put_text(np.zeros((*img_shape[:2], 4)), _title, margin=20, padding=20,
+                                     size=1.5, thickness=2, background_stroke=3).astype(np.float32) / 255
+                mm = MinMax(new_min=0, new_max=1, axis=(-3, -2))
+                transformed = mm.fit_transform(_image)
+                not_rgb = transformed.shape[-1] not in [3, 4]
+                not_alpha = transformed.shape[-1] != 4
+                if not_rgb:
+                    transformed = transformed.repeat(3, axis=-1)
+                if not_alpha:
+                    transformed = np.concatenate(
+                        [transformed, np.ones((*img_shape[:2], 1))], axis=-1)
+                inpainted = n_layers_alpha_compositing(torch.stack([torch.tensor(
+                    transformed), torch.tensor(title_img)], dim=0), torch.tensor([1, 0]))
+                if not_alpha:
+                    inpainted = inpainted[..., :3]
+                if not_rgb:
+                    inpainted = inpainted.mean(dim=-1, keepdim=True)
+                _image = mm.inverse_transform(inpainted)
+
             ax.imshow(_image, vmin=vmin, vmax=vmax, cmap=_cmap,
                       interpolation=interpolation, **imshow_kw)
 
@@ -1080,7 +1130,7 @@ def plot_vectors(y: VEC_TYPE,
     else:
         fig = ax.figure
 
-    if bar_width is None:
+    if bar_width is None and mode == "bar":
         bar_width = np.amin((x[1:] - x[:-1])) / (1.5 * y.shape[-1])
 
     for i in range(y.shape[-1]):

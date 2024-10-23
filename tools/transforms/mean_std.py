@@ -3,7 +3,7 @@ import torch
 
 from tools.transforms.fittable_transform import FittableTransform
 from tools.transforms.invertable_transform import InvertableTransform
-from tools.util.torch import tensorify
+from tools.transforms.to_tensor import tensorify
 from tools.util.typing import _DEFAULT, DEFAULT
 
 

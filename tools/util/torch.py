@@ -22,6 +22,8 @@ from tools.util.reflection import class_name
 from tools.util.format import _custom_traceback
 from tools.logger.logging import tools_logger as logger
 from traceback import FrameSummary, extract_stack
+from tools.transforms.to_tensor import tensorify
+from tools.transforms.to_tensor_image import tensorify_image
 
 
 def set_jit_enabled(enabled: bool):
@@ -96,42 +98,6 @@ def count_parameters(model: torch.nn.Module) -> List[Dict[str, Any]]:
     return param_list
 
 
-def tensorify(input: NUMERICAL_TYPE,
-              dtype: Optional[torch.dtype] = None,
-              device: Optional[torch.device] = None,
-              requires_grad: bool = False) -> torch.Tensor:
-    """
-    Assuring that input is a tensor by converting it to one.
-    Accepts tensors or ndarrays.
-
-    Parameters
-    ----------
-    input : Union[torch.Tensor, np.generic, int, float, complex, Decimal]
-        The input
-
-    dtype : Optional[torch.dtype]
-        Dtype where input should be belong to. If it differs it will cast the type.
-        By default its None and the dtype wont be changed.
-
-    device : Optional[torch.device]
-        Device where input should be on / send to. If it differs it will move.
-        By default its None and the device wont be changed.
-
-    requires_grad : bool
-        If the created tensor requires gradient, Will be only considered if input is not already a tensor!. Defaults to false.
-
-    Returns
-    -------
-    torch.Tensor
-        The created tensor.
-    """
-    if isinstance(input, torch.Tensor):
-        if (dtype and input.dtype != dtype) or (device and input.device != device):
-            input = input.to(dtype=dtype, device=device)
-        return input
-    return torch.tensor(input, dtype=dtype, device=device, requires_grad=requires_grad)
-
-
 def as_tensors(keep_output: bool = False) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     """Decorator for converting all input arguments to tensors.
 
@@ -169,47 +135,6 @@ def as_tensors(keep_output: bool = False) -> Callable[[Callable[..., Any]], Call
             return numpyify(ret)
         return wrapper
     return decorator
-
-
-def tensorify_image(image: VEC_TYPE,
-                    dtype: Optional[torch.dtype] = None,
-                    device: Optional[torch.device] = None,
-                    requires_grad: bool = False
-                    ) -> torch.Tensor:
-    """Converts an image to a torch tensor.
-    If its already a tensor, it will be returned as is, possibly with changed dtype, device or requires_grad.
-
-    If the image is a numpy array, it will be converted to a tensor with the shape ([B], C, H, W) or (C, H, W) depending on the shape of the input.
-    Assumes that the image is in the shape (H, W, C) or (B, H, W, C) for numpy arrays.
-
-    Parameters
-    ----------
-    image : VEC_TYPE
-        Image to convert to a tensor.
-    dtype : Optional[torch.dtype], optional
-        Dtype for the tensor, by default None
-    device : Optional[torch.device], optional
-        Device for the tensor, by default None
-    requires_grad : bool, optional
-        If tensor should require gradients, by default False
-
-    Returns
-    -------
-    torch.Tensor
-        The converted tensor.
-    """
-    is_tensor = isinstance(image, torch.Tensor)
-    image = tensorify(image, dtype=dtype, device=device,
-                      requires_grad=requires_grad)
-    if is_tensor:
-        return image
-    # Change the shape to ([B], C, H, W)
-    if len(image.shape) == 4:
-        return image.permute(0, 3, 1, 2)
-    # Change the shape to (C, H, W)
-    if len(image.shape) == 3:
-        return image.permute(2, 0, 1)
-    return image
 
 
 def fourier(x: torch.Tensor) -> torch.Tensor:
@@ -1280,11 +1205,11 @@ def is_non_finite(x: torch.Tensor, info: bool = False) -> Union[bool, Tuple[bool
     return non_finite or grad_non_finite, combined_info
 
 
-def buffered(gen: Generator, 
-           gather_fnc: Callable[[Any], torch.Tensor],
-           execute_fnc: Callable[[torch.Tensor], torch.Tensor],
-           assemble_fnc: Callable[[Any, torch.Tensor], Any],
-           buffer_size: int = -1) -> Generator[Any, None, None]:
+def buffered(gen: Generator,
+             gather_fnc: Callable[[Any], torch.Tensor],
+             execute_fnc: Callable[[torch.Tensor], torch.Tensor],
+             assemble_fnc: Callable[[Any, torch.Tensor], Any],
+             buffer_size: int = -1) -> Generator[Any, None, None]:
     """Bufferes values of a generator and applies a function to the buffered values.
     Will itself return a generator that yields the assembled output of the execution.
 
@@ -1294,10 +1219,10 @@ def buffered(gen: Generator,
     ----------
     gen : Generator
         The generator function to which the execution will be applied.
-    
+
     gather_fnc : Callable[[Any], Union[torch.Tensor, Generator[torch.Tensor, None, None]]]
         The function that extracts the data from the generator output and converts it to a tensor.
-        
+
         Parameters
         ----------
         data : Any
@@ -1323,11 +1248,11 @@ def buffered(gen: Generator,
         -------
         torch.Tensor
             The executed tensor of shape (B, ...).
-            
+
 
         Should accept a tensor of shape (B, ...) and return a tensor of shape (B, ...).
-        
-    
+
+
     assemble_fnc : Callable[[Any, torch.Tensor, int], Any]
         The function that assembles the output of the execution back to the desired output format.
 
@@ -1348,7 +1273,7 @@ def buffered(gen: Generator,
         Any
             The assembled output of the execution.
             Each will be yielded by the generator.
-    
+
     buffer_size : int, optional
         The size of the buffer, by default -1.
         -1 means a buffer of infinite size, the generator is fully consumed before the execution of execute_fnc.
@@ -1367,11 +1292,11 @@ def buffered(gen: Generator,
     _current_buffer_size = 0
 
     def process_items(
-            _data, 
+            _data,
             _data_gen_index,
             _buffer,
             _item_shape,
-            ):
+    ):
         b = torch.cat(_buffer, dim=0)
         num_batches = 1
         if buffer_size > 0:
@@ -1391,7 +1316,7 @@ def buffered(gen: Generator,
             yield assemble_fnc(org_data, res[item_start:item_end], idx)
 
     for i, data in enumerate(gen):
-        
+
         extracted_data = gather_fnc(data)
         if isinstance(extracted_data, torch.Tensor):
             _current_data.append(data)
@@ -1410,7 +1335,7 @@ def buffered(gen: Generator,
                 _current_buffer_size += shp[0]
 
         if buffer_size > 0 and _current_buffer_size >= buffer_size:
-            for item in process_items(_current_data, 
+            for item in process_items(_current_data,
                                       _current_data_gen_index,
                                       _current_buffer, _current_item_shape):
                 yield item
@@ -1420,7 +1345,7 @@ def buffered(gen: Generator,
             _current_buffer = []
             _current_item_shape = []
             _current_buffer_size = 0
-    
+
     # Process the remaining data
     if len(_current_data) > 0:
         for item in process_items(_current_data, _current_data_gen_index, _current_buffer, _current_item_shape):

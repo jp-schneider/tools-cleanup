@@ -324,7 +324,7 @@ def resample(
         return image[::skips, ::skips, :]
 
 
-def compute_new_size(image_shape: Tuple[int, int], max_size: Optional[int] = None, min_size : Optional[int] = None) -> Tuple[int, int]:
+def compute_new_size(image_shape: Tuple[int, int], max_size: Optional[int] = None, min_size: Optional[int] = None) -> Tuple[int, int]:
     """"Computes the new size of the image while maintaining aspect ratio.
 
     Parameters
@@ -858,6 +858,39 @@ def put_text(
     return img
 
 
+def alpha_compose_with_background_grid(
+    images: np.ndarray,
+    square_size: int = 10,
+    primary_color: Any = (153, 153, 153, 255),
+    secondary_color: Any = (102, 102, 102, 255),
+) -> np.ndarray:
+    """Gets a Batch of images and composes them using the alpha compositing algorithm with a background grid,
+    to remove transparency.
+
+    Parameters
+    ----------
+    images : np.ndarray
+        Images with transparency in the shape ([..., B,], H, W, C).
+        Where C is 4 (RGBA). With rgba values in the range [0, 1].
+
+    Returns
+    -------
+    np.ndarray
+        Image with the alpha composited images in the shape ([..., B,], H, W, C).
+        Where C is 3 (RGB). With rgba values in the range [0, 1].
+    """
+    from tools.util.numpy import flatten_batch_dims, unflatten_batch_dims
+    images, batch_dims = flatten_batch_dims(images, -4)
+    grid = torch.tensor(alpha_background_grid(images.shape[-3:-1], square_size=square_size,
+                                              primary_color=primary_color, secondary_color=secondary_color)).unsqueeze(0).unsqueeze(0).float() / 255
+    image_tensor = torch.tensor(images).unsqueeze(0)
+    N, B, H, W, C = image_tensor.shape
+    grid = grid.repeat(1, B, 1, 1, 1)
+    composition = n_layers_alpha_compositing(
+        torch.cat([grid, image_tensor], dim=0), torch.tensor([1, 0]))
+    return unflatten_batch_dims(composition.numpy(), batch_dims)
+
+
 def alpha_background_grid(
     resolution: Tuple[int, int],
     square_size: int = 10,
@@ -894,3 +927,63 @@ def alpha_background_grid(
                          2) == 1).sum(axis=-1) == 1
     img.reshape(-1, 4)[second_color_mask] = secondary_color
     return img
+
+
+@torch.jit.script
+def n_layers_alpha_compositing(
+        images: torch.Tensor, zbuffer: torch.Tensor) -> torch.Tensor:
+    """
+    Applies N layers alpha compositing to the input images,
+    bases on the z-buffer values.
+
+    Parameters
+    ----------
+    images: torch.Tensor
+        The input images with shape (N, [..., B], C).
+        C must be 4 (RGBA).
+        Image values are expected to be in the range [0, 1].
+
+    zbuffer: torch.Tensor
+        The z-buffer values for the images with shape (N).
+        Images are sorted based on the z-buffer values in ascending order.
+        E.g smaller z-buffer values are closer to the camera and will be rendered on top.
+
+    Returns
+    -------
+    torch.Tensor
+        The alpha composited image with shape ([..., B], C).
+    """
+    N = images.shape[0]
+    flattened_shape = images.shape[1:-1]
+    C = images.shape[-1]
+    if C != 4:
+        raise ValueError(
+            "The last dimension of the input images must be 4 (RGBA).")
+
+    B = torch.prod(torch.tensor(flattened_shape)).item()
+    images = images.reshape(N, B, C)  # (N, B, C)
+
+    order = torch.argsort(zbuffer).unsqueeze(1)
+    colors = images[:, :, :3]  # (N, B, 3)
+    alphas = images[:, :, 3]
+    inv_alphas = (1 - alphas)
+
+    # Apply N object alpha matting. This is done by multiplying the alpha of the object with the inverse of the alphas of the objects before it.
+    # We do it by calculating 1-alpha for each object, and
+    bidx = torch.arange(B, device=inv_alphas.device).unsqueeze(
+        0).repeat(N, 1)  # (N, B)
+    sorted_inv_alphas = inv_alphas[order, bidx]
+    sorted_alphas = alphas[order, bidx]  # (N, B, T, 1)
+    sorted_colors = colors[order, bidx]
+
+    rolled_inv_alpha = torch.roll(sorted_inv_alphas, 1, dims=0)
+    rolled_inv_alpha[0] = 1.
+
+    alpha_chain = torch.cumprod(rolled_inv_alpha, dim=0)
+    sorted_per_layer_alphas = alpha_chain * sorted_alphas
+    fused_color = (sorted_per_layer_alphas.unsqueeze(-1).repeat(1,
+                   1, 3) * sorted_colors).sum(dim=0)  # (B, 3)
+    out_image = torch.zeros(B, 4)
+    out_image[:, :3] = fused_color  # (3, H, W)
+    out_image[:, 3] = sorted_per_layer_alphas.sum(dim=0)
+    return out_image.reshape(flattened_shape + (4,))

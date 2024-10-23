@@ -1,4 +1,5 @@
 from typing import Union, Optional
+from tools.logger.logging import logger
 from tools.transforms.to_numpy import ToNumpy
 from tools.util.typing import NUMERICAL_TYPE, VEC_TYPE
 try:
@@ -36,10 +37,15 @@ class ToNumpyImage(ToNumpy):
     def convert_dtype(self, x: np.ndarray) -> np.ndarray:
         if self.output_dtype is None:
             return x
-        if self.output_dtype == x.dtype:
+        elif self.output_dtype == x.dtype:
             return x
-        if self.output_dtype == np.uint8 and x.dtype in [np.float32, np.float64, np.float16]:
+        elif self.output_dtype == np.uint8 and x.dtype in [np.float32, np.float64, np.float16]:
+            if x.min() < 0 or x.max() > 1:
+                logger.warning(
+                    f"Converting float image to uint8, but values are not in [0, 1]: {x.min()}, {x.max()}")
             return (x * 255).astype(np.uint8)
+        elif self.output_dtype in [np.float32, np.float64, np.float16] and x.dtype == np.uint8:
+            return x.astype(self.output_dtype) / 255
         else:
             raise ValueError(
                 f"Cannot convert dtype {x.dtype} to {self.output_dtype}")

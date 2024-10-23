@@ -15,7 +15,12 @@ def minmax(v: np.ndarray,
         v_min = np.min(v)
     if v_max is None:
         v_max = np.max(v)
-    return (v - v_min)/(v_max - v_min)*(new_max - new_min) + new_min
+    divider = v_max - v_min
+    if isinstance(divider, np.ndarray):
+        divider[divider == 0] = 1.
+    elif divider == 0:
+        divider = 1.
+    return (v - v_min)/divider*(new_max - new_min) + new_min
 
 
 class MinMax(InvertableTransform, FittableTransform):
