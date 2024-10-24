@@ -4,6 +4,7 @@ from tools.error.argument_none_error import ArgumentNoneError
 from tools.serialization.json_convertible import JsonConvertible
 from .json_serialization_rule import JsonSerializationRule
 
+
 class SliceValueWrapper(JsonConvertible):
 
     __type_alias__ = "slice"
@@ -13,6 +14,9 @@ class SliceValueWrapper(JsonConvertible):
                  decoding: bool = False,
                  **kwargs):
         super().__init__(decoding, **kwargs)
+        self.start = None
+        self.stop = None
+        self.step = None
         if decoding:
             return
         if value is None:
