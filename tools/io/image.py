@@ -606,7 +606,7 @@ def save_image_stack(images: VEC_TYPE,
     ], additional_variables=additional_filename_variables)
     if len(set(filenames)) != images.shape[0]:
         raise ValueError(
-            f"Number of filenames {len(filenames)} does not match number of masks {images.shape[0]} if you specified an index template?")
+            f"Number of distinct filenames {len(set(filenames))} does not match number of masks {images.shape[0]} if you specified an index template?")
     it = enumerate(filenames)
     if progress_bar:
         it = tqdm(it, total=images.shape[0], desc="Saving images")
