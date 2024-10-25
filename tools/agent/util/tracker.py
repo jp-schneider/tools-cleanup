@@ -2,6 +2,8 @@ from dataclasses import dataclass, field
 import os
 from typing import Any, Callable, Dict, Literal, Optional, Tuple, Union
 
+from tools.serialization.files.context_path import ContextPath
+from tools.serialization.files.file_handle import FileHandle
 from tools.serialization.json_convertible import JsonConvertible
 from tools.util.reflection import class_name
 
@@ -689,6 +691,7 @@ class Tracker():
         """
         if not override:
             directory = numerated_folder_name(directory)
+        directory = ContextPath.from_format_path("{tracker_path}", dict(tracker_path=directory))
         values = self._save_to_directory(
             directory=directory, override=True, make_dirs=make_dirs, **kwargs)
         path = os.path.join(directory, "tracker.json")
@@ -713,4 +716,4 @@ class Tracker():
             The loaded tracker.
         """
         path = os.path.join(directory, "tracker.json")
-        return JsonConvertible.load_from_file(path)
+        return JsonConvertible.load_from_file(path, tracker_path=directory)

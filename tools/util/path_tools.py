@@ -438,6 +438,7 @@ def process_path(
         The processed path as Path object.
     """
     from tools.util.format import parse_format_string
+    from tools.serialization.files.context_path import ContextPath
     if path is None:
         if allow_none:
             return None
@@ -450,8 +451,9 @@ def process_path(
         raise ValueError(
             f"Path {'for ' + variable_name + ' ' if variable_name is not None else ''}must be a string or Path object.")
     if interpolate:
-        path = parse_format_string(path, [interpolate_object])[0]
-    p = Path(path).resolve()
+        p = ContextPath.from_format_path(path, context=interpolate_object)
+    else:
+        p = Path(path).resolve()
     if need_exist and not p.exists():
         raise FileNotFoundError(
             f"Path {'for ' + variable_name + ' ' if variable_name is not None else ''}{p} does not exist.")

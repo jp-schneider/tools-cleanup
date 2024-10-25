@@ -1,17 +1,18 @@
 
+from pathlib import Path
 from typing import Any, Optional, Union
 from tools.serialization.json_convertible import JsonConvertible
 import os
 from io import BytesIO
 from tools.util.path_tools import format_os_independent, numerated_file_name, relpath
-
+from tools.serialization.files.path import PATH_TYPE
 
 class FileHandle(JsonConvertible):
 
     is_binary: bool
     """Wether the file is binary or not."""
 
-    file_path: str
+    file_path: Path
     """The path to the file."""
 
     need_to_open: bool
@@ -30,7 +31,7 @@ class FileHandle(JsonConvertible):
     """If the path is should be relative."""
 
     def __init__(self,
-                 file_path: str,
+                 file_path: Union[str, PATH_TYPE],
                  is_binary: bool = False,
                  need_to_open: bool = True,
                  append: bool = False,
@@ -41,11 +42,14 @@ class FileHandle(JsonConvertible):
                  **kwargs
                  ):
         super().__init__(decoding, **kwargs)
-        if use_relative_path:
-            p = os.path.normpath(os.path.abspath(file_path))
-            rp = relpath(os.getcwd(), p, is_from_file=False, is_to_file=True)
-            file_path = rp
-        self.file_path = format_os_independent(file_path)
+        if isinstance(file_path, (str, Path)):
+            if use_relative_path:
+                p = os.path.normpath(os.path.abspath(file_path))
+                rp = relpath(os.getcwd(), p, is_from_file=False, is_to_file=True)
+                file_path = rp
+            self.file_path = format_os_independent(file_path)
+        else:
+            self.file_path = file_path
         self.is_binary = is_binary
         self.append = append
         self.need_to_open = need_to_open

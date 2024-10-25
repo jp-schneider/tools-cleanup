@@ -4,35 +4,37 @@ from tools.serialization.json_convertible import JsonConvertible
 from tools.util.typing import _DEFAULT, DEFAULT
 from .json_serialization_rule import JsonSerializationRule
 import decimal
-from pathlib import Path
+from tools.serialization.files.context_path import ContextPath
 import os
 from tools.util.path_tools import relpath, format_os_independent
 from tools.util.format import parse_format_string
 
-class PathValueWrapper(JsonConvertible):
+class ContextPathValueWrapper(JsonConvertible):
 
-    __type_alias__ = "Path"
+    __type_alias__ = "ContextPath"
 
     def __init__(self,
-                 value: Path,
+                 value: ContextPath,
                  decoding: bool = False,
-                 convert_path_to_cwd_relative: bool = True,
                  **kwargs):
         super().__init__(decoding, **kwargs)
         if decoding:
+            self.raw_path = None
             self.value = value
+            self.context = None
             return
-        path_str = str(value)
-        if convert_path_to_cwd_relative:
-            path_str = relpath(os.getcwd(), path_str,
-                               is_from_file=False, is_to_file=not value.is_dir())
-        self.value = format_os_independent(path_str)
+        self.raw_path = value._raw_path
+        self.value = value._path
+        self.context = value._context
 
-    def to_python(self) -> Path:
-        path = parse_format_string(self.value, [dict()])[0]
-        return Path(path)
 
-class JsonPathSerializationRule(JsonSerializationRule):
+    def to_python(self, **kwargs) -> ContextPath:
+        pt = ContextPath(self.value, self.raw_path, self.context)
+        if len(kwargs) > 0:
+            pt = pt.reevaluate(kwargs)
+        return pt
+
+class JsonContextPathSerializationRule(JsonSerializationRule):
     """For the default singleton value."""
 
     def __init__(self) -> None:
@@ -40,11 +42,11 @@ class JsonPathSerializationRule(JsonSerializationRule):
 
     @classmethod
     def applicable_forward_types(self) -> List[Type]:
-        return [Path]
+        return [ContextPath]
 
     @classmethod
     def applicable_backward_types(self) -> List[Type]:
-        return [PathValueWrapper]
+        return [ContextPathValueWrapper]
 
     def forward(
             self, value: Any,
@@ -52,7 +54,7 @@ class JsonPathSerializationRule(JsonSerializationRule):
             object_context: Dict[str, Any],
             handle_unmatched: Literal['identity', 'raise', 'jsonpickle'],
             **kwargs) -> Any:
-        return PathValueWrapper(value).to_json_dict(handle_unmatched=handle_unmatched, **kwargs)
+        return ContextPathValueWrapper(value).to_json_dict(handle_unmatched=handle_unmatched, **kwargs)
 
-    def backward(self, value: PathValueWrapper, **kwargs) -> _DEFAULT:
-        return value.to_python()
+    def backward(self, value: ContextPathValueWrapper, **kwargs) -> _DEFAULT:
+        return value.to_python(**kwargs)

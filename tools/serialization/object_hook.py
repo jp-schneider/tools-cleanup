@@ -8,13 +8,8 @@ import logging
 import inspect
 from inspect import Parameter
 from tools.util.reflection import class_name
-
-
-class _NOTSET:
-    pass
-
-
-NOTSET = _NOTSET()
+from tools.serialization.object_reference import ObjectReference
+from tools.util.typing import _NOTSET, NOTSET
 
 
 def _init_object(_type: Type, data: Dict[str, Any]) -> Tuple[Any, Dict[str, Any]]:
@@ -72,9 +67,13 @@ def _init_object(_type: Type, data: Dict[str, Any]) -> Tuple[Any, Dict[str, Any]
     return ret, to_set_data
 
 
-def configurable_object_hook(on_error: Literal['raise', 'ignore', 'warning'] = 'raise') -> Callable[[Dict[str, Any]], Any]:
+def configurable_object_hook(on_error: Literal['raise', 'ignore', 'warning'] = 'raise', 
+                             memo: Dict[str, Any] = None,
+                             **kwargs) -> Callable[[Dict[str, Any]], Any]:
     def _object_hook(obj: Dict[str, Any]):
         nonlocal on_error
+        nonlocal kwargs
+        nonlocal memo
         from tools.serialization.rules.json_serialization_rule_registry import JsonSerializationRuleRegistry
         try:
             if '__class__' in obj:
@@ -90,6 +89,7 @@ def configurable_object_hook(on_error: Literal['raise', 'ignore', 'warning'] = '
                     else:
                         # Create object and fill values afterwards
                         obj.pop('__class__')
+                        uuid = obj.pop('__uuid__', None)
                         ret = None
 
                         ret, to_set = _init_object(object_type, obj)
@@ -100,14 +100,31 @@ def configurable_object_hook(on_error: Literal['raise', 'ignore', 'warning'] = '
                         if hasattr(ret, 'after_decoding'):
                             fnc = getattr(ret, 'after_decoding')
                             if callable(fnc):
-                                fnc()
+                                params = inspect.signature(fnc).parameters
+                                if "kwargs" in params:
+                                    fnc(**kwargs)
+                                else:
+                                    fnc()
                             else:
                                 raise AttributeError(
                                     f"after_decoding property declared in {object_type.__name__} is not callable!")
 
+                        after_decoding_hook = getattr(kwargs, 'after_decoding_hook', None)
+                        if after_decoding_hook is not None and callable(after_decoding_hook):
+                            after_decoding_hook(ret, **kwargs)
+
                         rule = JsonSerializationRuleRegistry.instance().get_rule_backward(ret)
                         if rule is not None:
-                            ret = rule.backward(ret)
+                            ret = rule.backward(ret, **kwargs)
+
+                        if isinstance(ret, ObjectReference):
+                            if memo is not None:
+                                found = memo.get(ret.uuid, NOTSET)
+                                if found == NOTSET:
+                                    raise ValueError(f"Object reference {ret.uuid} not found in memo!")
+                                return found
+                        if uuid is not None and memo is not None:
+                            memo[uuid] = ret
                         return ret
             return obj
         except Exception as err:
