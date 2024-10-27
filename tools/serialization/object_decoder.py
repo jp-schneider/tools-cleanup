@@ -2,7 +2,7 @@ import decimal
 import logging
 from typing import Any, Callable, Dict
 
-from tools.serialization import object_hook
+from tools.serialization import configurable_object_hook
 from tools.serialization.json_convertible import (JsonConvertible)
 from tools.error import NoIterationTypeError, NoSimpleTypeError
 
@@ -22,7 +22,7 @@ class ObjectDecoder():
         ObjectDecoder
             The Object decoder.
         """
-        return ObjectDecoder(object_hook=object_hook)
+        return ObjectDecoder(object_hook=configurable_object_hook(memo=dict()))
 
     def __init__(self, object_hook: Callable[[Dict[str, Any]], Any]) -> None:
         self.object_hook = object_hook

@@ -533,7 +533,7 @@ class JsonConvertible:
 
         return as_dict
 
-    def after_decoding(self):
+    def after_decoding(self, **kwargs):
         """Special function which will be invoked after decoding of an object.
         Will be invoked by the object_hook after the constructor.
         """
@@ -686,14 +686,14 @@ class JsonConvertible:
         ArgumentNoneError
             If str is none
         """
-        from tools.serialization import object_hook, configurable_object_hook
+        from tools.serialization import configurable_object_hook
         if json_str is None:
             raise ArgumentNoneError('json_str')
         if force_cls:
             object_dict = json.loads(json_str)
             return cls.from_object_dict(object_dict, on_error=on_error, force_cls=True, **kwargs)
         else:
-            return json.loads(json_str, object_hook=configurable_object_hook(on_error=on_error))
+            return json.loads(json_str, object_hook=configurable_object_hook(on_error=on_error, memo=dict(), **kwargs))
 
     @classmethod
     def from_object_dict(cls, obj: Dict[str, Any], on_error: Literal['raise', 'ignore', 'warning'] = 'raise', force_cls: bool = False, **kwargs) -> AnyJsonConvertible:
@@ -720,7 +720,7 @@ class JsonConvertible:
             The recreated instance.
         """
         from tools.serialization import ObjectDecoder, configurable_object_hook
-        decoder = ObjectDecoder(configurable_object_hook(on_error))
+        decoder = ObjectDecoder(configurable_object_hook(on_error, memo=dict(), **kwargs))
         # If force class is set, we will try to recreate the object with the current class
         if force_cls:
             obj.update({'__class__': class_name(cls)})
@@ -752,7 +752,6 @@ class JsonConvertible:
         ArgumentNoneError
             If str is none
         """
-        from tools.serialization import object_hook, configurable_object_hook
         import yaml
         from yaml import Loader
         if yaml_str is None:

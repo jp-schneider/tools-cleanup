@@ -17,7 +17,7 @@ from tools.util.typing import DEFAULT, MISSING
 from tools.util.reflection import dynamic_import
 from traceback import FrameSummary, extract_stack
 from types import FrameType, TracebackType
-
+from dataclasses import dataclass, field
 CAMEL_SEPERATOR_PATTERN = re.compile(
     r'((?<!^)(?<!_))((?=[A-Z][a-z])|((?<=[a-z])(?=[A-Z])))')
 UPPER_SNAKE_PATTERN = re.compile(r'^([A-Z]+_?)*([A-Z]+)$')
@@ -26,7 +26,23 @@ UPPER_PATTERN = re.compile(r'^([A-Z]+)$')
 REGEX_ISO_8601_PATTERN = r'^(-?(?:[1-9][0-9]*)?[0-9]{4})-(1[0-2]|0[1-9])-(3[01]|0[1-9]|[12][0-9])T(2[0-3]|[01][0-9]):([0-5][0-9]):([0-5][0-9])(\.[0-9]+)?(Z|[+-](?:2[0-3]|[01][0-9]):[0-5][0-9])?$'
 REGEX_ISO_COMPILED = re.compile(REGEX_ISO_8601_PATTERN)
 
+@dataclass
+class FormatVariable():
+    """Dataclass for a format variable."""
 
+    variable: str
+    """The variable name."""
+    
+    value: str
+    """The unformatted value of the variable."""
+
+    formatter: Optional[str] = field(default=None)
+    """The formatter for the variable."""
+
+    localizer: Optional[str] = field(default=None)
+    """The localizer for the variable."""
+
+    
 def to_snake_case(input: str) -> str:
     """Converts a upper snake case, or camel case pattern to lower snake case.
 
@@ -402,10 +418,9 @@ def parse_format_string(format_string: str,
                         index_variable: str = "index",
                         allow_invocation: bool = False,
                         additional_variables: Optional[Dict[str, Any]] = None,
-                        default_formatters: Optional[Dict[Type, Callable[[
-                            Any], str]]] = DEFAULT,
-                        index_offset: int = 0
-                        ) -> List[str]:
+                        default_formatters: Optional[Dict[Type, Callable[[Any], str]]] = DEFAULT,
+                        index_offset: int = 0,
+                        found_variables: Optional[List[List[FormatVariable]]] = None) -> List[str]:
     """Formats content of a list of objects with a format string for each object.
 
 
@@ -436,6 +451,11 @@ def parse_format_string(format_string: str,
         Offset for the index, by default 0
         If obj_list is a subset of a larger list, the offset can be used to adjust the index.
 
+    found_variables : Optional[List[List[Dict[str]]]], optional
+        If set to a list, this will be filled with the found variables for each object, by default None
+        For each object in the list, a list of dictionaries will be created, which contains the found variables in order.
+        [[{"localizer": str, "variable": str, "formatter": str, "value": Any}, ... per found variable], ... per object]
+
     Returns
     -------
     List[str]
@@ -465,6 +485,7 @@ def parse_format_string(format_string: str,
     results = []
     for i, obj in enumerate(obj_list):
         name = format_string
+        replacements = []
         for loc, key, format in loc_key_formats:
             value = MISSING
             if index_variable is not None and key == index_variable:
@@ -475,6 +496,10 @@ def parse_format_string(format_string: str,
                         raise ValueError(f"Unknown localizer: {loc} for key: {key} in format string: {format_string}")
                     # Try to find the value in the environment
                     value = os.environ.get(key, MISSING)
+                    if value == MISSING:
+                        # Check if variable is in the additional variables
+                        if key in additional_variables:
+                            value = additional_variables[key]
                     if value == MISSING:
                         raise ValueError(f"Environment variable '{key}' does not exist, but was specified in the format string {format_string}.")
                 else:
@@ -503,8 +528,10 @@ def parse_format_string(format_string: str,
             else:
                 loc = loc + ":"
             name = name.replace("{" + loc + key + format + "}", _formatted_value)
+            replacements.append(FormatVariable(localizer=loc, variable=key, formatter=format, value=value))
         results.append(name)
-
+        if found_variables is not None:
+            found_variables.append(replacements)
     return results
 
 

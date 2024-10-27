@@ -1,10 +1,12 @@
 import math
 import os
+from pathlib import Path
 import random
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, Optional, Tuple, Union
 import pandas as pd
 from dataclasses import dataclass, field
 
+from tools.serialization.files.path import PATH_TYPE
 from tools.util.reflection import class_name
 from .metric_entry import MetricEntry
 import numpy as np
@@ -196,7 +198,7 @@ class MetricSummary():
                                            metric_qualname=self.metric_qualname))
 
     def _save_to_directory(self,
-                           directory: str,
+                           directory: Union[str, PATH_TYPE],
                            override: bool = True,
                            make_dirs: bool = True,
                            **kwargs
@@ -210,10 +212,12 @@ class MetricSummary():
         step : int
             The step of the metric.
         """
+        if isinstance(directory, str):
+            directory = Path(directory)
         values = dict(vars(self))
         values["__class__"] = class_name(self)
         t_path = replace_unallowed_chars(self.tag) + ".csv"
-        path = os.path.join(directory, t_path)
+        path = directory / t_path
         values["values"] = DataFrameCSVFileHandle.for_object(values["values"], path,
                                                              override=override,
                                                              make_dirs=make_dirs)
