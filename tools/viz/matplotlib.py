@@ -622,7 +622,15 @@ def should_use_logarithm(x: np.ndarray, magnitudes: int = 2, allow_zero: bool = 
     if not allow_zero:
         if np.any(x <= 0):
             return False
-    return np.max(x) / np.min(x) > math.pow(10, magnitudes)
+    max_ = np.max(np.abs(x))
+    min_ = np.min(np.abs(x))
+    if min_ == 0:
+        if len(x[x > 0]) == 0:
+            min_ = 1
+        else:
+            min_ = np.min(x[x > 0])
+
+    return (max_ / min_) > math.pow(10, magnitudes)
 
 
 def preserve_legend(ax: Axes,  # type: ignore
@@ -889,7 +897,8 @@ def plot_as_image(data: VEC_TYPE,
             _col_cmaps.append(cmap)
 
             _col_titles.append(f"{title_num_str}angle({v_name})")
-            _col_images.append(np.angle(data))
+            angle = np.angle(data)
+            _col_images.append(angle)
             _col_cmaps.append(phase_cmap)
         else:
             _col_titles.append(title_num_str + v_name)
@@ -963,8 +972,7 @@ def plot_as_image(data: VEC_TYPE,
                 if isinstance(cscale, list):
                     _cscale = cscale[i]
                 if _cscale == 'auto':
-                    _cscale = 'log' if should_use_logarithm(
-                        _image.numpy()) else None
+                    _cscale = 'log' if should_use_logarithm(_image) else None
                 if _cscale is not None:
                     if _cscale == 'log':
                         zeros = _image == 0
