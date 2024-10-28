@@ -11,6 +11,7 @@ import torch
 
 ALLOWED_KEY_TYPES = [str, int, float, bool, None]
 
+
 class JsonDictSerializationRule(JsonSerializationRule):
     """For lists of objects."""
 
@@ -25,7 +26,8 @@ class JsonDictSerializationRule(JsonSerializationRule):
         res = super().is_forward_applicable(value)
         if res:
             if not all([isinstance(k, tuple(ALLOWED_KEY_TYPES)) for k in value.keys()]):
-                logging.warning(f"Keys of dict are not of allowed types: {value.keys()}")
+                logging.warning(
+                    f"Keys of dict are not of allowed types: {value.keys()}")
                 return False
             return res
         return not (isinstance(value, type)) and (hasattr(value, '__iter__') or hasattr(value, 'to_json_dict'))
@@ -35,9 +37,9 @@ class JsonDictSerializationRule(JsonSerializationRule):
         return []
 
     def forward(
-            self, 
-            value: Any, 
-            name: str, 
+            self,
+            value: Any,
+            name: str,
             object_context: Dict[str, Any],
             handle_unmatched: Literal['identity', 'raise', 'jsonpickle'],
             memo: Optional[Dict[Any, UUID]] = None,
@@ -62,7 +64,8 @@ class JsonDictSerializationRule(JsonSerializationRule):
             ret = {}
             as_dict = dict(value)
             for k, v in as_dict.items():
-                ret[k] = convert(v, k, as_dict, handle_unmatched=handle_unmatched, memo=memo, **kwargs)
+                ret[k] = convert(
+                    v, k, as_dict, handle_unmatched=handle_unmatched, memo=memo, **kwargs)
             return ret
         else:
             raise ValueError(f"Dont know how to handle Type: {type(value)}")

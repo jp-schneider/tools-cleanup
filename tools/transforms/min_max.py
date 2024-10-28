@@ -3,6 +3,7 @@ import torch
 
 from tools.transforms.fittable_transform import FittableTransform
 from tools.transforms.invertable_transform import InvertableTransform
+from tools.transforms.to_tensor import tensorify
 
 
 def minmax(v: torch.Tensor,
@@ -29,8 +30,8 @@ class MinMax(InvertableTransform, FittableTransform, torch.nn.Module):
         super().__init__()
         self.register_buffer("min", torch.zeros(1))
         self.register_buffer("max", torch.ones(1))
-        self.register_buffer("new_min", torch.tensor(new_min))
-        self.register_buffer("new_max", torch.tensor(new_max))
+        self.register_buffer("new_min", tensorify(new_min))
+        self.register_buffer("new_max", tensorify(new_max))
         self.dim = dim
 
     def _reduce(self, x: torch.Tensor, op: Any, dim: Any) -> torch.Tensor:
