@@ -10,6 +10,7 @@ from tools.util.typing import MISSING
 
 PATH_TYPE = Union[PathLibPath, "Path"]
 
+
 class Path(ABC):
     """Custom Path interface for files and directories."""
 
@@ -30,7 +31,7 @@ class Path(ABC):
 
     def __str__(self) -> str:
         return str(self._path)
-    
+
     def __repr__(self):
         return type(self).__name__ + f"({repr(self._path)})"
 
@@ -46,11 +47,15 @@ class Path(ABC):
         return cp
 
     def __getattr__(self, name: str) -> Any:
+        if name == "_path":
+            # If the attribute _path is not found, it is not initialized yet. Just raise an AttributeError.
+            raise AttributeError(
+                f"'{name}' not found in '{type(self).__name__}'")
         try:
-            return self._path.__getattribute__(name)
+            return getattr(self._path, name)
         except AttributeError as e:
-            raise AttributeError(f"{name} not found in '{type(self).__name__}'") from e
-
+            raise AttributeError(
+                f"{name} not found in '{type(self).__name__}'")
 
     @abstractmethod
     def merge(self, other: PATH_TYPE) -> PATH_TYPE:
@@ -67,5 +72,9 @@ class Path(ABC):
             The merged path.
         """
         ...
+
+    def __getstate__(self) -> object:
+        return super().__getstate__()
+
 
 os.PathLike.register(Path)

@@ -2,6 +2,7 @@
 # Class for functions
 # File for useful functions when using matplotlib
 import io
+import re
 from typing import Any, Callable, Dict, Iterable, List, Literal, Optional, Union, Tuple
 
 from matplotlib.animation import FuncAnimation
@@ -622,7 +623,15 @@ def should_use_logarithm(x: np.ndarray, magnitudes: int = 2, allow_zero: bool = 
     if not allow_zero:
         if np.any(x <= 0):
             return False
-    return np.max(x) / np.min(x) > math.pow(10, magnitudes)
+    max_ = np.max(np.abs(x))
+    min_ = np.min(np.abs(x))
+    if min_ == 0:
+        if len(x[x > 0]) == 0:
+            min_ = 1
+        else:
+            min_ = np.min(x[x > 0])
+
+    return (max_ / min_) > math.pow(10, magnitudes)
 
 
 def preserve_legend(ax: Axes,  # type: ignore
@@ -744,6 +753,26 @@ def register_alpha_colormap(color: np.ndarray,
     return name
 
 
+def used_mathjax(x: str) -> Tuple[bool, str]:
+    """Checks if a string is a mathjax string.
+
+    Parameters
+    ----------
+    x : str
+        String to check.
+
+    Returns
+    -------
+    Tuple[bool, str]
+        If the string is a mathjax string and the string without $.
+    """
+    pattern = r"^\$(?P<var_name>.*)\$$"
+    match = re.match(pattern, x)
+    if match is not None:
+        return True, match.group("var_name")
+    return False, x
+
+
 @saveable()
 def plot_as_image(data: VEC_TYPE,
                   size: float = 5,
@@ -764,6 +793,7 @@ def plot_as_image(data: VEC_TYPE,
                   norm: bool = False,
                   keep_transparency: bool = False,
                   inpaint_title: Union[bool, _DEFAULT] = DEFAULT,
+                  numbering: bool = True,
                   ) -> AxesImage:
     """Plots a 2D (complex) image with matplotib. Supports numpy arrays and torch tensors.
 
@@ -866,6 +896,7 @@ def plot_as_image(data: VEC_TYPE,
 
     images = []
     img_title = []
+    use_mathjax = []
     cmaps = []
 
     for i, data in enumerate(input_data):
@@ -873,6 +904,7 @@ def plot_as_image(data: VEC_TYPE,
         _col_images = []
         _col_titles = []
         _col_cmaps = []
+        _col_use_mathjax = []
         v_name = "?"
         if isinstance(variable_name, (List, tuple)):
             if len(variable_name) > i:
@@ -880,34 +912,48 @@ def plot_as_image(data: VEC_TYPE,
         else:
             v_name = variable_name
 
-        if len(input_data) > 1:
+        used_mj, v_name = used_mathjax(v_name)
+
+        if (len(input_data) > 1) and numbering:
             title_num_str = f"{rows + 1}: "
         if 'complex' in str(data.dtype):
             cols = 2
             _col_titles.append(f"{title_num_str}|{v_name}|")
+            _col_use_mathjax.append(used_mj)
             _col_images.append(np.abs(data))
             _col_cmaps.append(cmap)
 
             _col_titles.append(f"{title_num_str}angle({v_name})")
-            _col_images.append(np.angle(data))
+            _col_use_mathjax.append(used_mj)
+            angle = np.angle(data)
+            _col_images.append(angle)
             _col_cmaps.append(phase_cmap)
         else:
             _col_titles.append(title_num_str + v_name)
+            _col_use_mathjax.append(used_mj)
             _col_images.append(data)
             if cmap is None:
                 _col_cmaps.append('viridis')
             else:
-                _col_cmaps.append(cmap)
+                if isinstance(cmap, (List, tuple)):
+                    if len(cmap) > i:
+                        _col_cmaps.append(cmap[i])
+                    else:
+                        _col_cmaps.append("viridis")
+                else:
+                    _col_cmaps.append(cmap)
 
         images.append(_col_images)
         img_title.append(_col_titles)
         cmaps.append(_col_cmaps)
+        use_mathjax.append(_col_use_mathjax)
 
         rows += 1
 
     images = np.stack(images, axis=0)
     img_title = np.stack(img_title, axis=0)
     cmaps = np.stack(cmaps, axis=0)
+    use_mathjax = np.stack(use_mathjax, axis=0)
 
     if not keep_transparency and images.shape[-1] == 4:
         from tools.io.image import alpha_compose_with_background_grid
@@ -922,6 +968,7 @@ def plot_as_image(data: VEC_TYPE,
             images = images.swapaxes(0, 1)
             img_title = img_title.swapaxes(0, 1)
             cmaps = cmaps.swapaxes(0, 1)
+            use_mathjax = use_mathjax.swapaxes(0, 1)
 
     if axes is None:
         fig, axes = get_mpl_figure(
@@ -933,7 +980,10 @@ def plot_as_image(data: VEC_TYPE,
         axes = np.array([axes])
 
     if len(axes.shape) == 1:
-        axes = axes[None, ...]
+        if rows == 1:
+            axes = axes[None, ...]
+        else:
+            axes = axes[..., None]
     used_idx = 0
 
     for row in range(rows):
@@ -946,6 +996,7 @@ def plot_as_image(data: VEC_TYPE,
 
             _image = images[row][col]
             _title = img_title[row][col]
+            _use_mathjax = use_mathjax[row][col]
 
             color_mapping = None
 
@@ -964,14 +1015,22 @@ def plot_as_image(data: VEC_TYPE,
                     _cscale = cscale[i]
                 if _cscale == 'auto':
                     _cscale = 'log' if should_use_logarithm(
-                        _image.numpy()) else None
+                        _image, 3) else None
                 if _cscale is not None:
                     if _cscale == 'log':
                         zeros = _image == 0
-                        _image = np.where(zeros, 1, _image)
-                        _image = np.log(_image)
-                        _image = np.where(zeros, np.nan, _image)
-                        _title = f"log({_title})"
+                        non_finite = np.isnan(_image) | np.isinf(_image)
+                        negative = _image < 0
+                        _image = np.where(zeros, 1., _image)
+                        _image = np.where(non_finite, 1., _image)
+                        _image = np.where(negative, np.abs(_image), _image)
+                        _log = np.log10(_image)
+                        _log = np.where(zeros, np.nan, _log)
+                        _log = np.where(non_finite, np.nan, _log)
+                        _log = np.where(negative, -_log, _log)
+                        _image = _log
+                        _title = f"log_{{10}}({_title})"
+                        _use_mathjax = True
                 if _cscale == "count":
                     color_mapping = dict()
                     for j, value in enumerate(np.unique(_image)):
@@ -1038,6 +1097,8 @@ def plot_as_image(data: VEC_TYPE,
                       interpolation=interpolation, **imshow_kw)
 
             if not tight:
+                if _use_mathjax:
+                    _title = f"${_title}$"
                 ax.set_title(_title)
             if colorbar:
                 _cbar_format = None

@@ -170,3 +170,7 @@ class Config(JsonConvertible, ArgparserMixin):
         if self.use_progress_bar:
             if self.progress_factory is None:
                 self.progress_factory = ProgressFactory()
+
+    def __str__(self) -> str:
+        yaml_str = self.to_yaml(no_uuid=True, no_large_data=True)
+        return yaml_str
