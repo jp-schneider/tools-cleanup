@@ -1,6 +1,9 @@
 from dataclasses import dataclass, field
 import os
-from typing import Any, Callable, Dict, Literal, Optional, Tuple, Union
+import re
+from typing import Any, Callable, Dict, List, Literal, Optional, Tuple, Union
+
+import pandas as pd
 
 from tools.serialization.files.context_path import ContextPath
 from tools.serialization.files.file_handle import FileHandle
@@ -717,3 +720,24 @@ class Tracker():
         """
         path = os.path.join(directory, "tracker.json")
         return JsonConvertible.load_from_file(path, tracker_path=directory)
+
+    def get_metrics_overview(self, 
+                             scope: MetricScope = MetricScope.EPOCH, 
+                             mode: MetricMode = MetricMode.TRAINING,
+                             pattern: Optional[Union[str, List[str]]] = None) -> pd.DataFrame:
+        if pattern is None:
+            pattern = [".*"]
+        if isinstance(pattern, str):
+            pattern = [pattern]
+        pattern = [re.compile(p) for p in pattern]  
+        metrics = [x for k, x in self.metrics.items()
+                   if x.scope == scope and x.mode == mode and next((True for p in pattern if p.match(Tracker.split_tag(x.tag)[2])), False)]
+        ret = pd.DataFrame(columns=["step"])
+        for metric in metrics:
+            _, _, name = Tracker.split_tag(metric.tag)
+            df = metric.values.rename(columns={"value": name}, inplace=False)
+            df = df.drop(columns=["global_step"])
+            ret = pd.merge(ret, df, how="outer", on="step")
+        if scope == MetricScope.EPOCH:
+            ret = ret.rename(columns={"step": "epoch"})
+        return ret
