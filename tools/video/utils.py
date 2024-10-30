@@ -2,16 +2,19 @@ import numpy as np
 import cv2
 from tqdm.auto import tqdm
 from tools.util.path_tools import filer
-from tools.util.numpy import numpyify_image
+from tools.transforms.to_numpy_image import ToNumpyImage
 import sys
 from tools.util.typing import DEFAULT
 import os
+from tools.util.format import get_leading_zeros_format_string
+
 
 @filer(default_ext='mp4')
 def write_mp4(frames: np.ndarray,
               path: str = 'test.mp4',
               fps: float = 24.0,
               progress_bar: bool = False,
+              frame_counter: bool = False,
               codec: str = DEFAULT):
     """Writes the frames to a video file.
 
@@ -28,16 +31,15 @@ def write_mp4(frames: np.ndarray,
     codec : str, optional
         Codec to use for the video, by default DEFAULT
         If not set, will use the environment variable VIDEO_CODEC or 'avc1' if not set.
-        
+
     Raises
     ------
     ValueError
         If wrong number of channels in frames.
     """
-    if "torch" in sys.modules:
-        import torch
-        if isinstance(frames, torch.Tensor):
-            frames = numpyify_image(frames)
+    numpyify_image = ToNumpyImage(output_dtype=np.uint8)
+
+    frames = numpyify_image(frames)
 
     if len(frames.shape) not in [3, 4]:
         raise ValueError(f"Unsupported frame shape: {frames.shape}.")
@@ -50,9 +52,13 @@ def write_mp4(frames: np.ndarray,
     else:
         raise ValueError(f"Unsupported frame shape: {frames.shape}.")
 
-    if frames.dtype != np.uint8:
-        frames = frames - frames.min()
-        frames = (frames / frames.max() * 255).astype(np.uint8)
+    if frame_counter:
+        from tools.io.image import put_text
+        fmt = get_leading_zeros_format_string(num_frames)
+        for i, frame in enumerate(frames):
+            text = fmt.format(i)
+            frames[i] = put_text(frame.copy(), text,
+                                 placement="top-right", background_stroke=1)
 
     if codec == DEFAULT:
         codec = os.environ.get('VIDEO_CODEC', 'avc1')
