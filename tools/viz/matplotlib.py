@@ -49,7 +49,7 @@ def set_default_output_dir(output_dir: Optional[Union[str, Path]] = None):
     if output_dir is not None:
         if isinstance(output_dir, Path):
             output_dir = str(output_dir)
-        os.environ["PLOT_OUTPUT_DIR"] = output_dir
+        os.environ["PLOT_OUTPUT_DIR"] = str(output_dir)
     else:
         os.environ.pop("PLOT_OUTPUT_DIR", None)
 

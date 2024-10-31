@@ -105,6 +105,7 @@ class VisualNode3D(SceneNode):
         if ax is None:
             fig = plt.figure()
             ax = plt.subplot(projection='3d')
+            ax.computed_zorder = False
             init_ax = True
         else:
             fig = ax.get_figure()
