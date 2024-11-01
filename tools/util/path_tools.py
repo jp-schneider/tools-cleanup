@@ -1,6 +1,7 @@
 from functools import wraps
 import os
 from pathlib import Path
+
 import re
 import subprocess
 from typing import Any, Callable, Dict, List, Optional, Set, Union
@@ -447,7 +448,7 @@ def process_path(
         else:
             raise ValueError(
                 f"Path {'for ' + variable_name + ' ' if variable_name is not None else ''}must be set.")
-    if isinstance(path, Path):
+    if isinstance(path, (Path, ToolsPath)):
         return path
     elif isinstance(path, ToolsPath):
         return path

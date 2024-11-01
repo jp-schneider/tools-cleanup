@@ -35,7 +35,8 @@ class ToTensorImage(ToTensor):
         elif self.output_dtype == x.dtype:
             return x
         elif self.output_dtype == torch.uint8 and x.dtype in [torch.float32, torch.float64, torch.float16]:
-            if x.min() < 0 or x.max() > 1:
+            eps = 0.1
+            if x.min() < (0 - eps) or x.max() > (1 + eps):
                 logger.warning(
                     f"Converting float image to uint8, but values are not in [0, 1]: {x.min()}, {x.max()}")
             return (x * 255).to(torch.uint8)
