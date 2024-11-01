@@ -21,7 +21,7 @@ from tqdm.auto import tqdm
 
 from tools.agent.agent import Agent
 from tools.agent.util import (DataTracker, LearningMode, LearningScope,
-                                Tracker)
+                              Tracker)
 from tools.metric.metric_scope import MetricScope
 from tools.metric.metric_summary import MetricSummary
 from tools.metric.metric_mode import MetricMode
@@ -34,6 +34,7 @@ from tools.util.format import strfdelta
 from tools.util.timer import Timer
 from tools.util.torch import TensorUtil
 from tools.logger.logging import logger
+
 
 class TorchAgent(Agent):
 
@@ -60,6 +61,7 @@ class TorchAgent(Agent):
                  force_pretrain: Optional[bool] = None,
                  pretrain_only: Optional[bool] = None,
                  device: str = 'cpu',
+                 event_context: Optional[Dict[str, Any]] = None,
                  **kwargs
                  ):
         super().__init__(name=name,
@@ -67,7 +69,8 @@ class TorchAgent(Agent):
                          batch_metrics=batch_metrics,
                          epoch_metrics=epoch_metrics,
                          agent_directory=agent_directory,
-                         runs_directory=runs_directory
+                         runs_directory=runs_directory,
+                         event_context=event_context,
                          )
 
         # Model
@@ -156,7 +159,8 @@ class TorchAgent(Agent):
         """
         return dict(do_pretraining=self.do_pretraining,
                     pretrain_args=self.pretrain_args,
-                    pretrain_state_path=format_os_independent(self.pretrain_state_path) if self.pretrain_state_path is not None else None,
+                    pretrain_state_path=format_os_independent(
+                        self.pretrain_state_path) if self.pretrain_state_path is not None else None,
                     pretrain_only=self.pretrain_only,
                     force_pretrain=self.force_pretrain,
                     log_epoch_progress=self.log_epoch_progress,
@@ -308,7 +312,7 @@ class TorchAgent(Agent):
                         raise err
                     finally:
                         tracker.epoch(
-                                in_training=(phase == LearningMode.TRAINING))
+                            in_training=(phase == LearningMode.TRAINING))
 
                         epoch_loss = epoch_data_tracker.running_loss
                         # Track epoch main metric
@@ -335,17 +339,18 @@ class TorchAgent(Agent):
                         )
                         self.epoch_processed.notify(
                             epoch_output_event_args)
-                        
+
                         if use_progress_bar:
                             epoch_progress_bar.set_postfix(
                                 loss=epoch_loss, refresh=False)
-                        
+
         except StopTraining as err:
             raise
         finally:
             # Ending epoch timing
             if self.log_epoch_progress:
-                logger.info(f'Epoch {epoch + 1} / {num_epochs} time {strfdelta(epoch_timer.duration, "%H:%M:%S")}')
+                logger.info(
+                    f'Epoch {epoch + 1} / {num_epochs} time {strfdelta(epoch_timer.duration, "%H:%M:%S")}')
 
             # Compare validation result with best and save model if current is better.
             if (epoch_output_event_args is not None
@@ -357,9 +362,9 @@ class TorchAgent(Agent):
                     model.to('cpu')
 
                 self.save(execution_context=kwargs,
-                                 keep_device=keep_device,
-                                 stage=SaveStage.BEST,
-                                 )
+                          keep_device=keep_device,
+                          stage=SaveStage.BEST,
+                          )
                 logger.info(f'Accuracy: {best.value:.3e}')
 
                 if not keep_device and self.device != "cpu":
@@ -389,8 +394,8 @@ class TorchAgent(Agent):
         return type(self).decompose_training_item(item, training_dataset=self.training_dataset)
 
     @classmethod
-    def decompose_training_item(cls, 
-                                item: Any, 
+    def decompose_training_item(cls,
+                                item: Any,
                                 training_dataset: TorchDataSource
                                 ) -> Tuple[Any, Any, torch.Tensor, Optional[Any]]:
         """Unpacks the item from the training dataset.
@@ -446,7 +451,8 @@ class TorchAgent(Agent):
 
         # forward
         # track history if only in train
-        with (torch.set_grad_enabled(phase == LearningMode.TRAINING)): # and torch.autograd.detect_anomaly():
+        # and torch.autograd.detect_anomaly():
+        with (torch.set_grad_enabled(phase == LearningMode.TRAINING)):
 
             if isinstance(device_inputs, list):
                 # Unpacking as list as dataloader wraps multiple args within a list
@@ -456,7 +462,8 @@ class TorchAgent(Agent):
 
             # If the loss function accepts additional arguments, pass them
             if self.forward_additional_loss_args:
-                loss: torch.Tensor = criterion(device_outputs, device_labels, _input=device_inputs)
+                loss: torch.Tensor = criterion(
+                    device_outputs, device_labels, _input=device_inputs)
             else:
                 loss: torch.Tensor = criterion(device_outputs, device_labels)
 
@@ -536,7 +543,7 @@ class TorchAgent(Agent):
             if not isinstance(model, PretrainableModule):
                 raise ValueError("Model is not pretrainable!")
             state_loaded = False
-            
+
             pretraining_kwargs = dict(self.pretrain_args)
             pretraining_kwargs.update(kwargs.get("pretrain_args", {}))
 
@@ -577,13 +584,14 @@ class TorchAgent(Agent):
                 if state is not None:
                     _state = TensorUtil.apply_deep(
                         state, lambda x: x.detach().cpu())
-                    os.makedirs(os.path.dirname(self.pretrain_state_path), exist_ok=True)
+                    os.makedirs(os.path.dirname(
+                        self.pretrain_state_path), exist_ok=True)
                     torch.save(_state, self.pretrain_state_path)
                     logger.info(
                         f"Pretrain state saved to {self.pretrain_state_path}")
                 else:
                     logger.info("No pretrain state returned, not saving...")
-                
+
             after_pretrain_event_args = TorchModelStepEventArgs(
                 model=model,
                 model_args=self.model_args,
@@ -594,10 +602,10 @@ class TorchAgent(Agent):
             )
             self.after_pretrain.notify(after_pretrain_event_args)
             self.save(execution_context=kwargs,
-                                keep_device=keep_device,
-                                stage=SaveStage.BEST,
-                                )
-            
+                      keep_device=keep_device,
+                      stage=SaveStage.BEST,
+                      )
+
             logger.info("Pretraining done!")
 
     def train(self, num_epochs=10, keep_device: bool = True, **kwargs):
@@ -653,8 +661,6 @@ class TorchAgent(Agent):
         # Pretraining if wanted:
         self._pretrain(model, train_set=train_set, test_set=test_set,
                        use_progress_bar=use_progress_bar, keep_device=keep_device, **kwargs)
-
-
 
         if (self.pretrain_only == True or (self.pretrain_only is None and kwargs.get("pretrain_only", False))):
             logger.info("Pretraining done, exiting...")
@@ -784,7 +790,7 @@ class TorchAgent(Agent):
             self._optimizer = None
 
     def _get_optimizer(self, model: torch.nn.Module) -> torch.optim.Optimizer:
-        """Initializes or gets the optimizer. 
+        """Initializes or gets the optimizer.
         If a state dict is available it will use it.
 
         Parameters
@@ -908,13 +914,12 @@ class TorchAgent(Agent):
                 self.lr_scheduler.step(loss)
         self.epoch_processed.attach(_register_lr_plateu_scheduler)
 
-
     def use_step_lr_scheduler(self,
-                                    step_size: int,
-                                    gamma: float = 0.1,
-                                    last_epoch: int = -1,
-                                    verbose=False
-                                    ):
+                              step_size: int,
+                              gamma: float = 0.1,
+                              last_epoch: int = -1,
+                              verbose=False
+                              ):
         """
         Applies the Step LR Scheduler on the optimizer when it gets created.
         Need to be called before training.
@@ -1121,7 +1126,7 @@ class TorchAgent(Agent):
         Parameters
         ----------
         file_name_or_buf : Union[os.PathLike[str], BytesIO]
-            File name or buffer to load from.   
+            File name or buffer to load from.
 
         Returns
         -------

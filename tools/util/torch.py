@@ -298,7 +298,7 @@ def batched_generator_exec(
         default_batch_size: int = 1,
         default_multiprocessing: bool = False,
         default_num_workers: int = 4
-) -> callable:
+) -> Callable[[Callable[..., Any]], Callable[..., Generator]]:
     """Decorator for executing a function in batches.
     The wrapped function will be executed in batches based on the batched_params.
 
@@ -563,6 +563,70 @@ def index_of_first(values: torch.Tensor, search: torch.Tensor) -> torch.Tensor:
         widx = aw[where_inverse == i][0]  # Select first match
         out[s] = widx[0]
     return out
+
+
+def angle_between_vectors(v1: torch.Tensor, v2: torch.Tensor) -> torch.Tensor:
+    """Calculates the clockwise angle between two vectors.
+
+    Preserves the sign of the angle based on the cross product of the two vectors.
+
+    Parameters
+    ----------
+    v1 : torch.Tensor
+        The first vector. Shape: (..., 2) or (..., 3)
+
+    v2 : torch.Tensor
+        The second vector. Shape: (..., 2) or (..., 3)
+
+    Returns
+    -------
+    torch.Tensor
+        The angle between the two vectors. Shape: (..., 1) or (..., 2)
+    """
+
+    v1, shp = flatten_batch_dims(v1, -2)
+    v2 = flatten_batch_dims(v2, -2)[0]
+
+    # Normalize the vectors
+    nVs = v1 / torch.norm(v1, dim=-1, keepdim=True)
+    mV = v2 / torch.norm(v2, dim=-1, keepdim=True)
+
+    # Calculate the cross product (z-component)
+    if nVs.shape[-1] == 2:
+        cross_product = nVs[:, 0] * mV[:, 1] - nVs[:, 1] * mV[:, 0]
+    elif nVs.shape[-1] == 3:
+        cross_product = torch.cross(nVs, mV, dim=-1)
+    else:
+        raise ValueError("Vectors must be 2D or 3D")
+
+    # Calculate the dot product
+    dot_product = torch.sum(nVs * mV, dim=-1)
+
+    # Use atan2 to calculate the angle, handling the sign based on the cross product
+    angle = torch.atan2(cross_product, dot_product)
+
+    # Adjust the angle to the desired range (0 to 2pi)
+    angle = (angle + 2 * torch.pi) % (2 * torch.pi)
+
+    return unflatten_batch_dims(angle, shp)
+
+
+def complex_sign_angle(v: torch.Tensor) -> torch.Tensor:
+    """Calculates the angle of a complex vector and preserves the sign of the angle.
+    Angle is in the range of -pi to pi.
+
+    Parameters
+    ----------
+    v : torch.Tensor
+        Complex vector. Shape: (...)
+
+    Returns
+    -------
+    torch.Tensor
+        The angle of the complex vector. Shape: (...)
+    """
+    if "complex" not in str(v.dtype):
+        raise ValueError("Input must be a complex tensor.")
 
 
 class TensorUtil():

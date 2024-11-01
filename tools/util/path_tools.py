@@ -5,7 +5,6 @@ from pathlib import Path
 import re
 import subprocess
 from typing import Any, Callable, Dict, List, Optional, Set, Union
-
 from tools.util.typing import _NOTSET, NOTSET
 
 
@@ -219,7 +218,8 @@ def read_directory_recursive(
             sub_path = result.pop(path_key)
             patterns = "/".join(next_patterns)
             new_path = sub_path + "/" + patterns
-            rec_results = read_directory_recursive(new_path, parser, path_key, memo=memo)
+            rec_results = read_directory_recursive(
+                new_path, parser, path_key, memo=memo)
             for rec_result in rec_results:
                 rec_result.update(result)
                 super_results.append(rec_result)
@@ -441,6 +441,7 @@ def process_path(
     from tools.util.format import parse_format_string
     from tools.serialization.files.path import Path as ToolsPath
     from tools.serialization.files.context_path import ContextPath
+
     if path is None:
         if allow_none:
             return None
@@ -448,6 +449,8 @@ def process_path(
             raise ValueError(
                 f"Path {'for ' + variable_name + ' ' if variable_name is not None else ''}must be set.")
     if isinstance(path, (Path, ToolsPath)):
+        return path
+    elif isinstance(path, ToolsPath):
         return path
     elif not isinstance(path, str):
         raise ValueError(

@@ -11,6 +11,7 @@ import numpy as np
 import os
 from tools.util.reflection import dynamic_import
 
+
 def _encode_buffer(buf: bytes) -> str:
     return base64.b64encode(buf).decode()
 
@@ -62,7 +63,7 @@ class TensorValueWrapper(JsonConvertible):
         with io.BytesIO() as buf:
             buf.write(_decode_buffer(value))
             buf.seek(0)
-            return torch.load(buf)
+            return torch.load(buf, weights_only=True)
 
     def to_python(self) -> torch.Tensor:
         if self.has_data:
@@ -73,8 +74,10 @@ class TensorValueWrapper(JsonConvertible):
                 f"Tensor was saved without data, can not recover! Result will be without data. Wrapper value was: {os.linesep + json_str}")
             shp = self.shape.replace("(", "").replace(")", "")
             shp = tuple([int(x) for x in shp.split(",") if len(x) > 0])
-            dtype = dynamic_import(self.dtype) if self.dtype.startswith("torch.") else None
-            dev = torch.device(self.device) if self.device else torch.device("cpu")
+            dtype = dynamic_import(
+                self.dtype) if self.dtype.startswith("torch.") else None
+            dev = torch.device(
+                self.device) if self.device else torch.device("cpu")
             return torch.zeros(shp).to(dtype=dtype, device=dev)
 
 

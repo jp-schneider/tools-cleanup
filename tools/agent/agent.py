@@ -9,24 +9,36 @@ from tools.event import Event
 from tools.util.torch import VEC_TYPE
 from tools.util.path_tools import open_folder
 
+
 class Agent(ABC):
     """Abstract agent implementation."""
 
     def __init__(self,
                  name: Optional[str] = None,
                  tracker: Optional[Tracker] = None,
-                 epoch_metrics: Optional[List[Callable[[VEC_TYPE, VEC_TYPE], VEC_TYPE]]] = None,
-                 batch_metrics: Optional[List[Callable[[VEC_TYPE, VEC_TYPE], VEC_TYPE]]] = None,
+                 epoch_metrics: Optional[List[Callable[[
+                     VEC_TYPE, VEC_TYPE], VEC_TYPE]]] = None,
+                 batch_metrics: Optional[List[Callable[[
+                     VEC_TYPE, VEC_TYPE], VEC_TYPE]]] = None,
                  agent_directory: Optional[str] = None,
                  runs_directory: Optional[str] = None,
                  created_at: Optional[datetime] = None,
+                 event_context: Optional[Dict[str, Any]] = None,
                  **kwargs
                  ) -> None:
         super().__init__()
         self.name = name if name else type(self).__name__
         self.tracker: Tracker = tracker if tracker else Tracker()
         self.created_at = created_at if created_at else datetime.now().astimezone()
-        
+
+        if event_context is not None:
+            if "source" in event_context:
+                raise ValueError(
+                    "Event context should not contain a source key. This is reserved for the caller of event itself.")
+            ctx = self.get_shared_event_context()
+            for k, v in event_context.items():
+                ctx[k] = v
+
         # Events
         self.model_saving = Event[AgentSaveEventArgs](
             source=self, context=self.get_shared_event_context())
@@ -44,14 +56,16 @@ class Agent(ABC):
         """Event which occurs, when a epoch was completed.
         Shares its context with the other events of this class."""
 
-        self.epoch_metrics: List[Callable[[VEC_TYPE, VEC_TYPE], VEC_TYPE]] = epoch_metrics if epoch_metrics else []
+        self.epoch_metrics: List[Callable[[VEC_TYPE, VEC_TYPE],
+                                          VEC_TYPE]] = epoch_metrics if epoch_metrics else []
         """Additional epoch metrics, invoked with output and label.
         Type should be Callable(output, target) -> result"""
 
-        self.batch_metrics: List[Callable[[VEC_TYPE, VEC_TYPE], VEC_TYPE]] = batch_metrics if batch_metrics else []
+        self.batch_metrics: List[Callable[[VEC_TYPE, VEC_TYPE],
+                                          VEC_TYPE]] = batch_metrics if batch_metrics else []
         """Additional batch metrics, invoked with output and label.
            Type should be Callable(output, target) -> result"""
-        
+
         if runs_directory is None:
             runs_directory = "./runs/"
         self.runs_directory: str = runs_directory
@@ -74,7 +88,7 @@ class Agent(ABC):
         Dict[str, Any]
             Dictionary for the context.
         """
-        if not hasattr(self, "__shared_event_context__ ") or self.__shared_event_context__ is None:
+        if not hasattr(self, "__shared_event_context__") or self.__shared_event_context__ is None:
             self.__shared_event_context__ = dict()
         return self.__shared_event_context__
 
@@ -124,7 +138,6 @@ class Agent(ABC):
         """Name with date attached for easier comparison."""
         return self.name + "_" + self.created_at.strftime("%y_%m_%d_%H_%M_%S")
 
-
     @property
     def agent_folder(self) -> str:
         """Returns the folder of the agent.
@@ -140,7 +153,7 @@ class Agent(ABC):
         os.makedirs(path, exist_ok=True)
         return path
 
-    def open_folder(self) -> None:  
+    def open_folder(self) -> None:
         """Opens the folder of the agent.
         """
         open_folder(self.agent_folder)
