@@ -1,6 +1,7 @@
 from functools import wraps
 import os
 from pathlib import Path
+
 import re
 import subprocess
 from typing import Any, Callable, Dict, List, Optional, Set, Union
@@ -438,6 +439,7 @@ def process_path(
         The processed path as Path object.
     """
     from tools.util.format import parse_format_string
+    from tools.serialization.files.path import Path as ToolsPath
     from tools.serialization.files.context_path import ContextPath
     if path is None:
         if allow_none:
@@ -445,7 +447,7 @@ def process_path(
         else:
             raise ValueError(
                 f"Path {'for ' + variable_name + ' ' if variable_name is not None else ''}must be set.")
-    if isinstance(path, Path):
+    if isinstance(path, (Path, ToolsPath)):
         return path
     elif not isinstance(path, str):
         raise ValueError(
