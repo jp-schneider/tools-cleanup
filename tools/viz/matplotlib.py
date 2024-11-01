@@ -855,9 +855,8 @@ def plot_as_image(data: VEC_TYPE,
 
     def flatten_batch(x):
         if len(x.shape) > 4:
-            if len(d.shape) > 4:
-                logger.warning(
-                    "Reshaping data to 2D for plotting. Data has more than 4 dimensions.")
+            logger.warning(
+                "Reshaping data to 2D for plotting. Data has more than 4 dimensions.")
             if "torch" in sys.modules:
                 from tools.util.torch import flatten_batch_dims
                 if isinstance(x, Tensor):
