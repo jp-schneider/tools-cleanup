@@ -295,7 +295,8 @@ def save_mask(mask: VEC_TYPE,
               spread: bool = False,
               metadata: Optional[dict] = None,
               progress_bar: bool = False,
-              additional_filename_variables: Optional[Dict[str, Any]] = None
+              additional_filename_variables: Optional[Dict[str, Any]] = None,
+              index_offset: int = 0
               ) -> List[str]:
     """Saves the given (value) based mask to the given path.
 
@@ -326,6 +327,9 @@ def save_mask(mask: VEC_TYPE,
     additional_filename_variables : Optional[Dict[str, Any]], optional
         Additional variables to use in the filename format string, by default None
 
+    index_offset : int, optional
+        Offset to add to the index of the mask in the batch, by default 0
+        Can be used if masks are saved with a format string and the index should start at a different value.
 
     Returns
     -------
@@ -375,7 +379,7 @@ def save_mask(mask: VEC_TYPE,
 
     if len(mask.shape) == 4:
         filenames = parse_format_string(path, [dict(index=i) for i in range(
-            mask.shape[0])], additional_variables=additional_filename_variables)
+            mask.shape[0])], additional_variables=additional_filename_variables, index_offset=index_offset)
         if len(set(filenames)) != mask.shape[0]:
             raise ValueError(
                 f"Number of filenames {len(filenames)} does not match number of masks {mask.shape[0]} if you specified an index template?")
@@ -578,7 +582,9 @@ def save_channel_masks(
         mask_directory: str,
         oids: Optional[np.ndarray] = None,
         filename_pattern: str = "img_{index:02d}_ov_{ov_index}.png",
-        spread: bool = True) -> List[str]:
+        spread: bool = True,
+        index_offset: int = 0
+) -> List[str]:
     """Saves a list of channel masks to a directory.
 
     Parameters
@@ -614,7 +620,7 @@ def save_channel_masks(
         value_mask = channel_masks_to_value_mask(
             m_stack, m_stack_oids, handle_overlap='raise')[..., None]
         p = save_mask(value_mask, path, spread=spread,
-                      additional_filename_variables=dict(ov_index=i))
+                      additional_filename_variables=dict(ov_index=i), index_offset=index_offset)
         saved_paths.extend(p)
 
 
@@ -713,7 +719,7 @@ def load_channel_masks(
     overlapping_masks = {k: [] for k in overlapping_mask_paths}
     bar = None
     if progress_bar:
-        bar = progress_factory.bar(total=sum([len(x) for x in overlapping_mask_paths.values()]), desc="Loading masks", 
+        bar = progress_factory.bar(total=sum([len(x) for x in overlapping_mask_paths.values()]), desc="Loading masks",
                                    tag="LOADING_MASKS",
                                    is_reusable=True)
     for ov_index, path_dict_list in overlapping_mask_paths.items():

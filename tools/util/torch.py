@@ -298,7 +298,7 @@ def batched_generator_exec(
         default_batch_size: int = 1,
         default_multiprocessing: bool = False,
         default_num_workers: int = 4
-) -> callable:
+) -> Callable[[Callable[..., Any]], Callable[..., Generator]]:
     """Decorator for executing a function in batches.
     The wrapped function will be executed in batches based on the batched_params.
 

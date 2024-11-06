@@ -49,7 +49,7 @@ def set_default_output_dir(output_dir: Optional[Union[str, Path]] = None):
     if output_dir is not None:
         if isinstance(output_dir, Path):
             output_dir = str(output_dir)
-        os.environ["PLOT_OUTPUT_DIR"] = output_dir
+        os.environ["PLOT_OUTPUT_DIR"] = str(output_dir)
     else:
         os.environ.pop("PLOT_OUTPUT_DIR", None)
 
@@ -855,9 +855,8 @@ def plot_as_image(data: VEC_TYPE,
 
     def flatten_batch(x):
         if len(x.shape) > 4:
-            if len(d.shape) > 4:
-                logger.warning(
-                    "Reshaping data to 2D for plotting. Data has more than 4 dimensions.")
+            logger.warning(
+                "Reshaping data to 2D for plotting. Data has more than 4 dimensions.")
             if "torch" in sys.modules:
                 from tools.util.torch import flatten_batch_dims
                 if isinstance(x, Tensor):
