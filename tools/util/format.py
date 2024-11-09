@@ -26,13 +26,14 @@ UPPER_PATTERN = re.compile(r'^([A-Z]+)$')
 REGEX_ISO_8601_PATTERN = r'^(-?(?:[1-9][0-9]*)?[0-9]{4})-(1[0-2]|0[1-9])-(3[01]|0[1-9]|[12][0-9])T(2[0-3]|[01][0-9]):([0-5][0-9]):([0-5][0-9])(\.[0-9]+)?(Z|[+-](?:2[0-3]|[01][0-9]):[0-5][0-9])?$'
 REGEX_ISO_COMPILED = re.compile(REGEX_ISO_8601_PATTERN)
 
+
 @dataclass
 class FormatVariable():
     """Dataclass for a format variable."""
 
     variable: str
     """The variable name."""
-    
+
     value: str
     """The unformatted value of the variable."""
 
@@ -42,7 +43,7 @@ class FormatVariable():
     localizer: Optional[str] = field(default=None)
     """The localizer for the variable."""
 
-    
+
 def to_snake_case(input: str) -> str:
     """Converts a upper snake case, or camel case pattern to lower snake case.
 
@@ -162,7 +163,7 @@ def destinctive_number_float_format(values: Series,
     values = values.dropna()
 
     def _count_leading_zeros(value: float):
-        if value >= 1:
+        if abs(value) >= 1 or value == 0:
             return 0
         post = str(value).split('.')[1]
         i = 0
@@ -182,10 +183,16 @@ def destinctive_number_float_format(values: Series,
     for i, _v in values.items():
         exp = 0
         num = _v
-        while num >= 10:
+        if num == 0:
+            exp = 1
+            num = 0.
+            values[i] = num
+            _exp[i] = exp
+            continue
+        while abs(num) >= 10:
             num = num / 10
             exp += 1
-        while num < 1:
+        while abs(num) < 1:
             num = num * 10
             exp -= 1
         values[i] = num
@@ -418,7 +425,8 @@ def parse_format_string(format_string: str,
                         index_variable: str = "index",
                         allow_invocation: bool = False,
                         additional_variables: Optional[Dict[str, Any]] = None,
-                        default_formatters: Optional[Dict[Type, Callable[[Any], str]]] = DEFAULT,
+                        default_formatters: Optional[Dict[Type, Callable[[
+                            Any], str]]] = DEFAULT,
                         index_offset: int = 0,
                         found_variables: Optional[List[List[FormatVariable]]] = None) -> List[str]:
     """Formats content of a list of objects with a format string for each object.
@@ -434,7 +442,7 @@ def parse_format_string(format_string: str,
 
         It also supports Environment variables, which can be used with {ENV:variable[:formatter]}.
         If the environment variable does not exist, an ValueError will be raised.
-        
+
         Every property of the obj can be used as a variable, in addition to `index_variable` which is the index of the obj in the provided list.
 
     obj_list : List[Any]
@@ -461,8 +469,9 @@ def parse_format_string(format_string: str,
     List[str]
         Formatted strings.
     """
-    pattern = re.compile(r"\{((?P<localizer>(ENV)|(env))\:)?(?P<variable>[A-z0-9\_]+)(?P<formatter>:[0-9A-z\.\,]+)?\}")
-    
+    pattern = re.compile(
+        r"\{((?P<localizer>(ENV)|(env))\:)?(?P<variable>[A-z0-9\_]+)(?P<formatter>:[0-9A-z\.\,]+)?\}")
+
     matches = [m.groupdict() for m in pattern.finditer(format_string)]
     # Check which variables should included in the format string
     variables = re.findall(pattern, format_string)
@@ -470,7 +479,8 @@ def parse_format_string(format_string: str,
     keys = [variable[0] for variable in variables]
     formats = [variable[1] if len(
         variable) > 1 else None for variable in variables]
-    loc_key_formats = [(x.get("localizer", None), x.get("variable"), x.get("formatter", None)) for x in matches]
+    loc_key_formats = [(x.get("localizer", None), x.get(
+        "variable"), x.get("formatter", None)) for x in matches]
 
     if additional_variables is None:
         additional_variables = dict()
@@ -493,7 +503,8 @@ def parse_format_string(format_string: str,
             else:
                 if loc is not None:
                     if loc.lower() != "env":
-                        raise ValueError(f"Unknown localizer: {loc} for key: {key} in format string: {format_string}")
+                        raise ValueError(
+                            f"Unknown localizer: {loc} for key: {key} in format string: {format_string}")
                     # Try to find the value in the environment
                     value = os.environ.get(key, MISSING)
                     if value == MISSING:
@@ -501,7 +512,8 @@ def parse_format_string(format_string: str,
                         if key in additional_variables:
                             value = additional_variables[key]
                     if value == MISSING:
-                        raise ValueError(f"Environment variable '{key}' does not exist, but was specified in the format string {format_string}.")
+                        raise ValueError(
+                            f"Environment variable '{key}' does not exist, but was specified in the format string {format_string}.")
                 else:
                     # Default localizers
                     try:
@@ -511,7 +523,7 @@ def parse_format_string(format_string: str,
                             value = obj[key]
                         elif key in additional_variables:
                             value = additional_variables[key]
-            
+
             if value == MISSING:
                 raise AttributeError(
                     f"Object does not have a property: {key}")
@@ -527,8 +539,10 @@ def parse_format_string(format_string: str,
                 loc = ""
             else:
                 loc = loc + ":"
-            name = name.replace("{" + loc + key + format + "}", _formatted_value)
-            replacements.append(FormatVariable(localizer=loc, variable=key, formatter=format, value=value))
+            name = name.replace(
+                "{" + loc + key + format + "}", _formatted_value)
+            replacements.append(FormatVariable(
+                localizer=loc, variable=key, formatter=format, value=value))
         results.append(name)
         if found_variables is not None:
             found_variables.append(replacements)

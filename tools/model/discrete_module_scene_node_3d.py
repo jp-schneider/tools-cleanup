@@ -43,7 +43,8 @@ class DiscreteModuleSceneNode3D(ModuleSceneNode3D):
                  _orientation: Optional[torch.Tensor] = None,
                  **kwargs
                  ):
-        super().__init__(name=name, children=children, decoding=decoding, dtype=dtype, **kwargs)
+        super().__init__(name=name, children=children,
+                         decoding=decoding, dtype=dtype, **kwargs)
         if position is not None:
             if translation is not None or orientation is not None:
                 raise ValueError(
@@ -122,6 +123,22 @@ class DiscreteModuleSceneNode3D(ModuleSceneNode3D):
 
     def _transform(self, affine_matrix: torch.Tensor, **kwargs):
         self.set_position(affine_matrix @ self.get_position(**kwargs))
+
+    def after_checkpoint_loaded(self, **kwargs):
+        """Method to be called after the checkpoint is loaded.
+
+        This method is called after the checkpoint is loaded. It can be used to perform any operations.
+        """
+        pass
+
+    def _after_checkpoint_loaded(self, **kwargs):
+        """
+        Method to be called after the checkpoint is loaded.
+        """
+        self.after_checkpoint_loaded(**kwargs)
+        if self._scene_children is not None:
+            for child in self._scene_children:
+                child._after_checkpoint_loaded(**kwargs)
 
     def translate(self, translation_vector: VEC_TYPE):
         """Translate the object by moving its position.

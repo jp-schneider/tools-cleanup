@@ -50,8 +50,8 @@ class Path(ABC):
         if name == "_path":
             # If the attribute _path is not found, it is not initialized yet. Just raise an AttributeError.
             raise AttributeError(
-                f"'{name}' not found in '{type(self).__name__}'")
-        return getattr(self._path, name)
+                f"'{name}' not found in '{type(self).__name__}'")  # @IgnoreException
+        return getattr(self._path, name)  # @IgnoreException
 
     @abstractmethod
     def merge(self, other: PATH_TYPE) -> PATH_TYPE:

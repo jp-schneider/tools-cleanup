@@ -9,6 +9,9 @@ except ImportError:
     pass
 import numpy as np
 
+# Hash of np.float types is not correctly implemented so set check does not work and list is used.
+FLOAT_SET = [np.float32, np.float64, np.float16]
+
 
 class ToNumpyImage(ToNumpy):
     """Transforms a arbitrary value or tensor to a numpy array. If the input is a tensor, it will be permuted to (H, W, C) or (B, H, W, C) before conversion.
@@ -39,14 +42,16 @@ class ToNumpyImage(ToNumpy):
             return x
         elif self.output_dtype == x.dtype:
             return x
-        elif self.output_dtype == np.uint8 and x.dtype in [np.float32, np.float64, np.float16]:
+        elif self.output_dtype == np.uint8 and x.dtype in FLOAT_SET:
             eps = 0.1
             if x.min() < (0 - eps) or x.max() > (1 + eps):
                 logger.warning(
                     f"Converting float image to uint8, but values are not in [0, 1]: {x.min()}, {x.max()}")
             return (x * 255).astype(np.uint8)
-        elif self.output_dtype in [np.float32, np.float64, np.float16] and x.dtype == np.uint8:
+        elif self.output_dtype in FLOAT_SET and x.dtype == np.uint8:
             return x.astype(self.output_dtype) / 255
+        elif self.output_dtype in FLOAT_SET and x.dtype in FLOAT_SET:
+            return x.astype(self.output_dtype)
         else:
             raise ValueError(
                 f"Cannot convert dtype {x.dtype} to {self.output_dtype}")
