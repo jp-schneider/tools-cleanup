@@ -233,7 +233,7 @@ def _compose_transformation_matrix(position: torch.Tensor, orientation: torch.Te
         mat = torch.eye(4, dtype=orientation.dtype,
                         device=orientation.device).repeat(shp[0], 1, 1)
     mat[..., :3, :3] = orientation
-    mat[..., :3, 3] = position
+    mat[..., :3, 3] = position[..., :3]
     return mat
 
 
@@ -810,8 +810,9 @@ def position_quaternion_to_affine_matrix(position: torch.Tensor, quaternion: tor
     rotation_matrix = unitquat_to_rotmat(quaternion)
     return _compose_transformation_matrix(position, rotation_matrix[..., :3, :3])
 
+
 def _calculate_rotation_matrix(a: torch.Tensor, b: torch.Tensor):
-     # Check for opposite directions and flip if necessary
+    # Check for opposite directions and flip if necessary
     dot_products = torch.sum(a * b, dim=-1)
     opposite_directions = dot_products < 0
     a[opposite_directions] = -a[opposite_directions]  # Flip vectors in a
@@ -827,6 +828,7 @@ def _calculate_rotation_matrix(a: torch.Tensor, b: torch.Tensor):
         torch.einsum('ij,ik->ijk', A, A) * (1 - dot_product[:, None, None]) / (
             torch.linalg.norm(A, dim=-1)[:, None, None] ** 2)
     return R
+
 
 def calculate_rotation_matrix(a: torch.Tensor, b: torch.Tensor):
     """

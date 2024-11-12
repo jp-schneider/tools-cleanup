@@ -236,8 +236,8 @@ class VisualNode3D(SceneNode):
                 ax.set_ylim(y_lim)
             if z_lim is not None:
                 ax.set_zlim(z_lim)
-            ax.set_aspect("equal")
-
+            ax.set_aspect('equal', adjustable='box')
+            # ax.set_box_aspect((np.ptp(all_positions[..., 0]), np.ptp(all_positions[..., 1]), np.ptp(all_positions[..., 2])))
         # Set elevation, azimuth and roll if in kwargs
         elev = kwargs.get("elevation", None)
         azim = kwargs.get("azimuth", None)
