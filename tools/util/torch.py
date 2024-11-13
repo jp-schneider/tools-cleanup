@@ -24,6 +24,7 @@ from tools.logger.logging import tools_logger as logger
 from traceback import FrameSummary, extract_stack
 from tools.transforms.to_tensor import tensorify
 from tools.transforms.to_tensor_image import tensorify_image
+import gc
 
 
 def set_jit_enabled(enabled: bool):
@@ -297,7 +298,8 @@ def batched_generator_exec(
         batched_params: List[Union[str, dict]],
         default_batch_size: int = 1,
         default_multiprocessing: bool = False,
-        default_num_workers: int = 4
+        default_num_workers: int = 4,
+        default_explicit_garbage_collection: bool = False
 ) -> Callable[[Callable[..., Any]], Callable[..., Generator]]:
     """Decorator for executing a function in batches.
     The wrapped function will be executed in batches based on the batched_params.
@@ -325,6 +327,15 @@ def batched_generator_exec(
     default_batch_size : int, optional
         Default batch size to use, by default 1
 
+    default_multiprocessing : bool, optional
+        If multiprocessing should be used, by default False
+
+    default_num_workers : int, optional
+        Number of workers to use for multiprocessing, by default 4
+
+    default_explicit_garbage_collection : bool, optional
+        If explicit garbage collection should be used after each batching, by default False
+        Will call torch.cuda.empty_cache() and gc.collect()
     Returns
     -------
     callable
@@ -417,6 +428,10 @@ def batched_generator_exec(
                     ret_kwargs[i][k] = v
         return ret_kwargs
 
+    def garbage_collect():
+        torch.cuda.empty_cache()
+        gc.collect()
+
     _batched_params: Dict[str, Dict[str, Any]] = dict()
     for p in batched_params:
         def_p = _define_batched_params(p)
@@ -430,6 +445,8 @@ def batched_generator_exec(
             nonlocal _batched_params
             mod_kwargs = kwargs.copy()
             batch_size = mod_kwargs.pop('batch_size', default_batch_size)
+            explicit_gc = mod_kwargs.pop(
+                'explicit_garbage_collection', default_explicit_garbage_collection)
             use_multiprocessing = mod_kwargs.pop(
                 'multiprocessing', default_multiprocessing)
 
@@ -449,6 +466,9 @@ def batched_generator_exec(
             if not use_multiprocessing:
                 for batch_idx, batch_kwargs in enumerate(batched_kwargs):
                     yield function(**batch_kwargs)
+                    if explicit_gc:
+                        garbage_collect()
+
             else:
                 from pathos.pools import ProcessPool
 
@@ -459,6 +479,8 @@ def batched_generator_exec(
                     results = p.imap(function, *listed_args)
                     for r in results:
                         yield r
+                        if explicit_gc:
+                            garbage_collect()
 
         return wrapper
     return decorator

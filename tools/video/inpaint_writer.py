@@ -27,10 +27,10 @@ class InpaintWriter(Writer):
     def _patch_transparency(self, frame: np.ndarray) -> np.ndarray:
         if self.alpha_grid is None:
             self.alpha_grid = alpha_background_grid(
-                frame.shape[0], frame.shape[1])
+                (frame.shape[0], frame.shape[1]))
         from tools.util.numpy import flatten_batch_dims, unflatten_batch_dims
-        images, batch_dims = flatten_batch_dims(images, -4)
-        image_tensor = torch.tensor(images).unsqueeze(0)
+        images, batch_dims = flatten_batch_dims(frame, -4)
+        image_tensor = torch.tensor(images).unsqueeze(0).float() / 255
         N, B, H, W, C = image_tensor.shape
         grid = torch.tensor(self.alpha_grid).unsqueeze(
             0).unsqueeze(0).float() / 255
@@ -41,7 +41,7 @@ class InpaintWriter(Writer):
 
     def _process_frame(self, frame: np.ndarray) -> np.ndarray:
         if frame.shape[2] == 4 and self.use_transparency_grid:
-            frame = self._patch_transparency(frame)
+            frame = self._patch_transparency(frame)[..., :3]
         if self.inpaint_counter:
             frame = put_text(frame.copy(), self.counter_format.format(self.frame_counter),
                              placement="top-right", background_stroke=1)

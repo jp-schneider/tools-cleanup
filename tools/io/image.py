@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Literal, Tuple, Union
+from typing import Any, Dict, Generator, List, Optional, Literal, Tuple, Union
 
 import torch
 from tools.util.format import parse_enum
@@ -20,6 +20,7 @@ import os
 from torch.nn.functional import grid_sample
 from tools.util.progress_factory import ProgressFactory
 import cv2 as cv
+from tools.util.sized_generator import SizedGenerator, sized_generator
 
 
 def create_image_exif(metadata: Dict[Union[str, ExifTagsBase], Any]) -> Exif:
@@ -466,7 +467,7 @@ def load_image_stack(
         path: Optional[str] = None,
         filename_format: str = r"(?P<index>[0-9]+)\.((png)|(jpg))",
         max_size: Optional[int] = None,
-        sorted_image_paths: Optional[List[int]] = None,
+        sorted_image_paths: Optional[List[str]] = None,
         progress_bar: bool = True,
         progress_factory: Optional[ProgressFactory] = None,
         **kwargs
@@ -532,6 +533,82 @@ def load_image_stack(
         if progress_bar:
             it.update(1)
     return images
+
+
+@sized_generator()
+def load_image_stack_generator(
+        path: Optional[str] = None,
+        filename_format: str = r"(?P<index>[0-9]+)\.((png)|(jpg))",
+        max_size: Optional[int] = None,
+        sorted_image_paths: Optional[List[str]] = None,
+        progress_bar: bool = True,
+        progress_factory: Optional[ProgressFactory] = None,
+        **kwargs
+) -> Generator[np.ndarray, None, None]:
+    """Helper function to load images for a given path and filename format.
+
+    Parameters
+    ----------
+    path : Optional[str], optional
+        Path to the images.
+        Must be specified if sorted_image_paths is None.
+
+    filename_format : str, optional
+        Filename format regex, by default r"(?P<index>[0-9]+).png"
+        Images will be sorted by index.
+
+    max_size : Optional[int], optional
+        If the image should be resized to a maximum size, by default None
+        The image will be resized to the maximum size while maintaining aspect ratio.
+
+    sorted_image_paths : Optional[List[str]], optional
+        Sorted image paths, by default None
+        If provided, the images will be loaded from these paths in the given order.
+
+    progress_bar : bool, optional
+        If a progress bar should be shown, by default True
+
+    progress_factory : Optional[ProgressFactory], optional
+        Optional progress factory to use, by default None
+
+    Returns
+    -------
+    Optional[np.ndarray]
+        Image stack in shape H x W x C.
+
+
+        B order is index order ascending.
+        If no images are found, None will be returned.
+    """
+    if progress_bar and progress_factory is None:
+        progress_factory = ProgressFactory()
+    if sorted_image_paths is None:
+        if path is None:
+            raise ValueError(
+                "Path must be specified if sorted_image_paths is None")
+        sorted_image_paths = index_image_folder(
+            path, filename_format=filename_format)
+
+    yield len(sorted_image_paths)  # Length for the generator
+
+    if len(sorted_image_paths) == 0:
+        return None
+
+    img = load_image(sorted_image_paths[0], max_size=max_size, **kwargs)
+
+    yield img
+
+    it = None
+    if progress_bar:
+        it = progress_factory.bar(total=len(
+            sorted_image_paths), desc="Loading images", is_reusable=True, tag="load_image_stack", delay=1)
+        it.update(1)
+
+    for i in range(1, len(sorted_image_paths)):
+        yield load_image(sorted_image_paths[i],
+                         max_size=max_size, **kwargs)
+        if progress_bar:
+            it.update(1)
 
 
 def save_image_stack(images: VEC_TYPE,

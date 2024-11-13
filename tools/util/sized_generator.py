@@ -1,5 +1,6 @@
 from collections.abc import Sized, Generator
-from typing import Any
+from functools import wraps
+from typing import Any, Callable
 
 
 class SizedGenerator(Sized, Generator):
@@ -35,3 +36,31 @@ class SizedGenerator(Sized, Generator):
 
     def close(self):
         return self.generator.close()
+
+
+def sized_generator() -> SizedGenerator:
+    """
+    Decorator to create a SizedGenerator from a generator.
+
+    A SizedGenerator is a generator that has a __len__ method.
+    The decorator can be used on any generator that returns the size as the first element, followed by the actual items.
+
+    The decorator will remove the size from the generator and wrap it in a SizedGenerator so subsequent calls to len() will work.
+    And the generator can be used as a normal generator.
+
+    Returns
+    -------
+    SizedGenerator
+        Sized generator object.
+    """
+    def decorator(function: Callable[[Any], Generator[Any, Any, Any]]) -> Callable[[Any], Generator[Any, Any, Any]]:
+        @wraps(function)
+        def wrapper(*args, **kwargs):
+            gen = function(*args, **kwargs)
+            size = next(gen)
+            if not isinstance(size, int) or size < 0:
+                raise ValueError(
+                    "First element of sized generator must return the size as an int which must be >= 0.")
+            return SizedGenerator(gen, size)
+        return wrapper
+    return decorator

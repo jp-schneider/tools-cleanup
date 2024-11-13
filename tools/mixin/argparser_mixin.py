@@ -10,7 +10,7 @@ from typing_inspect import is_literal_type, is_optional_type, is_tuple_type, is_
 
 from tools.error import UnsupportedTypeError, IgnoreTypeError
 from enum import Enum
-
+from tools.logger.logging import logger
 from tools.serialization.json_convertible import JsonConvertible
 
 WARNING_ON_UNSUPPORTED_TYPE = True
@@ -306,8 +306,38 @@ class ArgparserMixin:
                         (field.default_factory != MISSING and (
                             value is not None and value != field.default_factory()))
                         or (field.default == MISSING and field.default_factory == MISSING)):
-                    setattr(self, field.name,
-                            self._get_parser_arg_value(field, value))
+                    new_value = self._get_parser_arg_value(field, value)
+                    old_value = getattr(self, field.name)
+                    if self.allow_cli_config_overwrite(field, old_value, new_value):
+                        setattr(self, field.name, new_value)
+                    else:
+                        logger.info(
+                            f"Value for field {field.name} was not overwritten.")
+
+    def allow_cli_config_overwrite(self, field: Field, config_value: Any, cli_value: Any) -> bool:
+        """
+        Method will be called for each field which was provided as a cli argument.
+        The default behavior is to allow the cli argument to overwrite the value in the current config object.
+
+        Parameters
+        ----------
+        field : Field
+            The field in the config which was provided as a cli argument.
+            Name of the property can be accessed via field.name
+
+        config_value : Any
+            The current value of the field in the config object. This value will be overwritten if the method returns True.
+
+        cli_value : Any
+            The value which was provided as a cli argument to the field.
+
+        Returns
+        -------
+        bool
+            If the cli config should be allowed to overwrite the config object.
+            False if the value should not be overwritten and discarded.
+        """
+        return True
 
     @classmethod
     def parse_args(cls,
