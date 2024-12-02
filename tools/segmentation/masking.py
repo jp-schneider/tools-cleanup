@@ -14,7 +14,7 @@ from tools.util.format import parse_format_string
 from tqdm.auto import tqdm
 from tools.util.path_tools import read_directory
 import os
-from tools.io.image import create_image_exif, load_image_exif
+from tools.io.image import create_image_exif, load_image_exif, compute_new_size
 from tools.transforms.to_numpy_image import ToNumpyImage
 import cv2
 from matplotlib.colors import to_rgba
@@ -22,7 +22,7 @@ import matplotlib.pyplot as plt
 from multiprocessing import Pool
 
 
-def split_overlap_channel_masks(masks: VEC_TYPE) -> List[np.ndarray]:
+def split_overlap_channel_masks(masks: VEC_TYPE) -> Tuple[List[np.ndarray], List[List[int]]]:
     """Splits a list of channel masks into multiple masks, where each mask has no overlap with the other masks.
 
     Parameters
@@ -228,6 +228,7 @@ def load_mask(
     is_stack: bool = False,
     read_directory_kwargs: Optional[Dict[str, Any]] = None,
     size: Optional[Tuple[int, int]] = None,
+    max_size: Optional[int] = None,
     progress_bar: bool = False
 ) -> np.ndarray:
     """Loads a mask from the given path.
@@ -257,8 +258,11 @@ def load_mask(
     from PIL.Image import Resampling
 
     def _read_path(path):
+        nonlocal size
         mask_pil = Image.open(path)
-        if size is not None:
+        if size is not None or max_size is not None:
+            if size is None:
+                size = compute_new_size(mask_pil.size, max_size)[::-1]
             mask_pil = mask_pil.resize(
                 (size[1], size[0]), resample=Resampling.BILINEAR)
         # Load metadata
@@ -583,9 +587,12 @@ def save_channel_masks(
         oids: Optional[np.ndarray] = None,
         filename_pattern: str = "img_{index:02d}_ov_{ov_index}.png",
         spread: bool = True,
-        index_offset: int = 0
-) -> List[str]:
+        index_offset: int = 0,
+        additional_filename_variables: Optional[Dict[str, Any]] = None,
+        return_in_ov_format: bool = False
+) -> Union[List[str], Tuple[Dict[int, List[str]], Dict[int, np.ndarray]]]:
     """Saves a list of channel masks to a directory.
+    Will split the masks into non-overlapping value masks and save them
 
     Parameters
     ----------
@@ -601,9 +608,37 @@ def save_channel_masks(
     spread : bool, optional
         Whether to spread the values of the mask to the full range 0 - 255 to make them visible with inspecting masks, by default
         True
+    index_offset : int, optional
+        Offset to add to the index of the mask in the batch, by default 0
+        Can be used if masks are saved with a format string and the index should start at a different value.
+    additional_filename_variables : Optional[Dict[str, Any]], optional
+        Additional variables to use in the filename format string, by default None
+        These variables will be used in the filename format string.
+    return_in_ov_format : bool, optional
+        If the return values should be as Dictionary of indexed overlapping aware value masks and their paths, by default False
+
+    Returns
+    -------
+    If return_in_ov_format is False:
+        List[str]
+            List of saved filenames.
+    else:
+        Tuple[Dict[int, List[str]], Dict[int, np.ndarray]]
+            1. Dictionary of indexed overlapping aware value masks.
+                Key is the overlapping index, value is a list of paths to the masks which belong to the same object in various time steps if the values are the same.
+            2. Dictionary of indexed overlapping aware object ids.
+                Key is the overlapping index, value is a numpy array of object ids which belong to the same object in various time steps if the values are the same.
+        
     """
     if oids is None:
         oids = np.arange(1, masks.shape[-1] + 1)
+
+    if additional_filename_variables is None:
+        additional_filename_variables = dict()
+
+    if "ov_index" in additional_filename_variables:
+        raise ValueError(
+            "ov_index is a reserved variable name, this will be automatically set by the function.")
 
     overlap_free_comb, overlap_free_comb_ids = split_overlap_channel_masks(
         masks)
@@ -614,14 +649,23 @@ def save_channel_masks(
     path = os.path.join(mask_directory, filename_pattern)
 
     saved_paths = []
+    ov_dict = dict()
     for i in range(len(overlap_free_comb)):
         m_stack = overlap_free_comb[i]
         m_stack_oids = oids[overlap_free_comb_ids[i]]
         value_mask = channel_masks_to_value_mask(
             m_stack, m_stack_oids, handle_overlap='raise')[..., None]
         p = save_mask(value_mask, path, spread=spread,
-                      additional_filename_variables=dict(ov_index=i), index_offset=index_offset)
-        saved_paths.extend(p)
+                      additional_filename_variables=dict(ov_index=i, **additional_filename_variables), index_offset=index_offset)
+        if return_in_ov_format:
+            ov_dict[i] = p
+        else:
+            saved_paths.extend(p)
+
+    if return_in_ov_format:
+        return ov_dict, {i:np.array(x, dtype=int) for i,x in enumerate(overlap_free_comb_ids)}
+    else:
+        return saved_paths
 
 
 def index_value_masks_folder(path: str, filename_pattern: str = r"img_(?P<index>[0-9]+)_ov_(?P<ov_index>[0-9]+).png", return_dict: bool = False) -> Union[Dict[int, List[str]], Dict[int, List[Dict[str, Any]]]]:
@@ -672,6 +716,7 @@ def load_channel_masks(
     output_format: Literal['channel', 'value'] = 'channel',
     overlapping_mask_paths: Optional[Dict[int, List[str]]] = None,
     size: Optional[Tuple[int, int]] = None,
+    max_size: Optional[int] = None,
     progress_bar: bool = False,
     progress_factory: Optional[ProgressFactory] = None
 ) -> Union[List[np.ndarray], Tuple[np.ndarray, np.ndarray]]:
@@ -696,6 +741,10 @@ def load_channel_masks(
     size : Optional[Tuple[int, int]], optional
         Size to resize the mask to, by default None
         Should be (H, W)
+
+    max_size : Optional[int], optional
+        Maximum size to resize the mask to, by default None
+        Set this size as the maximum size, keeping aspect ratio.
 
     Returns
     -------
@@ -724,7 +773,7 @@ def load_channel_masks(
                                    is_reusable=True)
     for ov_index, path_dict_list in overlapping_mask_paths.items():
         for p in path_dict_list:
-            overlapping_masks[ov_index].append(load_mask(p, size=size))
+            overlapping_masks[ov_index].append(load_mask(p, size=size, max_size=max_size))
             if progress_bar:
                 bar.update(1)
     # Stack masks

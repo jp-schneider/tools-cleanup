@@ -24,12 +24,20 @@ def flatten_batch_dims(array: np.ndarray, end_dim: int) -> Tuple[np.ndarray, Lis
         The flattend array and the original batch shape.
     """
     ed = end_dim + 1 if end_dim != -1 else None
-    batch_shape = array.shape[:ed]
+    full_batch = False
+    if ed is not None:
+        batch_shape = array.shape[:ed]
+    else:
+        batch_shape = array.shape
+        full_batch = True
 
     expected_dim = -1 if end_dim >= 0 else abs(end_dim)
 
     if len(batch_shape) > 0:
-        flattened = array.reshape(np.prod(batch_shape), *array.shape[ed:])
+        if not full_batch:
+            flattened = array.reshape(np.prod(batch_shape), *array.shape[ed:])
+        else:
+            flattened = array.reshape(np.prod(batch_shape))
     else:
         flattened = array[np.newaxis, ...]
         if expected_dim > 0:

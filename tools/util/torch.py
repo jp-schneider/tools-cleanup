@@ -491,6 +491,7 @@ def batched_exec(*input,
                  batch_size: int,
                  progress_bar: bool = False,
                  pf: Optional[ProgressFactory] = None,
+                 free_memory: bool = False,
                  **kwargs
                  ) -> torch.Tensor:
     """Execute a function in batches.
@@ -513,11 +514,16 @@ def batched_exec(*input,
     pf : Optional[ProgressFactory], optional
         Progress factory to reuse the progress bar, by default None
 
+    free_memory : bool, optional
+        If memory should be freed after each batch, by default False
+        Will call torch.cuda.empty_cache() and gc.collect()    
+    
     Returns
     -------
     torch.Tensor
         Concatenated results of the function execution.
     """
+    import gc
     results = []
     if progress_bar:
         if pf is None:
@@ -545,6 +551,9 @@ def batched_exec(*input,
         _ins = [i[s] for i in input]
         r = func(*_ins, **kwargs)
         results.append(r)
+        if free_memory:
+            gc.collect()
+            torch.cuda.empty_cache()
         if progress_bar:
             bar.update(1)
     return torch.cat(results, dim=0)

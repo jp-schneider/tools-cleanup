@@ -1,6 +1,6 @@
 import sys
 import numpy as np
-from typing import Any, Callable, Dict, Optional, Set, TypeVar, Union
+from typing import Any, Callable, Dict, Optional, Set, TypeVar, Union, List
 try:
     import torch
 except (ModuleNotFoundError, ImportError):
@@ -20,6 +20,9 @@ if torch is not None:
     NUMERICAL_TYPE = TypeVar(
         "NUMERICAL_TYPE", bound=Union[torch.Tensor, np.generic, int, float, complex, decimal.Decimal])  # type: ignore
     """Numerical type which can be converted to a tensor."""
+
+    INDEX_TYPE = TypeVar("INDEX_TYPE", bound=Union[int, np.ndarray, slice, List[int], torch.Tensor])  # type: ignore
+    """Index type which can be used to index a certain type like numpy arrays for 1 dimensional indices."""
 else:
     from torch import Tensor
     VEC_TYPE = TypeVar("VEC_TYPE", bound=np.ndarray)
@@ -33,6 +36,8 @@ else:
         "NUMERICAL_TYPE", bound=Union[np.generic, int, float, complex, decimal.Decimal])
     """Numerical type which can be converted to a numpy.ndarray."""
 
+    INDEX_TYPE = TypeVar("INDEX_TYPE", bound=Union[int, np.ndarray, slice, List[int]])
+    """Index type which can be used to index a certain type like numpy arrays for 1 dimensional indices."""
 
 class _DEFAULT():
     """Default value singleton."""

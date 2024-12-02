@@ -301,7 +301,7 @@ def save_figure_or_animation(
 
 
 def get_figure_path(
-        path: Optional[str] = None,
+        path: Optional[Union[str, os.PathLike]] = None,
         default_output_dir: Union[str, _DEFAULT] = DEFAULT,
         ext: Union[str, List[str]] = "png"
 ) -> List[str]:
@@ -309,6 +309,8 @@ def get_figure_path(
     import os
     if path is None:
         path = str(uuid4())
+    if not isinstance(path, str):
+        path = str(path)
     paths = []
     if any([(x in path) for x in ["/", "\\", os.sep]]):
         # Treat path as abspath
@@ -1140,7 +1142,12 @@ def plot_vectors(y: VEC_TYPE,
                  label: Optional[Union[str, List[str]]] = None,
                  mode: Literal["plot", "scatter", "bar"] = "plot",
                  ax: Optional[Axes] = None,
-                 bar_width: Optional[float] = None
+                 bar_width: Optional[float] = None,
+                 xlim: Optional[Tuple[float, float]] = None,
+                 ylim: Optional[Tuple[float, float]] = None,
+                 xlabel: Optional[str] = None,
+                 ylabel: Optional[str] = None,
+                 tick_right: bool = False,
                  ) -> Figure:
     """Gets a matplotlib line figure with a plot of vectors.
 
@@ -1157,6 +1164,35 @@ def plot_vectors(y: VEC_TYPE,
 
     label : Optional[Union[str, List[str]]], optional
         Label or each dimension. If None just numerates the dimensions, by default None
+
+    mode : Literal["plot", "scatter", "bar"], optional
+        Mode of the plot, by default "plot"
+        Plot: Line plot
+        Scatter: Scatter plot
+        Bar: Bar plot
+    
+    ax : Optional[Axes], optional
+        Matplotlib axis to plot on, by default None
+        If None, will create a new figure.
+
+    bar_width : Optional[float], optional
+        Width of the bars in bar mode, by default None
+        None will calculate the width based on the x values and number of dimensions.
+
+    xlim : Optional[Tuple[float, float]], optional
+        X limits for the plot, by default None
+
+    ylim : Optional[Tuple[float, float]], optional
+        Y limits for the plot, by default None
+
+    xlabel : Optional[str], optional
+        X label for the plot, by default None
+
+    ylabel : Optional[str], optional
+        Y label for the plot, by default None
+
+    tick_right : bool, optional
+        If the ticks should be on the right side, by default False
 
     Returns
     -------
@@ -1186,6 +1222,9 @@ def plot_vectors(y: VEC_TYPE,
     x_was_none = x is None
     if x is None:
         x = np.arange(y.shape[0])
+    else:
+        x = numpyify(x)
+        x, _ = flatten_batch_dims(x, -1)
     if ax is None:
         fig, ax = get_mpl_figure(1, 1)
     else:
@@ -1206,6 +1245,18 @@ def plot_vectors(y: VEC_TYPE,
             ax.bar(position, y[:, i], width=bar_width, label=label[i])
         else:
             raise ValueError("Mode should be either plot or scatter.")
+    
+    if xlim is not None:
+        ax.set_xlim(*tuple(xlim))
+    if ylim is not None:
+        ax.set_ylim(*tuple(ylim))
+    if xlabel is not None:
+        ax.set_xlabel(xlabel)
+    if ylabel is not None:
+        ax.set_ylabel(ylabel)
+    if tick_right:
+        ax.yaxis.tick_right()
+        ax.yaxis.set_label_position("right")
     ax.legend()
     return fig
 

@@ -3,7 +3,12 @@ import weakref
 from tqdm.auto import tqdm
 from uuid import uuid4
 import inspect
+from tqdm.contrib import DummyTqdmFile
+import contextlib
+import sys
 
+ORIGINAL_STDOUT = None
+"""Variable to store the original stdout. When using std_out_err_redirect_tqdm context manager."""
 
 class ProgressElement(tqdm):
 
@@ -18,10 +23,14 @@ class ProgressElement(tqdm):
                  tag: Optional[str] = None,
                  is_reusable: bool = False,
                  **kwargs):
+        global ORIGINAL_STDOUT
         self._tag = tag
         self._is_reusable = is_reusable
         if self._tag is None and self._is_reusable:
             self._tag = str(uuid4())
+        if ORIGINAL_STDOUT is not None:
+            kwargs["file"] = ORIGINAL_STDOUT
+            kwargs["dynamic_ncols"] = True
         super().__init__(*args, **kwargs)
 
 
@@ -189,3 +198,39 @@ class ProgressFactory:
             The progress element
         """
         return self.tqdm(iterable, total=total, desc=desc, tag=tag, is_reusable=is_reusable, delay=delay, **kwargs)
+
+
+@contextlib.contextmanager
+def std_out_err_redirect_tqdm():
+    """Redirect stdout to tqdm.write().
+
+    Make sure to use this context manager with the `with` statement and to use the `as` keyword to store the original stdout within the
+    ORIGINAL_STDOUT Global variable.
+
+    with std_out_err_redirect_tqdm() as orig_stdout:
+        global ORIGINAL_STDOUT
+        ORIGINAL_STDOUT = orig_stdout
+        # Your code here
+        ...
+
+    Yields
+    -------
+    Tuple[io.TextIOWrapper, io.TextIOWrapper]
+        The original stdout and stderr.
+
+    Raises
+    ------
+    Exception
+        Any exception that occurs during the redirection.
+
+    """
+    orig_out_err = sys.stdout, sys.stderr
+    try:
+        sys.stdout, sys.stderr = map(DummyTqdmFile, orig_out_err)
+        yield orig_out_err[0]
+    # Relay exceptions
+    except Exception as exc:
+        raise exc
+    finally:
+        sys.stdout, sys.stderr = orig_out_err
+
