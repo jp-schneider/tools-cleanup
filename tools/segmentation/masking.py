@@ -635,6 +635,10 @@ def save_channel_masks(
     if oids is None:
         oids = np.arange(1, masks.shape[-1] + 1)
 
+    # Check if oids are unique
+    if len(np.unique(oids)) != len(oids):
+        raise ValueError("Object ids must be unique. Duplicate ids found: " + str({int(k):v for k,v in zip(*np.unique(oids, return_counts=True)) if v > 1}))
+
     if additional_filename_variables is None:
         additional_filename_variables = dict()
 
