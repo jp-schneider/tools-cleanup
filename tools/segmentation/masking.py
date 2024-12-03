@@ -300,7 +300,7 @@ def save_mask(mask: VEC_TYPE,
               metadata: Optional[dict] = None,
               progress_bar: bool = False,
               additional_filename_variables: Optional[Dict[str, Any]] = None,
-              index_offset: int = 0
+              index_offset: int = 0,
               ) -> List[str]:
     """Saves the given (value) based mask to the given path.
 
@@ -625,9 +625,11 @@ def save_channel_masks(
     else:
         Tuple[Dict[int, List[str]], Dict[int, np.ndarray]]
             1. Dictionary of indexed overlapping aware value masks.
-                Key is the overlapping index, value is a list of paths to the masks which belong to the same object in various time steps if the values are the same.
+                Key is the overlapping index 
+                Value is a list of paths to the masks which belong to the same object in various time steps if the values are the same.
             2. Dictionary of indexed overlapping aware object ids.
-                Key is the overlapping index, value is a numpy array of object ids which belong to the same object in various time steps if the values are the same.
+                Key is the overlapping index
+                Value is a numpy array of object ids as supplied in the oids parameter, or a 1-based index if oids was not supplied.
         
     """
     if oids is None:
@@ -650,6 +652,7 @@ def save_channel_masks(
 
     saved_paths = []
     ov_dict = dict()
+    overlap_free_oids = []
     for i in range(len(overlap_free_comb)):
         m_stack = overlap_free_comb[i]
         m_stack_oids = oids[overlap_free_comb_ids[i]]
@@ -659,11 +662,12 @@ def save_channel_masks(
                       additional_filename_variables=dict(ov_index=i, **additional_filename_variables), index_offset=index_offset)
         if return_in_ov_format:
             ov_dict[i] = p
+            overlap_free_oids.append(m_stack_oids)
         else:
             saved_paths.extend(p)
 
     if return_in_ov_format:
-        return ov_dict, {i:np.array(x, dtype=int) for i,x in enumerate(overlap_free_comb_ids)}
+        return ov_dict, {i:np.array(x, dtype=int) for i,x in enumerate(overlap_free_oids)}
     else:
         return saved_paths
 

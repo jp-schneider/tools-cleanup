@@ -106,17 +106,23 @@ def write_mp4_generator(
 
     Parameters
     ----------
-    frames : np.ndarray
-        Frames to write to video in shape BxHxWxC or BxHxW. C is either 1 or 3.
+    frame_generator : np.ndarray
+        Frame generator to write frames to a video in shape HxWxC or HxW. C is either 1 or 3.
     path : str, optional
         Path to the video file, by default 'test.mp4'
     fps : float, optional
         Fps in the video, by default 24.0
-    progress_bar : bool, optional
-        Show progress bar, by default False
+    title : str, optional
+        Title to show in the video, by default None
+        Will be inpainted in the video if set.
+    frame_counter : bool, optional
+        Show frame counter in the video, by default False
+        Will be inpainted in the video if set, in the top right corner.
     codec : str, optional
         Codec to use for the video, by default DEFAULT
         If not set, will use the environment variable VIDEO_CODEC or 'avc1' if not set.
+    progress_bar : bool, optional
+        Show progress bar, by default False
 
     Raises
     ------
@@ -146,6 +152,73 @@ def write_mp4_generator(
                        codec=codec) as writer:
         for frame in frame_generator:
             writer.write(frame)
+            if progress_bar:
+                bar.update(1)
+    return path
+
+@filer(default_ext='mp4')
+def write_mask_mp4_generator(
+        frame_generator: Generator[np.ndarray, None, None],
+        mask_generator: Generator[np.ndarray, None, None],
+        path: str = 'test.mp4',
+        fps: float = 24.0,
+        title: str = None,
+        frame_counter: bool = False,
+        codec: str = DEFAULT,
+        progress_bar: bool = False,
+        progress_factory: Optional[ProgressFactory] = None):
+    """Writes the frames to a video file.
+
+    Parameters
+    ----------
+    frame_generator : np.ndarray
+        Frame generator to write frames to a video in shape HxWxC or HxW. C is either 1 or 3.
+    path : str, optional
+        Path to the video file, by default 'test.mp4'
+    fps : float, optional
+        Fps in the video, by default 24.0
+    title : str, optional
+        Title to show in the video, by default None
+        Will be inpainted in the video if set.
+    frame_counter : bool, optional
+        Show frame counter in the video, by default False
+        Will be inpainted in the video if set, in the top right corner.
+    codec : str, optional
+        Codec to use for the video, by default DEFAULT
+        If not set, will use the environment variable VIDEO_CODEC or 'avc1' if not set.
+    progress_bar : bool, optional
+        Show progress bar, by default False
+
+    Raises
+    ------
+    ValueError
+        If wrong number of channels in frames.
+    """
+    from tools.segmentation.masking import inpaint_masks
+    size = None
+    if isinstance(frame_generator, SizedGenerator):
+        size = len(frame_generator)
+
+    fmt = get_leading_zeros_format_string(size if size is not None else 100)
+
+    bar = None
+    if progress_bar:
+        if progress_factory is None:
+            progress_factory = ProgressFactory()
+        bar = progress_factory.bar(
+            total=size, desc='Writing video frames', is_reusable=True, tag='write_mp4_generator')
+
+    with InpaintWriter(path,
+                       fps=fps,
+                       inpaint_title=title,
+                       inpaint_counter=frame_counter,
+                       counter_format=fmt,
+                       use_transparency_grid=True,
+                       codec=codec) as writer:
+        for frame in frame_generator:
+            masks = next(mask_generator)
+            inpainted_frame = inpaint_masks(frame, masks)
+            writer.write(inpainted_frame)
             if progress_bar:
                 bar.update(1)
     return path
