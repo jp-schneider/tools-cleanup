@@ -20,7 +20,7 @@ import cv2
 from matplotlib.colors import to_rgba
 import matplotlib.pyplot as plt
 from multiprocessing import Pool
-
+from tools.util.typing import _DEFAULT, DEFAULT
 
 def split_overlap_channel_masks(masks: VEC_TYPE) -> Tuple[List[np.ndarray], List[List[int]]]:
     """Splits a list of channel masks into multiple masks, where each mask has no overlap with the other masks.
@@ -78,7 +78,8 @@ def channel_masks_to_value_mask(masks: VEC_TYPE,
                                                         'warning', 'warning+exclude'
                                                         'multi_mask',
                                                         ] = 'warning',
-                                base_value: Any = 0.
+                                base_value: Any = 0,
+                                dtype: Union[_DEFAULT, np.dtype] = DEFAULT
                                 ) -> Union[np.ndarray, Tuple[List[np.ndarray], List[List[int]]]]:
     """Converts a list of channel masks to a single mask with a new value per mask object.
 
@@ -101,7 +102,11 @@ def channel_masks_to_value_mask(masks: VEC_TYPE,
         - 'multi_mask': Returns a list of masks, where each mask stack has no overlap with the other masks.
 
     base_value : Any, optional
-        The base value to fill the mask with, by default 0.
+        The base value to fill the mask with, by default 0
+
+    dtype : Union[_DEFAULT, np.dtype], optional
+        The dtype of the mask, by default DEFAULT
+        If DEFAULT, the mask will use uint8 if object_values < 256, else int32.
 
 
     Returns
@@ -134,8 +139,11 @@ def channel_masks_to_value_mask(masks: VEC_TYPE,
             raise ValueError(
                 f"Object values must be unique, got {object_values}")
 
+    if dtype == DEFAULT:
+        dtype = np.uint8 if np.max(object_values) < 256 else np.int32
+
     def _convert_masks(masks, object_values):
-        mask = np.zeros(masks.shape[:-1], dtype=np.int32)
+        mask = np.zeros(masks.shape[:-1], dtype=dtype)
         mask.fill(base_value)
 
         for i in range(masks.shape[-1]):
@@ -164,7 +172,7 @@ def channel_masks_to_value_mask(masks: VEC_TYPE,
                     else:
                         raise ValueError(
                             f"Unknown overlap handling {handle_overlap}")
-            mask = np.where(fill, object_values[i], mask)
+            mask[fill] = object_values[i]
         return mask
 
     if not handle_overlap == "multi_mask":
@@ -179,7 +187,6 @@ def channel_masks_to_value_mask(masks: VEC_TYPE,
                 vals[i] = object_values[idx]
             ovals.append(vals)
         return [_convert_masks(m, o) for m, o in zip(masks, ovals)], indices
-    return mask
 
 
 def value_mask_to_channel_masks(
@@ -253,6 +260,8 @@ def load_mask(
     -------
     np.ndarray
         Numpy array of the mask.
+        Depending on saving, this is most likely of shape H x W
+        And a value based mask, where each value represents a different object.
     """
     from PIL import Image
     from PIL.Image import Resampling
@@ -301,6 +310,8 @@ def save_mask(mask: VEC_TYPE,
               progress_bar: bool = False,
               additional_filename_variables: Optional[Dict[str, Any]] = None,
               index_offset: int = 0,
+              pillow_mask_mode: Optional[str] = None,
+              pf: Optional[ProgressFactory] = None
               ) -> List[str]:
     """Saves the given (value) based mask to the given path.
 
@@ -335,6 +346,10 @@ def save_mask(mask: VEC_TYPE,
         Offset to add to the index of the mask in the batch, by default 0
         Can be used if masks are saved with a format string and the index should start at a different value.
 
+    pillow_mask_mode : Optional[str], optional
+        Mode to save the mask in, by default None
+        None will use the default mode of the mask, '1' will save the mask as a binary mask.
+
     Returns
     -------
     Union[str, List[str]]
@@ -350,6 +365,9 @@ def save_mask(mask: VEC_TYPE,
         If the mask contains floats or values outside the range 0 - 255.
     """
     from PIL import Image
+    if progress_bar:
+        if pf is None:
+            pf = ProgressFactory()
     if metadata is None:
         metadata = dict()
     metadata_json = None
@@ -357,16 +375,29 @@ def save_mask(mask: VEC_TYPE,
     mask = numpyify_image(mask)
     saved_files = []
 
-    # Check if all values are ints
-    if not np.all((mask.astype(int) == mask)):
-        raise ValueError("Mask must be integer values")
-    # Check if all values are in range 0 - 255
-    if not np.all((mask >= 0) & (mask <= 255)):
-        raise ValueError("Mask must be in range 0 - 255")
-    # Cast to uint8
-    mask = mask.astype(np.uint8)
+    if mask.dtype == np.float32 or mask.dtype == np.float64:
+        # Check if all values are ints
+        if not np.all((mask.astype(int) == mask)):
+            raise ValueError("Mask must be integer values")
+        # Convert to int32
+        mask = mask.astype(np.int32)
 
-    if spread:
+    # Check if all values are in range 0 - 255
+    if mask.dtype not in [np.uint8, np.bool_]:
+        if not np.all((mask >= 0) & (mask <= 255)):
+            raise ValueError("Mask must be in range 0 - 255")
+        else:
+            mask = mask.astype(np.uint8)
+        
+    if mask.dtype == np.uint8:
+        unique = np.unique(mask)
+        if len(unique) == 2 and max(unique) == 1 and min(unique) == 0:
+            mask = mask.astype(bool)
+
+    if pillow_mask_mode == None and mask.dtype == np.bool_:
+        pillow_mask_mode = '1'
+
+    if spread and mask.dtype == np.uint8:
         unique = np.unique(mask)
         maps = np.arange(0, 256, np.floor(
             255 // (unique.shape[0] - 1)), dtype=np.uint8)
@@ -388,14 +419,21 @@ def save_mask(mask: VEC_TYPE,
             raise ValueError(
                 f"Number of filenames {len(filenames)} does not match number of masks {mask.shape[0]} if you specified an index template?")
         it = enumerate(filenames)
+        pbar = None
         if progress_bar:
-            it = tqdm(it, total=mask.shape[0], desc="Saving masks")
+            pbar = pf.bar(total=mask.shape[0], desc="Saving masks", is_reusable=True, tag="SAVING_MASKS")
         for i, f in it:
             img = Image.fromarray(mask[i].squeeze())
+            if pillow_mask_mode is not None:
+                img = img.convert(pillow_mask_mode)
             img.save(f, **args)
             saved_files.append(f)
+            if progress_bar:
+                pbar.update(1)
     else:
         img = Image.fromarray(mask)
+        if pillow_mask_mode is not None:
+            img = img.convert(pillow_mask_mode)
         img.save(path, **args)
         return path
     return saved_files
