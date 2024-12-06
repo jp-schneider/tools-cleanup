@@ -3,7 +3,7 @@ from tools.logger.logging import logger
 from tools.transforms.to_tensor import ToTensor
 from tools.util.typing import NUMERICAL_TYPE, VEC_TYPE
 import torch
-
+from tools.torch.parse_device import parse_device
 FLOAT_SET = {torch.float32, torch.float64, torch.float16}
 
 
@@ -15,13 +15,23 @@ class ToTensorImage(ToTensor):
     output_dtype: torch.dtype
     """The output dtype of the numpy array. After transformation."""
 
-    def __init__(self, output_dtype: Optional[torch.dtype] = None):
+    output_device: torch.device
+    """The output device of the tensor. After transformation.
+    If None, the device will be the same as the input tensor.
+    Can be overridden by passing the device as a keyword argument to the transform method / call method.
+    """
+
+    def __init__(self, output_dtype: Optional[torch.dtype] = None, output_device: Optional[Union[str, torch.device]] = None):
         super().__init__()
         self.output_dtype = output_dtype
+        self.output_device = parse_device(output_device, False) if output_device is not None else None
 
     def transform(self, x: Union[NUMERICAL_TYPE, VEC_TYPE], **kwargs) -> torch.Tensor:
         is_tensor = isinstance(x, torch.Tensor)
-        x = super().transform(x, **kwargs)
+        args = kwargs
+        if self.output_device is not None and "device" not in args:
+            args["device"] = self.output_device
+        x = super().transform(x, **args)
         if not is_tensor:
             # Change the shape to ([B], C, H, W)
             if len(x.shape) == 4:

@@ -16,7 +16,7 @@ import numpy as np
 from tools.error import NoIterationTypeError, NoSimpleTypeError, ArgumentNoneError
 import hashlib
 from tools.util.progress_factory import ProgressFactory
-from tools.util.typing import NUMERICAL_TYPE, VEC_TYPE
+from tools.util.typing import NUMERICAL_TYPE, VEC_TYPE, _DEFAULT, DEFAULT
 from typing import Callable, Tuple
 from tools.util.reflection import class_name
 from tools.util.format import _custom_traceback
@@ -1083,7 +1083,6 @@ def unflatten_batch_dims(tensor: torch.Tensor, batch_shape: List[int]) -> torch.
     else:
         return tensor.squeeze(0)
 
-
 def grad_cached(
         device: torch.device = "cpu",
         return_key: str = "return",
@@ -1223,6 +1222,26 @@ def plot_weight(x: torch.Tensor, title: str = "Weights", cmap: str = "viridis", 
 
     return fig
 
+def rowwise_isin(x, y):
+    """Checks if the elements of x are in y rowwise.
+
+    Parameters
+    ----------
+    x : torch.Tensor
+        Tensor of shape (N, K)
+    y : torch.Tensor
+        Tensor of shape (N, L)
+
+    Returns
+    -------
+    torch.Tensor
+        Boolean tensor of shape (N, K) where result[n, k] is torch.isin(x[n, k], y[n])
+    """
+
+    matches = (x.unsqueeze(2) == y.unsqueeze(1))
+    # result: boolean tensor of shape (N, K) where result[n, k] is torch.isin(x[n, k], y[n])
+    result = torch.sum(matches, dim=2, dtype=torch.bool)
+    return result
 
 def consecutive_indices_string(x: VEC_TYPE, slice_sep: str = "-", item_sep: str = ",") -> str:
     """Formats a 1D tensor of (consecutive) indices into a string representation.
