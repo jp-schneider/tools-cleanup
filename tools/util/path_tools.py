@@ -441,7 +441,13 @@ def process_path(
     from tools.util.format import parse_format_string
     from tools.serialization.files.path import Path as ToolsPath
     from tools.serialization.files.context_path import ContextPath
-
+    def _checks(p: Path):
+        if need_exist and not p.exists():
+            raise FileNotFoundError(
+                f"Path {'for ' + variable_name + ' ' if variable_name is not None else ''}{p} does not exist.")
+        if make_exist and not p.exists():
+            p.mkdir(parents=True, exist_ok=True)
+        return p
     if path is None:
         if allow_none:
             return None
@@ -449,9 +455,9 @@ def process_path(
             raise ValueError(
                 f"Path {'for ' + variable_name + ' ' if variable_name is not None else ''}must be set.")
     if isinstance(path, (Path, ToolsPath)):
-        return path
+        return _checks(path)
     elif isinstance(path, ToolsPath):
-        return path
+        return _checks(path)
     elif not isinstance(path, str):
         raise ValueError(
             f"Path {'for ' + variable_name + ' ' if variable_name is not None else ''}must be a string or Path object.")
@@ -459,12 +465,7 @@ def process_path(
         p = ContextPath.from_format_path(path, context=interpolate_object)
     else:
         p = Path(path).resolve()
-    if need_exist and not p.exists():
-        raise FileNotFoundError(
-            f"Path {'for ' + variable_name + ' ' if variable_name is not None else ''}{p} does not exist.")
-    if make_exist and not p.exists():
-        p.mkdir(parents=True, exist_ok=True)
-    return p
+    return _checks(p)
 
 
 def filer(

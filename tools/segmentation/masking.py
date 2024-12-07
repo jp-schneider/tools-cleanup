@@ -273,7 +273,9 @@ def load_mask(
             if size is None:
                 size = compute_new_size(mask_pil.size, max_size)[::-1]
             mask_pil = mask_pil.resize(
-                (size[1], size[0]), resample=Resampling.BILINEAR)
+                (size[1], size[0]), 
+                resample=Resampling.NEAREST
+                )
         # Load metadata
         metadata = load_image_exif(mask_pil, safe_load=True)
         spread = metadata.get('spread', None)

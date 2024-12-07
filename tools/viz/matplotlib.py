@@ -1634,7 +1634,7 @@ def plot_mask(image: VEC_TYPE,
         ax.axis('off')
     # plt.legend()
     if title is not None:
-        fig.suptitle(title)
+        ax.set_title(title)
 
     if _colors is not None:
         _colors.clear()
