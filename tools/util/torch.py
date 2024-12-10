@@ -1343,6 +1343,38 @@ def _is_non_finite(x: torch.Tensor, info: bool = False) -> Union[bool, Tuple[boo
     return non_finite, info
 
 
+@torch.jit.script
+def cummatmul(x: torch.Tensor) -> torch.Tensor:
+    """
+    Cumulative matrix multiplication along the batch dimension.
+    Given matricies {M1, M2, M3, ..., Mn} the result will be {M1, M2\*M1, M3\*M2\*M1, ..., Mn\*...\*M3\*M2\*M1}.
+    "\*" denotes matrix multiplication.
+    
+
+    Parameters
+    ----------
+    x : torch.Tensor
+        Tensor to cumulatively multiply.
+        Further
+        Shape: (B, N, N)
+
+    Returns
+    -------
+    torch.Tensor
+        Cumulative matrix multiplication tensor.
+        Shape: (B, N, N)
+    """
+    if len(x.shape) != 3:
+        raise ValueError("Input tensor must have shape (B, N, N)")
+    B, N, M = x.shape
+    if N != M:
+        raise ValueError("Input matrix must be square. Shape: (B, N, N)")
+    cum = x.clone()
+    for i in range(1, B):
+        cum[i] = torch.matmul(x[i], cum[i - 1])
+    return cum
+
+
 def is_non_finite(x: torch.Tensor, info: bool = False) -> Union[bool, Tuple[bool, Dict[str, torch.Tensor]]]:
     """Checks if a tensor contains non-finite values.
     Will also check the gradients if available.
