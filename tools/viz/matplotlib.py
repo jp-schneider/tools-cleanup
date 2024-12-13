@@ -36,7 +36,7 @@ import sys
 import matplotlib.text as mtext
 from tools.util.typing import DEFAULT, _DEFAULT
 from pathlib import Path
-
+from mpl_toolkits.mplot3d import Axes3D
 
 def set_default_output_dir(output_dir: Optional[Union[str, Path]] = None):
     """Sets the default output directory for saving figures.
@@ -1490,6 +1490,33 @@ def align_marker(marker: Any, ha: Union[str, float] = 'center', va: Union[str, f
     m_arr[:, 1] += va / 2
 
     return Path(m_arr, bm.get_path().codes)
+
+
+def set_axes_equal_3d(ax: Axes3D):
+    """Set the aspect ratio of the 3D plot to be equal.
+
+    Parameters
+    ----------
+    ax : Axes3D
+        3D axis to set the aspect ratio for.
+    """
+    import numpy as np  
+    x_limits = ax.get_xlim3d()
+    y_limits = ax.get_ylim3d()
+    z_limits = ax.get_zlim3d()
+
+    x_range = abs(x_limits[1] - x_limits[0])
+    x_middle = np.mean(x_limits)
+    y_range = abs(y_limits[1] - y_limits[0])
+    y_middle = np.mean(y_limits)
+    z_range = abs(z_limits[1] - z_limits[0])
+    z_middle = np.mean(z_limits)
+
+    plot_radius = 0.5*max([x_range, y_range, z_range])
+
+    ax.set_xlim3d([x_middle - plot_radius, x_middle + plot_radius])
+    ax.set_ylim3d([y_middle - plot_radius, y_middle + plot_radius])
+    ax.set_zlim3d([z_middle - plot_radius, z_middle + plot_radius])
 
 
 @saveable()
