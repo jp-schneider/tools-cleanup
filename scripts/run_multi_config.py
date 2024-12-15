@@ -11,7 +11,6 @@ from tools.config.multi_config_config import MultiConfigConfig
 from tools.run.multi_config_runner import MultiConfigRunner
 
 
-
 def current_filename() -> str:
     return os.path.basename(__file__).split('.')[0]
 
@@ -54,6 +53,7 @@ if __name__ == "__main__":
         loop.run_until_complete(main(cfg))
         loop.close()
     except Exception as err:
-        logger.exception(f"Raised {type(err).__name__} in {current_filename()}, exiting...")
+        logger.exception(
+            f"Raised {type(err).__name__} in {current_filename()}, exiting...")
         exit(1)
     exit(0)

@@ -1170,7 +1170,7 @@ def plot_vectors(y: VEC_TYPE,
         Plot: Line plot
         Scatter: Scatter plot
         Bar: Bar plot
-    
+
     ax : Optional[Axes], optional
         Matplotlib axis to plot on, by default None
         If None, will create a new figure.
@@ -1233,19 +1233,22 @@ def plot_vectors(y: VEC_TYPE,
     if bar_width is None and mode == "bar":
         bar_width = np.amin((x[1:] - x[:-1])) / (1.5 * y.shape[-1])
 
+    handles = []
+
     for i in range(y.shape[-1]):
         if mode == "plot":
-            ax.plot(x, y[:, i], label=label[i])
+            handle, = ax.plot(x, y[:, i], label=label[i])
         elif mode == "scatter":
-            ax.scatter(x, y[:, i], label=label[i])
+            handle = ax.scatter(x, y[:, i], label=label[i])
         elif mode == "bar":
             position = x + i * bar_width
             # Center the bars
             position = position - bar_width * y.shape[-1] / 2
-            ax.bar(position, y[:, i], width=bar_width, label=label[i])
+            handle = ax.bar(position, y[:, i], width=bar_width, label=label[i])
         else:
             raise ValueError("Mode should be either plot or scatter.")
-    
+        handles.append(handle)
+
     if xlim is not None:
         ax.set_xlim(*tuple(xlim))
     if ylim is not None:
@@ -1257,7 +1260,7 @@ def plot_vectors(y: VEC_TYPE,
     if tick_right:
         ax.yaxis.tick_right()
         ax.yaxis.set_label_position("right")
-    ax.legend()
+    preserve_legend(ax, handles, create_if_not_exists=True)
     return fig
 
 

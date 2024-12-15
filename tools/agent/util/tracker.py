@@ -18,6 +18,7 @@ from datetime import datetime
 from copy import deepcopy
 import inspect
 from tools.util.path_tools import numerated_folder_name
+from tools.util.format import parse_enum
 
 
 @dataclass
@@ -504,6 +505,8 @@ class Tracker():
         Optional[MetricSummary]
             The found summary or None.
         """
+        scope = parse_enum(MetricScope, scope)
+        mode = parse_enum(MetricMode, mode)
         tag = Tracker.assemble_tag(
             metric_name=metric_name,
             in_training=(mode == MetricMode.TRAINING),
@@ -694,7 +697,8 @@ class Tracker():
         """
         if not override:
             directory = numerated_folder_name(directory)
-        directory = ContextPath.from_format_path("{tracker_path}", dict(tracker_path=directory))
+        directory = ContextPath.from_format_path(
+            "{tracker_path}", dict(tracker_path=directory))
         values = self._save_to_directory(
             directory=directory, override=True, make_dirs=make_dirs, **kwargs)
         path = os.path.join(directory, "tracker.json")
@@ -721,15 +725,15 @@ class Tracker():
         path = os.path.join(directory, "tracker.json")
         return JsonConvertible.load_from_file(path, tracker_path=directory)
 
-    def get_metrics_overview(self, 
-                             scope: MetricScope = MetricScope.EPOCH, 
+    def get_metrics_overview(self,
+                             scope: MetricScope = MetricScope.EPOCH,
                              mode: MetricMode = MetricMode.TRAINING,
                              pattern: Optional[Union[str, List[str]]] = None) -> pd.DataFrame:
         if pattern is None:
             pattern = [".*"]
         if isinstance(pattern, str):
             pattern = [pattern]
-        pattern = [re.compile(p) for p in pattern]  
+        pattern = [re.compile(p) for p in pattern]
         metrics = [x for k, x in self.metrics.items()
                    if x.scope == scope and x.mode == mode and next((True for p in pattern if p.match(Tracker.split_tag(x.tag)[2])), False)]
         ret = pd.DataFrame(columns=["step"])

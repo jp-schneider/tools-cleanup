@@ -5,6 +5,7 @@ from typing import List, Type, Optional, Tuple
 from matplotlib import pyplot as plt
 from tools.config.config import Config
 import os
+from tools.context.script_execution import ScriptExecution
 from tools.error import ArgumentNoneError
 from tools.run.trainable_runner import TrainableRunner
 from tools.util.format import parse_format_string
@@ -261,19 +262,22 @@ class MultiRunner(TrainableRunner):
             try:
                 cfg = child_runner.config
                 cfg.prepare()
+                with ScriptExecution(cfg), plt.ioff():
 
-                logger.info(f"Building child runner #{i}...")
-                child_runner.build()
-                # Save config and log it
-                cfg_file = child_runner.store_config()
-                child_runner.log_config()
-                logger.info(f"Stored config in: {cfg_file}")
-                logger.info(
-                    f"Training with child runner #{i}")
-                with plt.ioff():
+                    logger.info(f"Building child runner #{i}...")
+                    child_runner.build()
+                    # Save config and log it
+                    cfg_file = child_runner.store_config(cfg.output_folder)
+                    child_runner.log_config()
+                    logger.info(f"Stored config in: {cfg_file}")
+                    logger.info(
+                        f"Training with child runner #{i}")
+
                     child_runner.train()
-                logger.info(
-                    f"Training done with child runner #{i}")
+
+                    logger.info(
+                        f"Training done with child runner #{i}")
+
             except Exception as err:
                 logger.exception(
                     f"Raised {type(err).__name__} in training child runner #{i}")

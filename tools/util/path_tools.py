@@ -85,6 +85,8 @@ def open_folder(path: str) -> None:
     """
     from sys import platform
     path = os.path.abspath(os.path.normpath(path))
+    if os.path.isfile(path):
+        path = os.path.dirname(path)
     if os.path.exists(path):
         if platform == "linux" or platform == "linux2":
             # linux
@@ -441,6 +443,7 @@ def process_path(
     from tools.util.format import parse_format_string
     from tools.serialization.files.path import Path as ToolsPath
     from tools.serialization.files.context_path import ContextPath
+
     def _checks(p: Path):
         if need_exist and not p.exists():
             raise FileNotFoundError(

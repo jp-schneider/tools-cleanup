@@ -91,6 +91,32 @@ class Tensorboard():
             agent.batch_processed.attach(logger.log_graph())
         return logger
 
+    def apply_to(self,
+                 agent: TorchAgent,
+                 log_loss: bool = True,
+                 additional_metrics: List[str] = None,
+                 log_optimizer: bool = True,
+                 log_config: bool = True,
+                 log_graph: bool = True,
+                 log_config_only_once: bool = True,
+                 ) -> 'Tensorboard':
+        agent.logger = self
+        if log_loss:
+            agent.batch_processed.attach(self.log_loss)
+            agent.epoch_processed.attach(self.log_loss)
+        if additional_metrics is not None:
+            for metric in additional_metrics:
+                agent.batch_processed.attach(self.log_metric(metric))
+                agent.epoch_processed.attach(self.log_metric(metric))
+        if log_optimizer:
+            agent.epoch_processed.attach(self.log_optimizer)
+        if log_config:
+            agent.epoch_processed.attach(
+                self.log_config(only_once=log_config_only_once))
+        if log_graph:
+            agent.batch_processed.attach(self.log_graph())
+        return self
+
     def log_loss(self, ctx: Dict[str, Any], output_args: ModelStepEventArgs):
         """Handler for logging the primary loss metric.
 
@@ -307,6 +333,49 @@ class Tensorboard():
     def json_to_md_format(json_str: str) -> str:
         """Formats a json string for markdown display."""
         return "".join("\t" + l for l in json_str.splitlines(True))
+
+    def log_hparams(self,
+                    hparams: Dict[str, Any],
+                    metric: Dict[str, Any],
+                    global_step: int,
+                    domain_discrete_values: Optional[Dict[str,
+                                                          List[Any]]] = None,
+                    run_name: Optional[str] = None,
+                    key_prefix: Optional[str] = None
+                    ):
+        """Logs hyperparameters and metrics to tensorboard.
+
+        Parameters
+        ----------
+        hparams : Dict[str, Any]
+            The hyperparameters to log.
+            Keys are the names of the hyperparameters. Should be unique in the run.
+            Values are the values of the hyperparameters.
+        metric : Dict[str, Any]
+            The metrics to log.
+            Keys are the names of the metrics. Should be unique in the run.
+            Values are the values of the metrics.
+        global_step : int
+            The global step to log to.
+        domain_discrete_values : Optional[Dict[str, List[Any]]], optional
+            The domain of the discrete values, by default None
+            E.g. If discrete values, like enums are used, then the domain can be specified.
+        run_name : Optional[str], optional
+            The name of the run, by default None
+        key_prefix : Optional[str], optional
+            A prefix for all keys in hparams, domain_discrete_values and metrics dict, by default None
+        """
+        if key_prefix is not None:
+            hparams = {f"{key_prefix}{k}": v for k, v in hparams.items()}
+            metric = {f"{key_prefix}{k}": v for k, v in metric.items()}
+            if domain_discrete_values is not None:
+                domain_discrete_values = {
+                    f"{key_prefix}{k}": v for k, v in domain_discrete_values.items()}
+        self.summary_writer.add_hparams(hparam_dict=hparams,
+                                        metric_dict=metric,
+                                        run_name=run_name,
+                                        hparam_domain_discrete=domain_discrete_values,
+                                        global_step=global_step)
 
     def log_config(self, only_on_change: bool = True, only_once: bool = False) -> Callable[[Dict[str, Any], TorchModelStepEventArgs], None]:
         """Returns a executable for a epoch_processed event which will log the agent config.

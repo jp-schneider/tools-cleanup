@@ -1,7 +1,7 @@
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Union
+from typing import Optional, Union
 
 from tools.config.config import Config
 from tools.config.output_config import OutputConfig
@@ -9,11 +9,12 @@ from datetime import datetime
 
 from tools.util.path_tools import process_path
 
+
 @dataclass
 class ExperimentOutputConfig(OutputConfig):
     """Config which defines an actual output folder for experiments. This is heavily used when launch mechanisms need control over experiment outputs."""
 
-    experiment_datetime: datetime = field(default_factory=datetime.now)
+    experiment_datetime: Optional[datetime] = field(default=None)
     """Datetime of the experiment. Will be set automatically."""
 
     name: str = field(default="Example")
@@ -23,7 +24,6 @@ class ExperimentOutputConfig(OutputConfig):
         default="runs/{year}-{month:02d}-{day:02d}/{experiment_datetime_string}_{name}")
     """Output directory for the final output."""
 
-    
     def get_experiment_name(self) -> str:
         """Gets the (formatted) experiment name.
 
@@ -72,14 +72,13 @@ class ExperimentOutputConfig(OutputConfig):
     @property
     def second(self) -> int:
         return self.experiment_datetime.second
-    
+
     def prepare(self):
         super().prepare()
-
         if self.experiment_datetime is None:
             self.experiment_datetime = datetime.now()
 
-        self.output_path = process_path(self.output_path, 
-                                        make_exist=True, 
+        self.output_path = process_path(self.output_path,
+                                        make_exist=True,
                                         interpolate=True,
                                         interpolate_object=self, variable_name="output_path")
