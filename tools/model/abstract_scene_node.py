@@ -18,7 +18,7 @@ from abc import abstractmethod
 
 
 class AbstractSceneNode(JsonConvertible):
-    """Abstract class for nodes within a geometricall scene."""
+    """Abstract class for nodes within a geometrical scene."""
 
     @abstractmethod
     def get_name(self) -> Optional[str]:

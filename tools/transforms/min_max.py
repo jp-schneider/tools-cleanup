@@ -4,7 +4,7 @@ import torch
 from tools.transforms.fittable_transform import FittableTransform
 from tools.transforms.invertable_transform import InvertableTransform
 from tools.transforms.to_tensor import tensorify
-
+from tools.logger.logging import logger
 
 def minmax(v: torch.Tensor,
            v_min: Optional[torch.Tensor] = None,
@@ -16,6 +16,9 @@ def minmax(v: torch.Tensor,
         v_min = torch.min(v)
     if v_max is None:
         v_max = torch.max(v)
+    if v_min == v_max:
+        logger.warning("Min and max are equal. Returning full tensor with new_min.")
+        return torch.full_like(v, new_min)
     return (v - v_min) / (v_max - v_min) * (new_max - new_min) + new_min
 
 
