@@ -44,7 +44,6 @@ class TorchDtypeMixin:
                  dtype: Union[torch.dtype, np.dtype, str] = torch.float32,
                  decoding: bool = False,
                  **kwargs) -> None:
-        super_type = super()
         supported, left = check_fnc_supported_args(
             super().__init__, kwargs)
         # If left has other parameters than dtype and decoding, raise an error
