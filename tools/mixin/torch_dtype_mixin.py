@@ -46,11 +46,10 @@ class TorchDtypeMixin:
                  **kwargs) -> None:
         super_type = super()
         supported, left = check_fnc_supported_args(
-            super().__init__, kwargs, dtype=dtype, decoding=decoding)
+            super().__init__, kwargs)
         # If left has other parameters than dtype and decoding, raise an error
         if len(left) > 0:
-            if not all([key in ["dtype", "decoding"] for key in left.keys()]):
-                raise ValueError(
+            raise ValueError(
                     f"Unsupported parameters {left.keys()} in {super().__init__}")
         super().__init__(**supported)
         if decoding:
