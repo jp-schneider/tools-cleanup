@@ -5,6 +5,7 @@ from tools.util.format import raise_on_none
 from tools.util.reflection import dynamic_import
 from tools.util.torch import numpy_to_torch_dtype, torch_to_numpy_dtype, complex_dtype
 import numpy as np
+from tools.util.reflection import check_fnc_supported_args
 
 
 def check_dtype(dtype: Any) -> None:
@@ -41,11 +42,17 @@ class TorchDtypeMixin:
 
     def __init__(self,
                  dtype: Union[torch.dtype, np.dtype, str] = torch.float32,
+                 decoding: bool = False,
                  **kwargs) -> None:
-        if "dtype" in inspect.signature(super().__init__).parameters:
-            super().__init__(dtype=dtype, **kwargs)
-        else:
-            super().__init__(**kwargs)
+        supported, left = check_fnc_supported_args(
+            super().__init__, kwargs)
+        # If left has other parameters than dtype and decoding, raise an error
+        if len(left) > 0:
+            raise ValueError(
+                    f"Unsupported parameters {left.keys()} in {super().__init__}")
+        super().__init__(**supported)
+        if decoding:
+            return
         self._dtype = check_dtype(dtype)
         self._complex_dtype = complex_dtype(self._dtype)
 

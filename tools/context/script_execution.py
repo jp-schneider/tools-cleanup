@@ -47,6 +47,7 @@ def write_exit(config: OutputConfig, exit_code: int, err: Optional[Exception] = 
     except Exception as err:
         return
 
+
 class ScriptExecution:
     """Context manager which encapsulates the execution of a script and stores success or failure in a file."""
 
@@ -56,12 +57,13 @@ class ScriptExecution:
     scope: FrameSummary
     """Scope of the script execution."""
 
-    def __init__(self, 
+    def __init__(self,
                  config: OutputConfig,
                  log_on_keyboard_interrupt: bool = False,
                  ):
         self.config = config
         self.scope = get_frame_summary(1)
+        self.log_on_keyboard_interrupt = log_on_keyboard_interrupt
 
     def __enter__(self):
         return self
@@ -72,6 +74,7 @@ class ScriptExecution:
             # Error occurred
             if not isinstance(exc_val, KeyboardInterrupt) or self.log_on_keyboard_interrupt:
                 filename = os.path.basename(self.scope.filename).split(".")[0]
-                logger.exception(f"Raised {type(exc_val).__name__} in {filename}, exiting...")
+                logger.exception(
+                    f"Raised {type(exc_val).__name__} in {filename}, exiting...")
         write_exit(self.config, exit_code, exc_val)
         return False

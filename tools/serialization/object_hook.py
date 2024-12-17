@@ -1,4 +1,4 @@
-from typing import Dict, Any, Type, Union, Literal, Callable, Tuple
+from typing import Dict, Any, Optional, Type, Union, Literal, Callable, Tuple
 from datetime import datetime
 from enum import Enum
 from tools.serialization.json_convertible import JsonConvertible
@@ -12,7 +12,7 @@ from tools.serialization.object_reference import ObjectReference
 from tools.util.typing import _NOTSET, NOTSET
 
 
-def _init_object(_type: Type, data: Dict[str, Any]) -> Tuple[Any, Dict[str, Any]]:
+def _init_object(_type: Type, data: Dict[str, Any], memo: Dict[str, Any]) -> Tuple[Any, Dict[str, Any]]:
     """Custom method to create object when constructing"""
     to_set_data = dict(data)
     to_set_data.pop('__class__', None)
@@ -48,6 +48,8 @@ def _init_object(_type: Type, data: Dict[str, Any]) -> Tuple[Any, Dict[str, Any]
     if 'kwargs' in argspec or 'decoding' in argspec:
         required_args['decoding'] = True
 
+    is_unresolved_reference = {
+        k: v for k, v in required_args.items() if isinstance(v, ObjectReference)}
     try:
         try:
             ret = _type(**required_args)
@@ -64,10 +66,27 @@ def _init_object(_type: Type, data: Dict[str, Any]) -> Tuple[Any, Dict[str, Any]
                 "__init__()", f"__init__() of type: {class_name(_type)}")
             err.args = (msg, ) + err.args[1:]
         raise err
+
+    if len(is_unresolved_reference) > 0:
+        for k, v in is_unresolved_reference.items():
+            _add_unresolved_references(memo, v, ret, k)
+
     return ret, to_set_data
 
 
-def configurable_object_hook(on_error: Literal['raise', 'ignore', 'warning'] = 'raise', 
+def _add_unresolved_references(memo: Dict[str, Any],
+                               oref: ObjectReference,
+                               parent: Optional[Any],
+                               key: Optional[str]) -> None:
+    if "UNRESOLVED_REFERENCE" not in memo:
+        memo["UNRESOLVED_REFERENCE"] = dict()
+    if oref.uuid not in memo["UNRESOLVED_REFERENCE"]:
+        memo["UNRESOLVED_REFERENCE"][oref.uuid] = (oref, [])
+    if parent is not None and key is not None:
+        memo["UNRESOLVED_REFERENCE"][oref.uuid][1].append((parent, key))
+
+
+def configurable_object_hook(on_error: Literal['raise', 'ignore', 'warning'] = 'raise',
                              memo: Dict[str, Any] = None,
                              **kwargs) -> Callable[[Dict[str, Any]], Any]:
     def _object_hook(obj: Dict[str, Any]):
@@ -92,9 +111,12 @@ def configurable_object_hook(on_error: Literal['raise', 'ignore', 'warning'] = '
                         uuid = obj.pop('__uuid__', None)
                         ret = None
 
-                        ret, to_set = _init_object(object_type, obj)
+                        ret, to_set = _init_object(object_type, obj, memo=memo)
 
                         for new_name, new_val in to_set.items():
+                            if isinstance(new_val, ObjectReference):
+                                _add_unresolved_references(
+                                    memo, new_val, ret, new_name)
                             setattr(ret, new_name, new_val)
 
                         if hasattr(ret, 'after_decoding'):
@@ -109,7 +131,8 @@ def configurable_object_hook(on_error: Literal['raise', 'ignore', 'warning'] = '
                                 raise AttributeError(
                                     f"after_decoding property declared in {object_type.__name__} is not callable!")
 
-                        after_decoding_hook = getattr(kwargs, 'after_decoding_hook', None)
+                        after_decoding_hook = getattr(
+                            kwargs, 'after_decoding_hook', None)
                         if after_decoding_hook is not None and callable(after_decoding_hook):
                             after_decoding_hook(ret, **kwargs)
 
@@ -121,7 +144,9 @@ def configurable_object_hook(on_error: Literal['raise', 'ignore', 'warning'] = '
                             if memo is not None:
                                 found = memo.get(ret.uuid, NOTSET)
                                 if found == NOTSET:
-                                    raise ValueError(f"Object reference {ret.uuid} not found in memo!")
+                                    _add_unresolved_references(
+                                        memo, ret, None, None)
+                                    # raise ValueError(f"Object reference {ret.uuid} not found in memo!")
                                 return found
                         if uuid is not None and memo is not None:
                             memo[uuid] = ret

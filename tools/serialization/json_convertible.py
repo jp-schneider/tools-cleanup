@@ -593,6 +593,9 @@ class JsonConvertible:
         elif ext == "yaml" or ext == "yml":
             path = self._save_to_file_yaml(
                 path=path, ensure_ascii=ensure_ascii, **kwargs)
+        else:
+            raise ValueError(
+                f"Unsupported file extension: {ext} Only json and yaml / yml are supported!")
         return path
 
     @classmethod
@@ -720,7 +723,8 @@ class JsonConvertible:
             The recreated instance.
         """
         from tools.serialization import ObjectDecoder, configurable_object_hook
-        decoder = ObjectDecoder(configurable_object_hook(on_error, memo=dict(), **kwargs))
+        decoder = ObjectDecoder(configurable_object_hook(
+            on_error, memo=dict(), **kwargs))
         # If force class is set, we will try to recreate the object with the current class
         if force_cls:
             obj.update({'__class__': class_name(cls)})

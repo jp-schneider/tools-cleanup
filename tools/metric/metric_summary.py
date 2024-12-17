@@ -222,3 +222,8 @@ class MetricSummary():
                                                              override=override,
                                                              make_dirs=make_dirs)
         return values
+
+    def after_decoding(self, **kwargs):
+        """Called after decoding the metric."""
+        if isinstance(self.values, dict):
+            self.values = pd.DataFrame(self.values)

@@ -32,7 +32,7 @@ class SetValueWrapper(JsonConvertible):
         self.values = value
 
     def to_python(self) -> complex:
-        return self.get_type(self.values)
+        return self.get_type()(self.values)
 
 
 class JsonSetSerializationRule(JsonSerializationRule):

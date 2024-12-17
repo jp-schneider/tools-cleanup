@@ -36,7 +36,7 @@ import sys
 import matplotlib.text as mtext
 from tools.util.typing import DEFAULT, _DEFAULT
 from pathlib import Path
-
+from mpl_toolkits.mplot3d import Axes3D
 
 def set_default_output_dir(output_dir: Optional[Union[str, Path]] = None):
     """Sets the default output directory for saving figures.
@@ -1170,7 +1170,7 @@ def plot_vectors(y: VEC_TYPE,
         Plot: Line plot
         Scatter: Scatter plot
         Bar: Bar plot
-    
+
     ax : Optional[Axes], optional
         Matplotlib axis to plot on, by default None
         If None, will create a new figure.
@@ -1233,19 +1233,22 @@ def plot_vectors(y: VEC_TYPE,
     if bar_width is None and mode == "bar":
         bar_width = np.amin((x[1:] - x[:-1])) / (1.5 * y.shape[-1])
 
+    handles = []
+
     for i in range(y.shape[-1]):
         if mode == "plot":
-            ax.plot(x, y[:, i], label=label[i])
+            handle, = ax.plot(x, y[:, i], label=label[i])
         elif mode == "scatter":
-            ax.scatter(x, y[:, i], label=label[i])
+            handle = ax.scatter(x, y[:, i], label=label[i])
         elif mode == "bar":
             position = x + i * bar_width
             # Center the bars
             position = position - bar_width * y.shape[-1] / 2
-            ax.bar(position, y[:, i], width=bar_width, label=label[i])
+            handle = ax.bar(position, y[:, i], width=bar_width, label=label[i])
         else:
             raise ValueError("Mode should be either plot or scatter.")
-    
+        handles.append(handle)
+
     if xlim is not None:
         ax.set_xlim(*tuple(xlim))
     if ylim is not None:
@@ -1257,7 +1260,7 @@ def plot_vectors(y: VEC_TYPE,
     if tick_right:
         ax.yaxis.tick_right()
         ax.yaxis.set_label_position("right")
-    ax.legend()
+    preserve_legend(ax, handles, create_if_not_exists=True)
     return fig
 
 
@@ -1492,6 +1495,33 @@ def align_marker(marker: Any, ha: Union[str, float] = 'center', va: Union[str, f
     return Path(m_arr, bm.get_path().codes)
 
 
+def set_axes_equal_3d(ax: Axes3D):
+    """Set the aspect ratio of the 3D plot to be equal.
+
+    Parameters
+    ----------
+    ax : Axes3D
+        3D axis to set the aspect ratio for.
+    """
+    import numpy as np  
+    x_limits = ax.get_xlim3d()
+    y_limits = ax.get_ylim3d()
+    z_limits = ax.get_zlim3d()
+
+    x_range = abs(x_limits[1] - x_limits[0])
+    x_middle = np.mean(x_limits)
+    y_range = abs(y_limits[1] - y_limits[0])
+    y_middle = np.mean(y_limits)
+    z_range = abs(z_limits[1] - z_limits[0])
+    z_middle = np.mean(z_limits)
+
+    plot_radius = 0.5*max([x_range, y_range, z_range])
+
+    ax.set_xlim3d([x_middle - plot_radius, x_middle + plot_radius])
+    ax.set_ylim3d([y_middle - plot_radius, y_middle + plot_radius])
+    ax.set_zlim3d([z_middle - plot_radius, z_middle + plot_radius])
+
+
 @saveable()
 def plot_mask(image: VEC_TYPE,
               mask: VEC_TYPE,
@@ -1634,7 +1664,7 @@ def plot_mask(image: VEC_TYPE,
         ax.axis('off')
     # plt.legend()
     if title is not None:
-        fig.suptitle(title)
+        ax.set_title(title)
 
     if _colors is not None:
         _colors.clear()

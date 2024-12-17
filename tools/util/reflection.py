@@ -1,5 +1,5 @@
 import inspect
-from typing import Any, Optional, Tuple, Type, Union, Set, Dict, List
+from typing import Any, Callable, Optional, Tuple, Type, Union, Set, Dict, List
 from types import ModuleType, FunctionType
 import importlib
 
@@ -393,3 +393,60 @@ def check_package(package_name: str, silent: bool = True) -> Optional[ModuleType
         if not silent:
             raise e
         return None
+
+
+def check_fnc_supported_args(
+    func_or_method: Callable[[Any], Any],
+    args: Dict[str, Any],
+    kwargs_as_supported: bool = True,
+    **kwargs: Any
+) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+    """Checks if the arguments are supported by the function / method.
+
+    Parameters
+    ----------
+    func_or_method : Callable[[Any], Any]
+        The function or method to check the arguments for.
+
+    args : Dict[str, Any]
+        The arguments to check.
+
+    kwargs_as_supported : bool, optional
+        If kwargs are supported, by default True
+        When kwargs are supported, all arguments are accepted.
+        E.g. if the function has a **[name] parameter.
+
+    kwargs : Any
+        Additional keyword arguments to pass to the function. Treated the same as args.
+
+    Returns
+    -------
+    Tuple[Dict[str, Any], Dict[str, Any]]
+        A tuple of two dictionaries, the first dictionary contains the accepted parameters, the second dictionary contains the left parameters / invalid parameters.
+    """
+    successfull = dict()
+    left = dict(args)
+    left.update(**kwargs)
+    if hasattr(func_or_method, '__qualname__') and func_or_method.__qualname__ == 'object.__init__':
+        # Top level object init method, return all arguments, its the base class, and does not have any parameters
+        return dict(), left
+    pparams = dict(inspect.signature(func_or_method).parameters)
+    if len(pparams) == 0:
+        return dict(), left
+    if kwargs_as_supported:
+        # Check if kwargs are supported
+        if any([p.kind == inspect.Parameter.VAR_KEYWORD for p in pparams.values()]):
+            return left, dict()
+    if len(pparams) < len(left):
+        # Loop over the parameters
+        for param in pparams.values():
+            if param.name in dict(left):
+                successfull[param.name] = left.pop(param.name)
+    else:
+        # Loop over the kwargs
+        for param_name, value in dict(left).items():
+            if param_name in pparams:
+                successfull[param_name] = value
+                # Remove the parameter from the left params
+                left.pop(param_name)
+    return successfull, left
