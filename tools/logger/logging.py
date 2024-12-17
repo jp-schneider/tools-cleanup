@@ -3,6 +3,7 @@ import sys
 from typing import Optional
 from tools.util.reflection import check_package
 from tools.util.package_tools import get_package_name, get_invoked_package_name, get_project_root_path
+from rich.logging import RichHandler
 
 ONE_TIME_MESSAGES = dict()
 """Dictionary to store one time messages."""
@@ -58,7 +59,9 @@ def basic_config(level: int = logging.INFO):
     _date_fmt = '%Y-%m-%d:%H:%M:%S'
     logging.basicConfig(format=_fmt,
                         datefmt=_date_fmt,
-                        level=level)
+                        level=level,
+                        handlers=[RichHandler(rich_tracebacks=True)]
+                        )
     fmt = logging.Formatter(_fmt, _date_fmt)
     root.handlers[0].setFormatter(fmt)
     # Set default for other loggers

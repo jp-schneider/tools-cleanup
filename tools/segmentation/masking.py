@@ -564,13 +564,19 @@ def inpaint_mask_image(
     mask = np.clip(input_mask, 0, 1)
 
     # paint mask
-    painted_image = inpaint_mask(
-        input_image, mask, np.array(to_rgba(mask_color)))
+    if mask_color is not None:
+        painted_image = inpaint_mask(
+            input_image, mask, np.array(to_rgba(mask_color)))
+    else:
+        painted_image = input_image.copy()
+
     # paint contour
     if contour_width > 0:
         contour_radius = (contour_width - 1) // 2
         dist_transform_fore = cv2.distanceTransform(mask, cv2.DIST_L2, 3)
         dist_transform_back = cv2.distanceTransform(1-mask, cv2.DIST_L2, 3)
+
+        cv.drawContours(mask, contours, -1, (255),1)
 
         contour_radius += 2
         contour_mask = np.abs(
@@ -950,7 +956,8 @@ def inpaint_mask_image(
     return painted_image
 
 
-def inpaint_masks(image: np.ndarray, masks: np.ndarray,
+def inpaint_masks(image: np.ndarray, 
+                  masks: np.ndarray,
                   colors: Optional[np.ndarray] = None,
                   contour_colors: Optional[np.ndarray] = None,
                   contour_width: int = 0) -> np.ndarray:

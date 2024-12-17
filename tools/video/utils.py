@@ -164,6 +164,7 @@ def write_mask_mp4_generator(
         fps: float = 24.0,
         title: str = None,
         frame_counter: bool = False,
+        darkening_background_alpha: float = 0.5,
         codec: str = DEFAULT,
         progress_bar: bool = False,
         progress_factory: Optional[ProgressFactory] = None):
