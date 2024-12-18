@@ -1,4 +1,4 @@
-from collections.abc import Sized, Generator
+from typing import Sized, Generator
 from functools import wraps
 from typing import Any, Callable
 

@@ -134,24 +134,24 @@ class PriorDataset():
         return self.__has_prior__
 
 
-    def prior_save(self, f: Union[PathLike[str], BinaryIO]) -> None:
+    def prior_save(self, f: Union[PathLike, BinaryIO]) -> None:
         """Saves the prior cache to the given file / buffer.
 
         Parameters
         ----------
-        f : Union[PathLike[str], BinaryIO]
+        f : Union[PathLike, BinaryIO]
             File / Buffer
         """
         if self.has_prior:
             return self.__prior_cache__.save(f)
 
 
-    def prior_load(self, f: Union[PathLike[str], BinaryIO]):
+    def prior_load(self, f: Union[PathLike, BinaryIO]):
         """Loads the prior cache from the given file / buffer.
 
         Parameters
         ----------
-        f : Union[PathLike[str], BinaryIO]
+        f : Union[PathLike, BinaryIO]
             File / Buffer
         """
         cache = PriorCache.load(f)

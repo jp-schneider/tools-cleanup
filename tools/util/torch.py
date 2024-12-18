@@ -1,4 +1,4 @@
-from collections.abc import Generator
+from typing import Generator
 import decimal
 from functools import wraps
 import inspect

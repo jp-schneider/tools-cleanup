@@ -67,7 +67,7 @@ class PriorCache():
         res['cache'] = {str(k): v for k, v in self.__cache__.items()}
         return res
 
-    def save(self, f: Union[PathLike[str], BinaryIO]) -> None:
+    def save(self, f: Union[PathLike, BinaryIO]) -> None:
         res = self.get_state()
         torch.save(res, f)
 
@@ -82,7 +82,7 @@ class PriorCache():
         self.__cache__ = {int(k): v for k, v in res['cache'].items()}
 
     @classmethod
-    def load(cls, f: Union[PathLike[str], BinaryIO]) -> 'PriorCache':
+    def load(cls, f: Union[PathLike, BinaryIO]) -> 'PriorCache':
         args = dict()
         if not torch.cuda.is_available():
             args['map_location']=torch.device('cpu')

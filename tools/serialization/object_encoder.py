@@ -1,9 +1,8 @@
-from collections.abc import Callable
 import json
 import logging
 import sys
 from datetime import datetime
-from typing import Any, Dict, Optional, Union
+from typing import Any, Dict, Optional, Union, Tuple, Callable
 from tools.serialization import JsonConvertible
 try:
     import numpy
@@ -25,7 +24,8 @@ class ObjectEncoder(json.JSONEncoder):
                  allow_nan: bool = True, 
                  sort_keys: bool = False, 
                  indent: Optional[Union[int, str]] = None, 
-                 separators: Optional[tuple[str, str]] = None, 
+                 separators: Optional[Tuple
+                                      [str, str]] = None, 
                  default: Optional[Callable[..., Any]] = None,
                  json_convertible_kwargs: Optional[Dict[str, Any]] = None
                  ) -> None:

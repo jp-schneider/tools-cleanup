@@ -101,7 +101,7 @@ def get_progress_factory_argument(func: callable) -> Optional[str]:
 
 class ProgressFactory:
 
-    _elements: dict[str, ProgressElement]
+    _elements: Dict[str, ProgressElement]
     """Dictionary of progress elements."""
 
     def __init__(self):
