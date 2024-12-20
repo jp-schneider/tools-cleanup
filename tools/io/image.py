@@ -12,7 +12,11 @@ from tools.transforms.to_numpy_image import ToNumpyImage, numpyify_image
 from tools.serialization.json_convertible import JsonConvertible
 from tools.logger.logging import logger
 from PIL.Image import Exif, Image
-from PIL.ExifTags import Base as ExifTagsBase
+try:
+    from PIL.ExifTags import Base as ExifTagsBase
+except Exception as err:
+    ExifTagsBase = object
+
 from tools.util.format import parse_format_string
 from tqdm.auto import tqdm
 from tools.util.path_tools import numerated_file_name, read_directory

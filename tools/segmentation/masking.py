@@ -9,7 +9,6 @@ from tools.util.numpy import numpyify, numpyify_image
 from tools.serialization.json_convertible import JsonConvertible
 from tools.logger.logging import logger
 from PIL.Image import Exif, Image
-from PIL.ExifTags import Base as ExifTagsBase
 from tools.util.format import parse_format_string
 from tqdm.auto import tqdm
 from tools.util.path_tools import read_directory
