@@ -222,8 +222,14 @@ def value_mask_to_channel_masks(
         else:
             invalid_values.update(ignore_value)
     vals = np.unique(mask)
-    _valid_classes = np.stack([x for x in vals if x not in invalid_values])
+    valid_values = [x for x in vals if x not in invalid_values]
+    
+    if len(valid_values) == 0:
+        return np.zeros(mask.shape + (0,), dtype=bool), np.array([])
+    
+    _valid_classes = np.stack(valid_values)
     channel_mask = np.zeros(mask.shape + (len(_valid_classes),), dtype=bool)
+    
     for i, c in enumerate(_valid_classes):
         channel_mask[..., i] = (mask == c)
     return channel_mask, _valid_classes
