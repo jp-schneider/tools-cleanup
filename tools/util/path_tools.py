@@ -5,7 +5,44 @@ from pathlib import Path
 import re
 import subprocess
 from typing import Any, Callable, Dict, List, Optional, Set, Union
-from tools.util.typing import _NOTSET, NOTSET
+from tools.util.typing import _NOTSET, NOTSET, _DEFAULT, DEFAULT
+from tools.logger.logging import logger
+
+VSCODE_AVAILABLE = NOTSET
+
+def has_vscode() -> bool:
+    """
+    Checks if vscode is available on the system an on the path.
+
+    Returns
+    -------
+    bool
+        If vscode is available.
+    """
+    global VSCODE_AVAILABLE
+    if VSCODE_AVAILABLE is not NOTSET:
+        return VSCODE_AVAILABLE
+    try:
+        subprocess.run("code --version", shell=True, check=True)
+        VSCODE_AVAILABLE = True
+    except Exception as err:
+        VSCODE_AVAILABLE = False
+    return VSCODE_AVAILABLE
+
+def is_headless() -> bool:
+    """Checks if the current environment is headless.
+
+    Returns
+    -------
+    bool
+        If the environment is headless.
+    """
+    from tools.util.format import str_to_bool
+    is_headless = os.environ.get("HEADLESS", False)
+    if isinstance(is_headless, bool):
+        return is_headless
+    else:
+        return str_to_bool(str(is_headless))
 
 
 def relpath(from_: str, to: str, is_from_file: bool = True, is_to_file: bool = True) -> str:
@@ -230,7 +267,10 @@ def read_directory_recursive(
     return read_directory(path, pattern, parser, path_key)
 
 
-def open_in_default_program(path_to_file: Union[str, Path]) -> None:
+def open_in_default_program(
+        path_to_file: Union[str, Path],
+        headless: Union[bool, _DEFAULT] = DEFAULT
+        ) -> None:
     """Opens the given file in the systems default program.
 
     Parameters
@@ -239,19 +279,30 @@ def open_in_default_program(path_to_file: Union[str, Path]) -> None:
         Path to open in default program.
     """
     from sys import platform
+    if headless is DEFAULT:
+        headless = is_headless()
     path_to_file: Path = process_path(
         path_to_file, need_exist=False, variable_name="path_to_file")
     path_to_file = path_to_file.resolve()
     if path_to_file.exists():
-        if platform == "linux" or platform == "linux2":
-            # linux
-            raise NotImplementedError()
-        elif platform == "darwin":
-            # OS X
-            raise NotImplementedError()
-        elif platform == "win32":
-            # Windows...
-            subprocess.run(f"powershell {path_to_file}")
+        if not headless:
+            if platform == "linux" or platform == "linux2":
+                # linux
+                subprocess.run(f"xdg-open {path_to_file}")
+            elif platform == "darwin":
+                # OS X
+                if has_vscode():
+                    subprocess.run(f"code {path_to_file} -r", shell=True)
+                else:
+                    logger.warning("Default program opening is not supported on MacOS. Consider an implementation.")
+            elif platform == "win32":
+                # Windows...
+                subprocess.run(f"powershell {path_to_file}")
+        else:
+            if has_vscode():
+                subprocess.run(f"code {path_to_file} -r", shell=True)
+            else:
+                logger.warning("Could not open file in default program, vscode is not available and program is running in headless mode.")
 
 
 def numerated_file_name(path: str, max_check: int = 1000) -> str:

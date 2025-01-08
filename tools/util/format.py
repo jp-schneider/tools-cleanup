@@ -94,6 +94,31 @@ def snake_to_upper_camel(input: str, sep: str = "") -> str:
     return sep.join(words)
 
 
+def str_to_bool(value: str) -> bool:
+    """Converts a string to a boolean.
+
+    Parameters
+    ----------
+    value : str
+        The value to convert.
+
+    Returns
+    -------
+    bool
+        The converted value.
+
+    Raises
+    ------
+    ValueError
+        If the value is not a valid boolean string.
+    """
+    if value.lower() in ("yes", "true", "t", "1", "y"):
+        return True
+    elif value.lower() in ("no", "false", "f", "0", "n", ""):
+        return False
+    else:
+        raise ValueError(f"Invalid boolean string: {value}")
+
 class TimeDeltaTemplate(Template):
     """Class for formating timedelta with strftime like syntax"""
     delimiter = "%"

@@ -194,7 +194,7 @@ def load_image(
 
 def save_image(image: VEC_TYPE,
                path: Union[str, Path],
-               override: bool = False,
+               override: bool = True,
                mkdirs: bool = True,
                metadata: Optional[Dict[Union[str, ExifTagsBase], Any]] = None) -> Union[str, Path]:
     """Saves numpy array or torch tensor as an image.

@@ -438,6 +438,8 @@ def save_mask(mask: VEC_TYPE,
             if progress_bar:
                 pbar.update(1)
     else:
+        if mask.shape[-1] == 1:
+            mask = mask.squeeze()
         img = Image.fromarray(mask)
         if pillow_mask_mode is not None:
             img = img.convert(pillow_mask_mode)
