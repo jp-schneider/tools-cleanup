@@ -709,6 +709,20 @@ def create_alpha_colormap(
 
     return map_object
 
+def get_tab40_colors() -> LinearSegmentedColormap:
+    """
+    Returns a colormap with the colors of the tab20b + tab20c colormaps,
+    effectively creating a colormap with 40 distinct colors.
+
+    Returns
+    -------
+    LinearSegmentedColormap
+        The created colormap.
+    """
+    tab20b = plt.get_cmap("tab20b")
+    tab20c = plt.get_cmap("tab20c")
+    colors = np.concatenate([tab20b.colors, tab20c.colors], axis=0)
+    return LinearSegmentedColormap.from_list("tab40", colors)
 
 def register_alpha_colormap(color: np.ndarray,
                             name: str,

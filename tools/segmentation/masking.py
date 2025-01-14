@@ -20,8 +20,12 @@ from matplotlib.colors import to_rgba
 import matplotlib.pyplot as plt
 from multiprocessing import Pool
 from tools.util.typing import _DEFAULT, DEFAULT
+import pandas as pd
+from tools.util.path_tools import read_directory_recursive
 
-def split_overlap_channel_masks(masks: VEC_TYPE) -> Tuple[List[np.ndarray], List[List[int]]]:
+def split_overlap_channel_masks(
+        masks: VEC_TYPE
+        ) -> Tuple[List[np.ndarray], List[List[int]]]:
     """Splits a list of channel masks into multiple masks, where each mask has no overlap with the other masks.
 
     Parameters
@@ -141,7 +145,7 @@ def channel_masks_to_value_mask(masks: VEC_TYPE,
     if dtype == DEFAULT:
         dtype = np.uint8 if np.max(object_values) < 256 else np.int32
 
-    def _convert_masks(masks, object_values):
+    def _convert_masks(masks, object_values) -> np.ndarray:
         mask = np.zeros(masks.shape[:-1], dtype=dtype)
         mask.fill(base_value)
 
@@ -1158,3 +1162,185 @@ def fuse_timed_stack(masks: np.ndarray, fuse_indices: List[List[int]], ignore_in
         fused_mask, _ = fuse_masks(masks[t], fuse_indices, ignore_indices)
         ret[t] = fused_mask
     return ret
+
+def index_channel_mask_hierarchy(
+        path: str,
+        pattern: str = r"(?P<oid>\d+)/(?P<timestamp>\d+).png",
+        parser: Optional[Dict[str, Any]] = DEFAULT,
+        ) -> pd.DataFrame:
+    """Indexes a directory of channel masks with a hierarchy.
+
+    By default, the pattern is set to "(?P<oid>\d+)/(?P<timestamp>\d+).png" which will index the masks by the object id and the timestamp.
+
+    So the hierarchy will be:
+    path/
+        - oid0/
+            - [..., 0]0.png
+            - [..., 0]1.png
+            - [..., 0]N.png
+        - oid1/
+            - [..., 1]0.png
+            - [..., 1]1.png
+            - [..., 1]N.png
+        - oidN/
+
+    Parameters
+    ----------
+    path : str
+        Path to the directory where the masks are stored.
+
+    pattern : str, optional
+        Pattern to search for and load the masks, by default r"(?P<oid>\d+)/(?P<timestamp>\d+).png"
+
+    parser : Optional[Dict[str, Any]], optional
+        Parser to use for the filename, by default DEFAULT
+        The parser must contain the keys "oid" and "timestamp" which are the keys in the pattern.
+
+    Returns
+    -------
+    pd.DataFrame
+        DataFrame with the indexed masks.
+        Columns are "oid", "timestamp", "path" and any additional keys in the parser.
+    """
+        
+    if parser == DEFAULT:
+        parser = dict(oid=int, timestamp=int)
+    
+    if "?P<oid>" not in pattern:
+        raise ValueError("The pattern must contain the oid group.")
+    if "oid" not in parser:
+        parser['oid'] = int
+
+    if "?P<timestamp>" not in pattern:
+        raise ValueError("The pattern must contain the timestamp group.")
+    if "timestamp" not in parser:
+        parser['timestamp'] = int
+    
+    found_masks = read_directory_recursive(os.path.join(path, pattern), parser=parser)    
+    df = pd.DataFrame(found_masks).sort_values(["timestamp", "oid"]).reset_index(drop=True)
+    return df
+
+
+def determine_overlapping_groups_from_index(
+        df: pd.DataFrame,
+        progress_bar: bool = False,
+        progress_factory: Optional[ProgressFactory] = None
+        ) -> Dict[int, List[int]]:
+    """Determines overlapping groups from an indexed DataFrame.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        DataFrame with the indexed masks.
+        Columns are "oid", "timestamp", "path" and any additional keys in the parser.
+
+    Returns
+    -------
+    Dict[int, List[int]]
+        Dictionary of overlapping groups.
+        Key is the overlapping index, value is a list of object ids which are overlapping free.
+    """
+    groups = dict()
+    groups[0] = df['oid'].unique().tolist()
+    num_timestamps = df['timestamp'].nunique()
+
+    bar = None
+    if progress_bar:
+        if progress_factory is None:
+            progress_factory = ProgressFactory()
+        bar = progress_factory.bar(total=num_timestamps, desc="Determining overlapping groups",
+                                    tag="DETERMINING_OVERLAPPING_GROUPS",
+                                    is_reusable=True)
+    for t, timedf in df.groupby("timestamp"):
+        for group_index, group in dict(groups).items():
+            if len(group) == 1:
+                continue
+            in_group_df = timedf[timedf["oid"].isin(group)]
+            paths = in_group_df['path'].values
+            in_group_oids = in_group_df['oid'].values
+            masks = np.stack([load_mask(p) for p in paths], axis=-1)
+            _, ref_indices = split_overlap_channel_masks(masks)
+            if len(ref_indices) > 1:
+                # Overlapps occured, move the overlapping masks to a new group
+                for i, indices in enumerate(ref_indices[1:]):
+                    new_group = in_group_oids[indices].tolist()
+                    new_group_ov_index = max(groups.keys()) + 1
+                    groups[new_group_ov_index] = new_group
+                    for oid in new_group:
+                        # Remove the oid from the old group
+                        group.remove(oid)
+        if progress_bar:
+            bar.update(1)
+    return groups
+
+def save_index_to_overlapping_groups_masks(
+        df: pd.DataFrame,
+        groups: Dict[int, List[int]],
+        save_directory: str,
+        oid_mapping: Optional[Dict[int, int]] = None,
+        spread: bool = False,
+        progress_bar: bool = False,
+        progress_factory: Optional[ProgressFactory] = None
+        ) -> Dict[int, List[str]]:
+    """Saves the indexed masks to overlapping groups.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        DataFrame with the indexed masks.
+        Columns are "oid", "timestamp", "path" and any additional keys in the parser.
+
+    groups : Dict[int, List[int]]
+        Dictionary of overlapping groups.
+        Key is the overlapping index, value is a list of object ids which are overlapping free.
+    """
+    if oid_mapping is None:
+        oid_mapping = dict()
+
+    max_time = df["timestamp"].max()
+    max_ov = len(groups)
+
+    time_format = f"{{:0{len(str(max_time))}d}}"
+    ov_format = f"{{:0{len(str(max_ov))}d}}"
+
+    save_paths = dict()
+
+    ov_bar = None
+    time_bar = None
+
+    if progress_bar:
+        if progress_factory is None:
+            progress_factory = ProgressFactory()
+        ov_bar = progress_factory.bar(total=len(groups), desc="Saving overlapping groups",
+                                      tag="SAVING_OVERLAPPING_GROUPS",
+                                      is_reusable=True)
+        time_bar = progress_factory.bar(total=max_time, desc="Saving masks",
+                                        tag="SAVING_MASKS",
+                                        is_reusable=True)
+
+    for ov_index, group in groups.items():
+        group_df = df[df['oid'].isin(group)]
+
+        if progress_bar:
+            time_bar.reset()
+
+        if len(group_df) > 0:
+            save_paths[ov_index] = []
+            # Group by timestamp
+            for t, timedf in group_df.sort_values("timestamp").groupby("timestamp"):
+                paths = timedf['path'].values.tolist()
+                oids = timedf['oid'].values.tolist()
+
+                color_oids = [oid_mapping.get(oid, oid) for oid in oids]
+
+                masks = np.stack([load_mask(p) for p in paths], axis=-1)
+                value_mask = channel_masks_to_value_mask(masks, color_oids, handle_overlap='raise')
+
+                path = save_mask(value_mask, os.path.join(save_directory, f"img_{time_format.format(t)}_ov_{ov_format.format(ov_index)}.png"), spread=spread)
+                save_paths[ov_index].append(path)
+
+                if progress_bar:
+                    time_bar.update(1)
+        if progress_bar:
+            ov_bar.update(1)
+    return save_paths
