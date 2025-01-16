@@ -9,7 +9,7 @@ from typing import Any, Callable, Dict, List, Literal, Optional, Tuple, Type, Ty
 from tools.logger.logging import logger
 import inspect
 from pandas import Series
-
+from tools.util.typing import VEC_TYPE
 from tools.error import ArgumentNoneError
 from tools.error.argument_none_type_suggestion_error import ArgumentNoneTypeSuggestionError
 from tools.util.path_tools import format_os_independent
@@ -763,3 +763,73 @@ def get_leading_zeros_format(max_number: int) -> str:
 def get_leading_zeros_format_string(max_number: int) -> str:
     """Gets the format string for leading zeros for strings, directly usable in format strings."""
     return f"{{:{get_leading_zeros_format(max_number)}}}"
+
+def consecutive_indices_string(x: VEC_TYPE, slice_sep: str = "-", item_sep: str = ",") -> str:
+    """Formats a 1D tensor of (consecutive) indices into a string representation.
+
+    Indices of similar step size are grouped together. The output is a string
+    where each item is a string of the form "StartSlice[-EndSlice-StepSize]".
+    StartSlice is the starting index of the group, EndSlice is the ending index, both are inclusive.
+    If the group size is smaller than 3, there will be no grouping and the indices will be printed as single items.
+
+    Example:
+    x = [0, 1, 2, 3, 5, 7, 9, 11, 15, 16, 19]
+    consecutive_indices_string(x) -> "0-3-1,5-11-2,15,16,19"
+
+    Parameters
+    ----------
+    x : VEC_TYPE
+        A 1D array of indices.
+    slice_sep : str, optional
+        Seperator for slices, by default "-"
+    item_sep : str, optional
+        Seperator for items, by default ","
+
+    Returns
+    -------
+    str
+        String representation of the input tensor.
+    """
+    from tools.transforms.to_numpy import numpyify
+    x = numpyify(x)
+    if "int" not in str(x.dtype):
+        raise ValueError("Input must be an integer array.")
+    if len(x.shape) > 1:
+        raise ValueError("Input must be a 1D array.")
+    if len(x) < 2:
+        return f"{x[0]},{x[0]},1"
+    grad = x[1:] - x[:-1]
+    rets = []
+
+    def _append(l, start, end, step): 
+        if start == end:
+            l.append(f"{start}")
+        elif (end - start) == step:
+            l.append(f"{start}")
+            l.append(f"{end}")
+        else:
+            l.append(f"{start}{slice_sep}{end}{slice_sep}{step}")
+
+    istart = 0
+    cstart = x[0]
+    cend = None
+    cstep = None
+    while istart < len(x):
+        cend = x[istart]
+        if cstep is None:
+            cstep = grad[istart]
+        else:
+            if istart == len(grad) or cstep != grad[istart]:
+                _append(rets, cstart, cend, cstep)
+                if istart == len(grad):
+                    break
+                istart += 1
+                cstart = x[istart]
+                if istart == len(grad):
+                    _append(rets, cstart, cend, cstep)
+                    break
+                cstep = grad[istart]
+            else:
+                pass
+        istart += 1
+    return item_sep.join(rets)

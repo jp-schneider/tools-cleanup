@@ -836,13 +836,27 @@ def load_channel_masks(
         bar = progress_factory.bar(total=sum([len(x) for x in overlapping_mask_paths.values()]), desc="Loading masks",
                                    tag="LOADING_MASKS",
                                    is_reusable=True)
+    nan_entries = dict()
     for ov_index, path_dict_list in overlapping_mask_paths.items():
-        for p in path_dict_list:
-            overlapping_masks[ov_index].append(load_mask(p, size=size, max_size=max_size))
+        for i, p in enumerate(path_dict_list):
+            if p is None or isinstance(p, float) and np.isnan(p):
+                overlapping_masks[ov_index].append(None)
+                if ov_index not in nan_entries:
+                    nan_entries[ov_index] = []
+                nan_entries[ov_index].append(i)
+            else:
+                overlapping_masks[ov_index].append(load_mask(p, size=size, max_size=max_size))
             if progress_bar:
                 bar.update(1)
     # Stack masks
     for k in overlapping_masks:
+        if len(nan_entries.get(k, [])) > 0:
+            # Find first non-nan entry
+            first_non_nan = next(iter([x for x in overlapping_masks[k] if x is not None]))
+            shape = first_non_nan.shape
+            dtype = first_non_nan.dtype
+            for i in nan_entries[k]:
+                overlapping_masks[k][i] = np.zeros(shape, dtype=dtype)
         overlapping_masks[k] = np.stack(overlapping_masks[k], axis=0)
     value_mask = list(overlapping_masks.values())
     if output_format == 'channel':
@@ -1170,7 +1184,7 @@ def index_channel_mask_hierarchy(
         ) -> pd.DataFrame:
     """Indexes a directory of channel masks with a hierarchy.
 
-    By default, the pattern is set to "(?P<oid>\d+)/(?P<timestamp>\d+).png" which will index the masks by the object id and the timestamp.
+    By default, the pattern is set to "(?P<oid>\\d+)/(?P<timestamp>\\d+).png" which will index the masks by the object id and the timestamp.
 
     So the hierarchy will be:
     path/

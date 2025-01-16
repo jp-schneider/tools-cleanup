@@ -1269,48 +1269,9 @@ def consecutive_indices_string(x: VEC_TYPE, slice_sep: str = "-", item_sep: str 
     str
         String representation of the input tensor.
     """
-    x = tensorify(x).detach().cpu()
-    if "int" not in str(x.dtype):
-        raise ValueError("Input must be an integer tensor.")
-    if len(x.shape) > 1:
-        raise ValueError("Input must be a 1D tensor.")
-    if len(x) < 2:
-        return f"{x[0]},{x[0]},1"
-    grad = x[1:] - x[:-1]
-    rets = []
+    from tools.util.format import consecutive_indices_string
+    return consecutive_indices_string(x, slice_sep=slice_sep, item_sep=item_sep)
 
-    def _append(l, start, end, step): 
-        if start == end:
-            l.append(f"{start}")
-        elif (end - start) == step:
-            l.append(f"{start}")
-            l.append(f"{end}")
-        else:
-            l.append(f"{start}{slice_sep}{end}{slice_sep}{step}")
-
-    istart = 0
-    cstart = x[0]
-    cend = None
-    cstep = None
-    while istart < len(x):
-        cend = x[istart]
-        if cstep is None:
-            cstep = grad[istart]
-        else:
-            if istart == len(grad) or cstep != grad[istart]:
-                _append(rets, cstart, cend, cstep)
-                if istart == len(grad):
-                    break
-                istart += 1
-                cstart = x[istart]
-                if istart == len(grad):
-                    _append(rets, cstart, cend, cstep)
-                    break
-                cstep = grad[istart]
-            else:
-                pass
-        istart += 1
-    return item_sep.join(rets)
 
 def _is_non_finite(x: torch.Tensor, info: bool = False) -> Union[bool, Tuple[bool, torch.Tensor]]:
     """Checks if a tensor contains non-finite values.
