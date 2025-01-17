@@ -300,7 +300,7 @@ def load_mask(
 
         if out_dtype is not None:
             mask = mask.astype(np.dtype(out_dtype))
-            
+
         return mask
     if not is_stack:
         return _read_path(path)
@@ -417,8 +417,10 @@ def save_mask(mask: VEC_TYPE,
 
     if spread and mask.dtype == np.uint8:
         unique = np.unique(mask)
-        maps = np.arange(0, 256, np.floor(
-            255 // (unique.shape[0] - 1)), dtype=np.uint8)
+        if len(unique) > 1:
+            maps = np.arange(0, 256, np.floor(255 // (unique.shape[0] - 1)), dtype=np.uint8)
+        else:
+            maps = np.array([0], dtype=np.uint8)
         metadata['spread'] = {x[0].item(): x[1].item()
                               for x in zip(maps, unique)}
         metadata['dtype'] = str(mask.dtype.name)
