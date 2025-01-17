@@ -24,7 +24,6 @@ if torch is not None:
     INDEX_TYPE = TypeVar("INDEX_TYPE", bound=Union[int, np.ndarray, slice, List[int], torch.Tensor])  # type: ignore
     """Index type which can be used to index a certain type like numpy arrays for 1 dimensional indices."""
 else:
-    from torch import Tensor
     VEC_TYPE = TypeVar("VEC_TYPE", bound=np.ndarray)
     """Vector type, like torch.Tensor or numpy.ndarray."""
 

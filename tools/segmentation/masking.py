@@ -287,7 +287,9 @@ def load_mask(
                 )
         # Load metadata
         metadata = load_image_exif(mask_pil, safe_load=True)
+        out_dtype = metadata.get('dtype', None)
         spread = metadata.get('spread', None)
+
         mask = np.array(mask_pil)
         # If spread was applied, reverse it
         if spread is not None:
@@ -295,6 +297,10 @@ def load_mask(
             for k, v in spread.items():
                 msk_copy[mask == int(k)] = int(v)
             mask = msk_copy
+
+        if out_dtype is not None:
+            mask = mask.astype(np.dtype(out_dtype))
+            
         return mask
     if not is_stack:
         return _read_path(path)
@@ -402,7 +408,8 @@ def save_mask(mask: VEC_TYPE,
         
     if mask.dtype == np.uint8:
         unique = np.unique(mask)
-        if len(unique) == 2 and max(unique) == 1 and min(unique) == 0:
+        if len(unique) == 2 and max(unique) == 1 and min(unique) == 0 and spread:
+            metadata["dtype"] = str(mask.dtype.name)
             mask = mask.astype(bool)
 
     if pillow_mask_mode == None and mask.dtype == np.bool_:
@@ -414,6 +421,7 @@ def save_mask(mask: VEC_TYPE,
             255 // (unique.shape[0] - 1)), dtype=np.uint8)
         metadata['spread'] = {x[0].item(): x[1].item()
                               for x in zip(maps, unique)}
+        metadata['dtype'] = str(mask.dtype.name)
         msk_copy = np.zeros_like(mask, dtype=mask.dtype)
         for i in range(unique.shape[0]):
             msk_copy[mask == unique[i]] = maps[i]
