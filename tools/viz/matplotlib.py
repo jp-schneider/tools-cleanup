@@ -1085,28 +1085,7 @@ def plot_as_image(data: VEC_TYPE,
                 _cmap.set_bad(color='white')
 
             if inpaint_title == True or (inpaint_title == DEFAULT and tight):
-                import torch
-                from tools.io.image import put_text, n_layers_alpha_compositing
-                from tools.transforms.numpy.min_max import MinMax
-                img_shape = _image.shape[-3:]
-                title_img = put_text(np.zeros((*img_shape[:2], 4)), _title, margin=20, padding=20,
-                                     size=1.5, thickness=2, background_stroke=3).astype(np.float32) / 255
-                mm = MinMax(new_min=0, new_max=1, axis=(-3, -2))
-                transformed = mm.fit_transform(_image)
-                not_rgb = transformed.shape[-1] not in [3, 4]
-                not_alpha = transformed.shape[-1] != 4
-                if not_rgb:
-                    transformed = transformed.repeat(3, axis=-1)
-                if not_alpha:
-                    transformed = np.concatenate(
-                        [transformed, np.ones((*img_shape[:2], 1))], axis=-1)
-                inpainted = n_layers_alpha_compositing(torch.stack([torch.tensor(
-                    transformed), torch.tensor(title_img)], dim=0), torch.tensor([1, 0]))
-                if not_alpha:
-                    inpainted = inpainted[..., :3]
-                if not_rgb:
-                    inpainted = inpainted.mean(dim=-1, keepdim=True)
-                _image = mm.inverse_transform(inpainted)
+                _image = _inpaint_title(_image, _title)
 
             ax.imshow(_image, vmin=vmin, vmax=vmax, cmap=_cmap,
                       interpolation=interpolation, **imshow_kw)
@@ -1149,6 +1128,47 @@ def plot_as_image(data: VEC_TYPE,
         fig.suptitle(title)
     return fig
 
+def _inpaint_title(image: VEC_TYPE, title: str, **kwargs):
+    import torch
+    from tools.io.image import put_text, n_layers_alpha_compositing
+    from tools.transforms.numpy.min_max import MinMax
+    img_shape = image.shape[-3:]
+
+    args = dict(kwargs)
+    if "margin" not in args:
+        args["margin"] = 20
+    if "padding" not in args:
+        args["padding"] = 20
+    if "size" not in args:
+        args["size"] = 1.5
+    if "thickness" not in args:
+        args["thickness"] = 2
+    if "background_stroke" not in args:
+        args["background_stroke"] = 3
+
+    title_img = put_text(np.zeros((*img_shape[:2], 4)), 
+                         title, **args).astype(np.float32) / 255
+    mm = MinMax(new_min=0, new_max=1, axis=(-3, -2))
+    transformed = mm.fit_transform(image)
+    empty_image = (mm.min == mm.max).all()
+    not_rgb = transformed.shape[-1] not in [3, 4]
+    not_alpha = transformed.shape[-1] != 4
+    if not_rgb:
+        transformed = transformed.repeat(3, axis=-1)
+    if not_alpha:
+        transformed = np.concatenate(
+            [transformed, np.ones((*img_shape[:2], 1))], axis=-1)
+    inpainted = n_layers_alpha_compositing(torch.stack([torch.tensor(
+        transformed), torch.tensor(title_img)], dim=0), torch.tensor([1, 0]))
+    if not_alpha:
+        inpainted = inpainted[..., :3]
+    if not_rgb:
+        inpainted = inpainted.mean(dim=-1, keepdim=True)
+    if not empty_image:
+        image = mm.inverse_transform(inpainted)
+    else:
+        image = inpainted
+    return image
 
 @saveable()
 def plot_vectors(y: VEC_TYPE,
@@ -1559,6 +1579,8 @@ def plot_mask(image: VEC_TYPE,
               sort: bool = False,
               reverse: bool = True,
               inpaint_indices: bool = False,
+              inpaint_title: bool = DEFAULT,
+              inpaint_title_kwargs: Optional[Dict[str, Any]] = None,
               legend: bool = DEFAULT,
               **kwargs) -> Figure:  # type: ignore
     import matplotlib.patches as mpatches
@@ -1674,10 +1696,16 @@ def plot_mask(image: VEC_TYPE,
     ax.imshow(background_mask, cmap='alpha_binary',
               alpha=darkening_background, label='')
 
+    if inpaint_title == True or (inpaint_title == DEFAULT and tight):
+        _img = np.zeros_like(background_mask)[..., np.newaxis].repeat(4, axis=-1)
+        _image = _inpaint_title(_img, title, **(inpaint_title_kwargs if inpaint_title_kwargs is not None else dict()))
+        ax.imshow(_image)
+
+
     if not tight:
         ax.axis('off')
     # plt.legend()
-    if title is not None:
+    if title is not None and not tight:
         ax.set_title(title)
 
     if _colors is not None:
