@@ -5,7 +5,7 @@ import torch
 from tools.util.format import parse_enum
 from tools.util.reflection import class_name
 from tools.util.torch import tensorify_image
-from tools.util.typing import VEC_TYPE
+from tools.util.typing import DEFAULT, VEC_TYPE
 import numpy as np
 from tools.transforms.to_numpy import numpyify
 from tools.transforms.to_numpy_image import ToNumpyImage, numpyify_image
@@ -23,7 +23,6 @@ from tools.util.path_tools import numerated_file_name, read_directory
 import os
 from torch.nn.functional import grid_sample
 from tools.util.progress_factory import ProgressFactory
-import cv2 as cv
 from tools.util.sized_generator import SizedGenerator, sized_generator
 
 
@@ -702,11 +701,16 @@ def get_origin(
         text: str,
         vertical_alignment: str = "center",
         horizontal_alignment: str = "center",
-        family: int = cv.FONT_HERSHEY_SIMPLEX,
+        family: int = DEFAULT,
         size: float = 1,
         thickness: int = 1,
 
 ) -> Tuple[float, float]:
+    import cv2 as cv
+
+    if family == DEFAULT:
+        family = cv.FONT_HERSHEY_SIMPLEX
+
     # Opencv Assumes text origin to be bottom left
     text_width, text_height = cv.getTextSize(text, family, size, thickness)[0]
 
@@ -781,7 +785,7 @@ def put_text(
         position: Optional[Tuple[int, int]] = None,
         vertical_alignment: str = "top",
         horizontal_alignment: str = "center",
-        family: int = cv.FONT_HERSHEY_DUPLEX,
+        family: int = DEFAULT,
         size: float = 1,
         thickness: int = 1,
         color: Any = "black",
@@ -862,6 +866,11 @@ def put_text(
     """
     from tools.viz.matplotlib import parse_color_rgb, parse_color_rgba
     from matplotlib.pyplot import figure
+    import cv2 as cv
+
+    if family == DEFAULT:
+        family = cv.FONT_HERSHEY_SIMPLEX
+
     has_alpha = False
     color_parser = parse_color_rgb
     if img.shape[-1] == 4:

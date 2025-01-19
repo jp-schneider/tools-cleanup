@@ -15,7 +15,6 @@ from tools.util.path_tools import read_directory
 import os
 from tools.io.image import create_image_exif, load_image_exif, compute_new_size
 from tools.transforms.to_numpy_image import ToNumpyImage
-import cv2
 from matplotlib.colors import to_rgba
 import matplotlib.pyplot as plt
 from multiprocessing import Pool
@@ -582,6 +581,7 @@ def inpaint_mask_image(
         contour_color: np.ndarray = "black",
         contour_width: int = 5):
     from matplotlib.colors import to_rgba
+    import cv2
     assert input_image.shape[:2] == input_mask.shape, 'different shape between image and mask'
     # 0: background, 1: foreground
     mask = np.clip(input_mask, 0, 1)
@@ -969,6 +969,7 @@ def inpaint_mask_image(
     np.ndarray
         The inpainted image.
     """
+    import cv2
     assert input_image.shape[:2] == input_mask.shape, 'different shape between image and mask'
     # 0: background, 1: foreground
     mask = np.clip(input_mask, 0, 1)

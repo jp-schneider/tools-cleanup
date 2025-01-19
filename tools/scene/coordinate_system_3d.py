@@ -5,6 +5,7 @@ from typing import Union, List, Tuple, Optional
 import numpy as np 
 from tools.util.typing import VEC_TYPE
 from tools.util.numpy import flatten_batch_dims, unflatten_batch_dims
+from tools.util.numpy import numpyify
 
 class Handiness(Enum):
     """Handiness of a coordinate system."""
@@ -167,6 +168,26 @@ class CoordinateSystem3D:
         else:
             raise ValueError("Coordinate system is degenerate.")
 
+
+    def get_permutation_matrix(self) -> np.ndarray:
+        """
+        Get the permutation matrix of the coordinate system,
+        which is defined as the permutation matrix which transforms 
+        a native right-handed coordinate system (x-right, y-up, z-backward) 
+        to the current coordinate system.
+
+        Returns
+        -------
+        np.ndarray
+            The permutation matrix.
+        """
+        # Create a permutation matrix.
+        matrix = np.zeros((3, 3), dtype=np.int32)
+        matrix[:, 0] = self.x.get_base_orientation()
+        matrix[:, 1] = self.y.get_base_orientation()
+        matrix[:, 2] = self.z.get_base_orientation()
+        return matrix
+
     def __str__(self):
         return f"{self.x.value}{self.y.value}{self.z.value}"
 
@@ -179,13 +200,31 @@ class CoordinateSystem3D:
         ----------
         value : str
             The string to parse.
-            Should be in the format "XYZ" where X, Y and Z are axis specifiers e.g. "ruf" for a left-handed coordinate system.
+            Should be in the format "XYZ" where X, Y and Z are axis specifiers e.g. "ruf" for a left-handed coordinate system:
+            x-[r]ight, y-[u]p, z-[f]orward.
+
+            All valid axis specifiers are:
+            - [l]eft
+            - [r]ight
+            - [u]p
+            - [d]own
+            - [f]orward
+            - [b]ackward
+
+        validate : bool, optional
+            If the coordinate system should be validated, by default True.
 
         Returns
         -------
         CoordinateSystem3D
             The parsed coordinate system.
         """
+        if isinstance(value, CoordinateSystem3D):
+            if validate:
+                value.validate()
+            return value
+        
+        value = value.lower()
         if len(value) != 3:
             raise ValueError("Invalid coordinate system string length.")
         system =  cls(
@@ -220,5 +259,23 @@ class CoordinateSystem3D:
         if isinstance(other, str):
             other = CoordinateSystem3D.from_string(other, validate=True)
         
-        matrix, shp = flatten_batch_dims(matrix, -3)
-        pass # Central conversion function is missing.
+        matrix, shp = flatten_batch_dims(numpyify(matrix), -3)
+        
+        B, _, _ = matrix.shape
+        current_to_native = np.linalg.inv(self.get_permutation_matrix())
+        native_to_other = other.get_permutation_matrix()
+        current_to_other = native_to_other @ current_to_native
+        current_to_other = current_to_other[np.newaxis].repeat(B, axis=0)
+
+        rots = matrix[..., :3, :3]
+        positions = matrix[..., :3, 3]
+
+        new_positions = current_to_other @ positions[..., np.newaxis]
+        new_positions = new_positions[..., 0]
+
+        converted_matrix = np.eye(4, dtype=matrix.dtype)[np.newaxis].repeat(B, axis=0)
+        converted_matrix[..., :3, :3] = rots
+        converted_matrix[..., :3, 3] = new_positions
+
+        return unflatten_batch_dims(converted_matrix, shp)
+
