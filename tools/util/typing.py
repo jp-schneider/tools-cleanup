@@ -152,3 +152,36 @@ NOTSET = _NOTSET()
 
 PATHNONE = _PATHNONE()
 """Constant for a non existing path."""
+
+
+def is_list_type(lst):
+    """Test if the type is a generic list type, including subclasses excluding
+    non-generic classes.
+    Examples::
+
+        is_list_type(int) == False
+        is_list_type(tuple) == False
+        is_list_type(List) == True
+        is_list_type(List[int]) == True
+        class MyClass(List[str]):
+            ...
+        is_list_type(MyClass) == True
+
+    For more general tests use issubclass(..., list), for more precise test
+    (excluding subclasses) use::
+
+        get_origin(tp) is tuple  # Tuple prior to Python 3.7
+    """
+    from typing_inspect import NEW_TYPING
+    
+    if NEW_TYPING:
+        from typing_inspect import typingGenericAlias, Generic
+        from typing import List
+        return (lst is List or isinstance(lst, typingGenericAlias) and
+                lst.__origin__ is list or
+                isinstance(lst, list) and issubclass(lst, Generic) and
+                issubclass(lst, list))
+    from typing import (
+        ListMeta
+    )
+    return type(lst) is ListMeta

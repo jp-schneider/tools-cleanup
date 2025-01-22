@@ -4,7 +4,7 @@ import logging
 from argparse import ArgumentParser
 from dataclasses import MISSING, Field
 from typing import Any, Dict, List, Optional, Type, get_args
-
+from tools.util.typing import is_list_type
 from simple_parsing.docstring import get_attribute_docstring
 from typing_inspect import is_literal_type, is_optional_type, is_tuple_type, is_classvar, is_union_type
 
@@ -96,21 +96,23 @@ class ArgparserMixin:
             raise IgnoreTypeError()
         elif ((isinstance(_type, Type) and
               (issubclass(_type, list) or issubclass(_type, tuple)))
-              or is_tuple_type(_type)):
+              or is_tuple_type(_type) or is_list_type(_type)):
             # Handling list or tuples the same way
             # Limitation: Lists can have an arbitrary amount of arguments.
-
             args = dict()
             arg = get_args(_type)
             if is_tuple_type(_type):
                 # If a typing tuple, the number types can be directly inferred
                 args["nargs"] = len(arg)
-            elif issubclass(_type, tuple):
+            elif (isinstance(_type, Type) and issubclass(_type, tuple)):
                 # Empty tuple would not make sense so limit it to 1...n
                 args["nargs"] = "+"
-            else:
+            elif (isinstance(_type, List) and issubclass(_type, list)) or is_list_type(_type):
                 # For list empty would be ok.
                 args["nargs"] = "*"
+            else:
+                raise UnsupportedTypeError(
+                    f"Dont know how to handle type: {_type} of field: {field.name}.")
             if len(arg) > 0:
                 args["type"] = arg[0]
             return args
@@ -173,8 +175,8 @@ class ArgparserMixin:
                     f"Could not specify {value} for literal type: {_type}")
         elif ((isinstance(_type, Type) and
               (issubclass(_type, list) or issubclass(_type, tuple)))
-              or is_tuple_type(_type)):
-            if is_tuple_type(_type) or issubclass(_type, tuple):
+              or is_tuple_type(_type) or is_list_type(_type)):
+            if is_tuple_type(_type) or (isinstance(_type, Type) and issubclass(_type, tuple)):
                 return tuple(value)  # Be shure that value is a tuple
             else:
                 # For list empty would be ok.
@@ -217,7 +219,7 @@ class ArgparserMixin:
         ]
 
     @classmethod
-    def get_parser(cls, parser: Optional[ArgumentParser] = None, sep: str = "-") -> ArgumentParser:
+    def  get_parser(cls, parser: Optional[ArgumentParser] = None, sep: str = "-") -> ArgumentParser:
         """Creates / fills an Argumentparser with the fields of the current class.
         Inheriting class must be a dataclass to get annotations and fields.
         By default only puplic field are used (=field with a leading underscore "_" are ignored.)

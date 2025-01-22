@@ -326,6 +326,7 @@ def save_mask(mask: VEC_TYPE,
               progress_bar: bool = False,
               additional_filename_variables: Optional[Dict[str, Any]] = None,
               index_offset: int = 0,
+              batch_indices: Optional[List[Any]] = None,
               pillow_mask_mode: Optional[str] = None,
               pf: Optional[ProgressFactory] = None
               ) -> List[str]:
@@ -361,6 +362,12 @@ def save_mask(mask: VEC_TYPE,
     index_offset : int, optional
         Offset to add to the index of the mask in the batch, by default 0
         Can be used if masks are saved with a format string and the index should start at a different value.
+
+    batch_indices : Optional[List[Any]], optional
+        If the indices of the batch should be different than the index in the batch itself, batch_indices can be used.
+        Its length should match the number of masks in the batch. Instead of an index number, the value at the batch_indices will be used.
+        Mutally exclusive with index_offset.
+        Default is None.
 
     pillow_mask_mode : Optional[str], optional
         Mode to save the mask in, by default None
@@ -433,8 +440,8 @@ def save_mask(mask: VEC_TYPE,
         args['exif'] = create_image_exif(metadata)
 
     if len(mask.shape) == 4:
-        filenames = parse_format_string(path, [dict(index=i) for i in range(
-            mask.shape[0])], additional_variables=additional_filename_variables, index_offset=index_offset)
+        filenames = parse_format_string(path, [dict(index=i if batch_indices is None else batch_indices[i]) for i in range(
+            mask.shape[0])], additional_variables=additional_filename_variables, index_offset=index_offset if batch_indices is None else 0)
         if len(set(filenames)) != mask.shape[0]:
             raise ValueError(
                 f"Number of filenames {len(filenames)} does not match number of masks {mask.shape[0]} if you specified an index template?")
@@ -655,6 +662,7 @@ def save_channel_masks(
         filename_pattern: str = "img_{index:02d}_ov_{ov_index}.png",
         spread: bool = True,
         index_offset: int = 0,
+        batch_indices: Optional[List[Any]] = None,
         additional_filename_variables: Optional[Dict[str, Any]] = None,
         return_in_ov_format: bool = False
 ) -> Union[List[str], Tuple[Dict[int, List[str]], Dict[int, np.ndarray]]]:
@@ -678,6 +686,13 @@ def save_channel_masks(
     index_offset : int, optional
         Offset to add to the index of the mask in the batch, by default 0
         Can be used if masks are saved with a format string and the index should start at a different value.
+    
+    batch_indices : Optional[List[Any]], optional
+        If the indices of the batch should be different than the index in the batch itself, batch_indices can be used.
+        Its length should match the number of masks in the batch. Instead of an index number, the value at the batch_indices will be used.
+        Mutally exclusive with index_offset.
+        Default is None.
+    
     additional_filename_variables : Optional[Dict[str, Any]], optional
         Additional variables to use in the filename format string, by default None
         These variables will be used in the filename format string.
@@ -701,6 +716,8 @@ def save_channel_masks(
     """
     if oids is None:
         oids = np.arange(1, masks.shape[-1] + 1)
+    else:
+        oids = numpyify(oids)
 
     # Check if oids are unique
     if len(np.unique(oids)) != len(oids):
@@ -730,7 +747,10 @@ def save_channel_masks(
         value_mask = channel_masks_to_value_mask(
             m_stack, m_stack_oids, handle_overlap='raise')[..., None]
         p = save_mask(value_mask, path, spread=spread,
-                      additional_filename_variables=dict(ov_index=i, **additional_filename_variables), index_offset=index_offset)
+                      additional_filename_variables=dict(ov_index=i, **additional_filename_variables), 
+                      index_offset=index_offset,
+                      batch_indices=batch_indices
+                      )
         if return_in_ov_format:
             ov_dict[i] = p
             overlap_free_oids.append(m_stack_oids)
