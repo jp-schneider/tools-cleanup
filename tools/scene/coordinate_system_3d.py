@@ -238,6 +238,37 @@ class CoordinateSystem3D(JsonConvertible):
         return system
     
 
+    def convert_vector(self,
+                       other: Union[str, "CoordinateSystem3D"],
+                          vector: VEC_TYPE) -> np.ndarray:
+        """
+        Convert a vector from this coordinate system to another coordinate system.
+
+        Parameters
+        ----------
+        other : CoordinateSystem3D
+            The other coordinate system to convert to.
+
+        vector : np.ndarray
+            The vector to convert. Shape: ([..., B] 3)
+
+        Returns
+        -------
+        np.ndarray
+            The converted vector. Shape: ([..., B] 3)
+        """
+        vector, shp = flatten_batch_dims(numpyify(vector), -2)
+
+        B, _ = vector.shape
+        current_to_native = np.linalg.inv(self.get_permutation_matrix())
+        native_to_other = other.get_permutation_matrix()
+        current_to_other = native_to_other @ current_to_native
+        current_to_other = current_to_other[np.newaxis].repeat(B, axis=0)
+        new_vector = current_to_other @ vector[..., np.newaxis]
+        new_vector = new_vector[..., 0]
+
+        return unflatten_batch_dims(new_vector, shp)
+
     def convert(self, 
                 other: Union[str, "CoordinateSystem3D"], 
                 matrix: VEC_TYPE) -> np.ndarray:
@@ -263,16 +294,11 @@ class CoordinateSystem3D(JsonConvertible):
         matrix, shp = flatten_batch_dims(numpyify(matrix), -3)
         
         B, _, _ = matrix.shape
-        current_to_native = np.linalg.inv(self.get_permutation_matrix())
-        native_to_other = other.get_permutation_matrix()
-        current_to_other = native_to_other @ current_to_native
-        current_to_other = current_to_other[np.newaxis].repeat(B, axis=0)
 
         rots = matrix[..., :3, :3]
         positions = matrix[..., :3, 3]
 
-        new_positions = current_to_other @ positions[..., np.newaxis]
-        new_positions = new_positions[..., 0]
+        new_positions = self.convert_vector(other, positions)
 
         converted_matrix = np.eye(4, dtype=matrix.dtype)[np.newaxis].repeat(B, axis=0)
         converted_matrix[..., :3, :3] = rots

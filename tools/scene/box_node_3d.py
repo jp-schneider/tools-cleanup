@@ -7,6 +7,7 @@ from tools.viz.matplotlib import saveable
 from typing import Any, Iterable, List, Literal, Optional, Set, Tuple, Union
 import torch
 from tools.viz.matplotlib import parse_color_rgba
+from tools.labels.timed_box_3d import TimedBox3D
 
 class BoxNode3D(DiscreteModuleSceneNode3D, VisualNode3D):
     """Pytorch Module class for a 3D box."""
