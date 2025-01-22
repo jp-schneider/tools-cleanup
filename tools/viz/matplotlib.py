@@ -972,7 +972,14 @@ def plot_as_image(data: VEC_TYPE,
 
     if not keep_transparency and images.shape[-1] == 4:
         from tools.io.image import alpha_compose_with_background_grid
-        images = alpha_compose_with_background_grid(images)[..., :3]
+        if images.dtype == np.uint8:
+            img = images.astype(np.float32) / 255
+            images = alpha_compose_with_background_grid(img)[..., :3]
+            images = (images * 255).astype(np.uint8)
+        else:
+            images = alpha_compose_with_background_grid(images)[..., :3]
+        
+
 
     if cols == 1:
         # If just one column, and images are not in landscape mode, flip rows and cols

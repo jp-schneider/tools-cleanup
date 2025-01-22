@@ -6,6 +6,7 @@ import numpy as np
 from tools.util.typing import VEC_TYPE
 from tools.util.numpy import flatten_batch_dims, unflatten_batch_dims
 from tools.util.numpy import numpyify
+from tools.serialization.json_convertible import JsonConvertible
 
 class Handiness(Enum):
     """Handiness of a coordinate system."""
@@ -109,7 +110,7 @@ class AxisSpecifier(Enum):
             raise ValueError("Unknown axis specifier.")
 
 @dataclass
-class CoordinateSystem3D:
+class CoordinateSystem3D(JsonConvertible):
     """Definition class for a 3D coordinate system."""
 
     x: AxisSpecifier = AxisSpecifier.RIGHT

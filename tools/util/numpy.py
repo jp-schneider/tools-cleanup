@@ -71,3 +71,46 @@ def unflatten_batch_dims(array: np.ndarray, batch_shape: List[int]) -> np.ndarra
         return array.reshape(new_dims)
     else:
         return array.squeeze(0)
+
+def index_of_first(values: np.ndarray, search: np.ndarray) -> np.ndarray:
+    """Searches for the index of the first occurence of the search array in the values array.
+
+    Tested for 1D array. Returns -1 if the search array is not found in the values array.
+
+    Example:
+    values = np.array([1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
+    search = np.array([5, 6, 7, 12])
+
+    index_of_first(values, search) -> np.array([4, 5, 6, -1])
+
+    Parameters
+    ----------
+    values : np.ndarray
+        Values array to search in. Shape [N, ...]
+    search : np.ndarray
+        Search array to search for. Shape [M, ...]
+
+    Returns
+    -------
+    np.ndarray
+        Index array of the first occurence of the search value in the values array.
+    """
+    E = values.shape
+    S = search.shape
+    values_rep = values[..., None]
+    search_rep = search[None, ...]
+    repeats_v = tuple(1 for _ in range(len(E))) + S
+    repeats_s = E + tuple(1 for _ in range(len(S)))
+    for ax, r in enumerate(repeats_v):
+        values_rep = np.repeat(values_rep, r, axis=ax) 
+    for ax, r in enumerate(repeats_s):
+        search_rep = np.repeat(search_rep, r, axis=ax)
+    res = values_rep == search_rep
+    out = np.zeros(tuple(S), dtype=np.int32)
+    out[...] = -1
+    aw = np.argwhere(res)
+    search_found, where_inverse = np.unique(aw[:, -1], return_inverse=True)
+    for i, s in enumerate(search_found):
+        widx = aw[where_inverse == i][0]  # Select first match
+        out[s] = widx[0]
+    return out
