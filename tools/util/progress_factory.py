@@ -104,6 +104,23 @@ class ProgressFactory:
     _elements: Dict[str, ProgressElement]
     """Dictionary of progress elements."""
 
+    _global_instance: Optional["ProgressFactory"] = None
+    """Global instance of the progress factory."""
+
+    @classmethod
+    def global_instance(cls):
+        """Get the global instance of the progress factory.
+
+        Returns
+        -------
+        ProgressFactory
+            The global instance of the progress factory.
+            Which is a singleton.
+        """
+        if not hasattr(cls, "_global_instance") or cls._global_instance is None:
+            cls._global_instance = cls()
+        return cls._global_instance
+
     def __init__(self):
         self._elements = {}
         self._finalizer = weakref.finalize(self, free_items, self._elements)

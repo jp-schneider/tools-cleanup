@@ -641,7 +641,14 @@ def inpaint_mask(image: np.ndarray,
     image = image.copy()
     alpha = color[3]
     color = color[:3]
-    image[mask] = image[mask] * (1-alpha) + color * alpha
+    alphas = None
+    if image.shape[-1] == 4:
+        alphas = image[..., 3].copy()
+        color = np.concatenate([color, np.array([1])], axis=-1)
+    if mask.sum() != 0:
+        image[mask] = image[mask] * (1-alpha) + color * alpha
+    if alphas is not None:
+        image[..., 3] = alphas
     # If image was uint8, convert back to uint8
     if input_dtype == np.uint8:
         image = (image * 255).astype(np.uint8)

@@ -15,7 +15,12 @@ from PIL.Image import Exif, Image
 try:
     from PIL.ExifTags import Base as ExifTagsBase
 except Exception as err:
-    ExifTagsBase = object
+    if "cannot import name 'Base' from 'PIL.ExifTags'" in str(err):
+        from PIL.ExifTags import TAGS as Exif_Tags
+        from enum import Enum
+        ExifTagsBase = Enum('ExifTagsBase', {v: k for k, v in Exif_Tags.items()})
+    else:
+        ExifTagsBase = object
 
 from tools.util.format import parse_format_string
 from tqdm.auto import tqdm
@@ -91,8 +96,12 @@ def load_image_exif(image: Image, safe_load: bool = True) -> Dict[Union[str, Exi
     metadata_json = None
     # Get Make
     make = exif.get(ExifTagsBase.Make, None)
+    if make is None:
+        make = exif.get(ExifTagsBase.Make.value, None)
     if make is not None and make == class_name(create_image_exif):
         metadata_json = exif.get(ExifTagsBase.MakerNote, None)
+        if metadata_json is None:
+            metadata_json = exif.get(ExifTagsBase.MakerNote.value, None)
     other_tags = [k for k in exif.keys() if k !=
                   ExifTagsBase.Make and k != ExifTagsBase.MakerNote]
     for k in other_tags:
@@ -1076,4 +1085,61 @@ def n_layers_alpha_compositing(
     out_image = torch.zeros(B, 4)
     out_image[:, :3] = fused_color  # (3, H, W)
     out_image[:, 3] = sorted_per_layer_alphas.sum(dim=0)
+    return out_image.reshape(flattened_shape + (4,))
+
+
+def n_layers_alpha_compositing_numpy(
+        images: np.ndarray, zbuffer: np.ndarray) -> np.ndarray:
+    """
+    Applies N layers alpha compositing to the input images,
+    bases on the z-buffer values.
+
+    Parameters
+    ----------
+    images: np.ndarray
+        The input images with shape (N, [..., B], C).
+        C must be 4 (RGBA).
+        Image values are expected to be in the range [0, 1].
+
+    zbuffer: np.ndarray
+        The z-buffer values for the images with shape (N).
+        Images are sorted based on the z-buffer values in ascending order.
+        E.g smaller z-buffer values are closer to the camera and will be rendered on top.
+
+    Returns
+    -------
+    np.ndarray
+        The alpha composited image with shape ([..., B], C).
+    """
+    N = images.shape[0]
+    flattened_shape = images.shape[1:-1]
+    C = images.shape[-1]
+    if C != 4:
+        raise ValueError(
+            "The last dimension of the input images must be 4 (RGBA).")
+
+    B = np.prod(np.array(flattened_shape)).item()
+    images = images.reshape(N, B, C)  # (N, B, C)
+
+    order = np.argsort(zbuffer)[:, np.newaxis]
+    colors = images[:, :, :3]  # (N, B, 3)
+    alphas = images[:, :, 3]
+    inv_alphas = (1 - alphas)
+
+    # Apply N object alpha matting. This is done by multiplying the alpha of the object with the inverse of the alphas of the objects before it.
+    # We do it by calculating 1-alpha for each object, and
+    bidx = np.arange(B)[np.newaxis].repeat(N, axis=0)  # (N, B)
+    sorted_inv_alphas = inv_alphas[order, bidx]
+    sorted_alphas = alphas[order, bidx]  # (N, B, T, 1)
+    sorted_colors = colors[order, bidx]
+
+    rolled_inv_alpha = np.roll(sorted_inv_alphas, 1, axis=0)
+    rolled_inv_alpha[0] = 1.
+
+    alpha_chain = np.cumprod(rolled_inv_alpha, axis=0)
+    sorted_per_layer_alphas = alpha_chain * sorted_alphas
+    fused_color = (sorted_per_layer_alphas[..., np.newaxis].repeat(3, axis=-1) * sorted_colors).sum(axis=0)  # (B, 3)
+    out_image = np.zeros((B, 4))
+    out_image[:, :3] = fused_color  # (3, H, W)
+    out_image[:, 3] = sorted_per_layer_alphas.sum(axis=0)
     return out_image.reshape(flattened_shape + (4,))
