@@ -184,9 +184,9 @@ class CoordinateSystem3D(JsonConvertible):
         """
         # Create a permutation matrix.
         matrix = np.zeros((3, 3), dtype=np.int32)
-        matrix[:, 0] = self.x.get_base_orientation()
-        matrix[:, 1] = self.y.get_base_orientation()
-        matrix[:, 2] = self.z.get_base_orientation()
+        matrix[0, :] = self.x.get_base_orientation()
+        matrix[1, :] = self.y.get_base_orientation()
+        matrix[2, :] = self.z.get_base_orientation()
         return matrix
 
     def __str__(self):
