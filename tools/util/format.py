@@ -523,8 +523,10 @@ def parse_format_string(format_string: str,
         replacements = []
         for loc, key, format in loc_key_formats:
             value = MISSING
-            if index_variable is not None and key == index_variable and index_offset is not None and index_offset > 0:
-                value = i + index_offset
+            if index_variable is not None and key == index_variable:
+                value = i
+                if index_offset is not None and index_offset > 0:
+                    value += index_offset
             else:
                 if loc is not None:
                     if loc.lower() != "env":
