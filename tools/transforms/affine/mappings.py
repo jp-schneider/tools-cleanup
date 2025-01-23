@@ -10,7 +10,14 @@ import torch
 from tools.transforms.affine.transforms3d import flatten_batch_dims, unflatten_batch_dims, rotmat_to_unitquat, unitquat_to_rotmat
 import numpy as np
 
-
+try:
+    torch.hypot
+    hypot = torch.hypot
+except AttributeError:
+    # torch.hypot is not available in PyTorch 1.6.
+    def hypot(x, y):
+        return torch.sqrt(torch.square(x) + torch.square(y))
+    
 @torch.jit.script
 def rotvec_to_unitquat(rotvec: torch.Tensor) -> torch.Tensor:
     """
@@ -324,8 +331,8 @@ def unitquat_to_euler(convention: str, quat: torch.Tensor, degrees: bool = False
     angles = [torch.empty(N, device=quat.device, dtype=quat.dtype)
               for _ in range(3)]
 
-    angles[1] = 2 * torch.atan2(roma.internal.hypot(c, d),
-                                roma.internal.hypot(a, b))
+    angles[1] = 2 * torch.atan2(hypot(c, d),
+                                hypot(a, b))
 
     # ... and check if equal to is 0 or pi, causing a singularity
     case1 = torch.abs(angles[1]) <= epsilon

@@ -674,6 +674,42 @@ def vector_angle_3d(v1: VEC_TYPE, v2: VEC_TYPE, output_mode: Literal["deg", "rad
         ret = torch.rad2deg(ret)
     return ret
 
+@torch.jit.script
+def _norm_rotation_angles(v1: torch.Tensor) -> torch.Tensor:
+    """Normalizes the rotation angles to the range of [-pi, pi).
+
+    Parameters
+    ----------
+    v1 : torch.Tensor
+        The input vector.
+        Accepts any shape.
+
+    Returns
+    -------
+    torch.Tensor
+        The normalized vector.
+    """
+    pi_normed = torch.fmod(v1, 2 * np.pi)
+    above_half = pi_normed > np.pi
+    return torch.where(above_half, pi_normed - 2 * np.pi, pi_normed)
+
+@as_tensors()
+def norm_rotation_angles(v1: VEC_TYPE) -> VEC_TYPE:
+    """Normalizes the rotation angles to the range of [-pi, pi).
+
+    Parameters
+    ----------
+    v1 : VEC_TYPE
+        The input vector.
+        Accepts any shape.
+
+    Returns
+    -------
+    VEC_TYPE
+        The normalized vector.
+    """
+    return _norm_rotation_angles(v1)
+
 
 @torch.jit.script
 def unitquat_to_rotmat(quat: torch.Tensor) -> torch.Tensor:
