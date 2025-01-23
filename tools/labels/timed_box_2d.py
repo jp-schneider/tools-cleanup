@@ -150,7 +150,7 @@ class TimedBox2D(JsonConvertible):
         # Add batchidx to C of images
         images = images.copy()
         for i in range(T):
-            images[i] = cv2.rectangle(images[i], tuple(edges[i, 0]), tuple(edges[i, 1]), color[i].astype(int).tolist(), thickness=thickness[i])
+            images[i] = cv2.rectangle(images[i], tuple(edges[i, 0]), tuple(edges[i, 1]), color[i].astype(int).tolist(), thickness=int(thickness[i]))
         return images
 
 
@@ -185,7 +185,7 @@ class TimedBox2D(JsonConvertible):
         if (indices < 0).any():
             raise ValueError(f"The time steps {time_steps[indices < 0]} are not in the frame times.")
         centers = self.center[indices]
-        heights = self.heights[indices]
+        heights = self.height[indices]
         widths = self.width[indices]
         images, shp = flatten_batch_dims(numpyify(images), -4)
         values, _ = flatten_batch_dims(numpyify(values), -2)
@@ -233,8 +233,8 @@ class TimedBox2D(JsonConvertible):
         if (indices < 0).any():
             raise ValueError(f"The time steps {time_steps[indices < 0]} are not in the frame times.")
         centers = self.center[indices]
-        widths = self.length[indices]
-        heights = self.width[indices]
+        widths = self.width[indices]
+        heights = self.height[indices]
         images, shp = flatten_batch_dims(numpyify(images), -4)
         colors, _ = flatten_batch_dims(numpyify(colors), -2)
         centers, _ = flatten_batch_dims(centers, -2)
