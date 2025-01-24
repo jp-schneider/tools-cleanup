@@ -209,7 +209,7 @@ def euler_to_unitquat(convention: str, angles, degrees=False, normalize=True, dt
     Warning:
         Case is important: 'xyz' and 'XYZ' denote different conventions.
     """
-    from nsf.transforms.quaternion import quat_composition
+    from tools.transforms.affine.quaternion import quat_composition
     if type(angles) == torch.Tensor:
         angles = [t.squeeze(dim=-1) for t in torch.split(angles,
                                                          split_size_or_sections=1, dim=-1)]
