@@ -195,6 +195,8 @@ def read_directory_recursive(
     path: str,
     parser: Optional[Dict[str, callable]] = None,
     path_key: str = "path",
+    recurse_in_matched_subdirs: bool = False,
+    max_depth: int = 10,
     memo: Optional[Set[str]] = None
 ) -> List[Dict[str, Any]]:
     """Reads a directory for files matching a regex pattern and returns a
@@ -244,25 +246,54 @@ def read_directory_recursive(
     if len(p) == len(directory):
         # No regex in path, match all files
         return read_directory(path, ".*", parser, path_key)
+    
     path = "/".join(p)
-
     next_patterns = directory[pattern_start:]
     next_pattern = next_patterns.pop(0)
     results = read_directory(path, next_pattern, parser, path_key)
-    if len(next_patterns) == 0:
+    if len(next_patterns) == 0 and not recurse_in_matched_subdirs:
         return results
     else:
-        super_results = []
-        for result in results:
-            sub_path = result.pop(path_key)
-            patterns = "/".join(next_patterns)
-            new_path = sub_path + "/" + patterns
-            rec_results = read_directory_recursive(
-                new_path, parser, path_key, memo=memo)
-            for rec_result in rec_results:
-                rec_result.update(result)
-                super_results.append(rec_result)
-        return super_results
+        if recurse_in_matched_subdirs and len(next_patterns) == 0:
+            super_results = []
+            if max_depth == 0 or max_depth < -1:
+                return results
+            else:
+                if max_depth != -1:
+                    max_depth -= 1
+            for result in results:
+                sub_path = result.get(path_key)
+                if os.path.isfile(sub_path):
+                    super_results.append(result)
+                    continue
+                result.pop(path_key)
+                # Reusing last-pattern on subdirs
+                new_path = sub_path + "/" + next_pattern
+                rec_results = read_directory_recursive(
+                    new_path, parser, path_key, 
+                    recurse_in_matched_subdirs=recurse_in_matched_subdirs,
+                    max_depth=max_depth,
+                    memo=memo)
+                for rec_result in rec_results:
+                    rec_result.update(result)
+                    super_results.append(rec_result)
+            return super_results
+        else:
+            super_results = []
+            for result in results:
+                sub_path = result.pop(path_key)
+                patterns = "/".join(next_patterns)
+                new_path = sub_path + "/" + patterns
+                rec_results = read_directory_recursive(
+                    new_path, 
+                    parser, path_key, 
+                    recurse_in_matched_subdirs=recurse_in_matched_subdirs,
+                    reuse_last_pattern_on_subdirs=reuse_last_pattern_on_subdirs,
+                    memo=memo)
+                for rec_result in rec_results:
+                    rec_result.update(result)
+                    super_results.append(rec_result)
+            return super_results
 
     return read_directory(path, pattern, parser, path_key)
 
@@ -625,3 +656,73 @@ def is_path_only_basename(path: str) -> bool:
         If the path is only a basename.
     """
     return any([(x in path) for x in ["/", "\\", os.sep]])
+
+def display_path(
+        path: str, 
+        max_length: int = 30,
+        filename_replace: str = "[...]",
+        path_replace: str = "**"
+        ) -> str:
+    """Displays a path with a maximum length and adds 
+    "[... / ...]" for more directories than the first or [...] to shorten the basename.
+
+    Parameters
+    ----------
+    path : str
+        The path to display.
+    max_length : int
+        The maximum length of the path.
+    filename_replace : str, optional
+        The string to replace to long parts of the filename with, by default "[...]"
+    path_replace : str, optional
+        The string to replace to long parts of the path with, by default "**"
+
+    Returns
+    -------
+    str
+        The displayed path.
+    """
+    if len(path) <= max_length:
+        return path
+    parts = path.split(os.sep)
+    filename = parts[-1]
+    max_path_filename_length = max_length - len(filename_replace)
+    if len(filename) >= max_length:
+        # If already the filename is too long
+        fn, ext = os.path.splitext(filename)
+        mle = max_path_filename_length - len(ext)
+        # Check if it has a path 
+        if len(parts) > 1:
+            mle -= len(path_replace)
+            filename = path_replace + fn[:mle] + filename_replace + ext
+            return filename
+        else:
+            if len(filename) == max_length:
+                return filename
+            return fn[:mle] + filename_replace + ext
+    else:
+        # Try to preserve the filename and as much as starting and ending path components, shorten the middle
+        max_path_length = max_length - len(filename)
+        trimmed_path = None
+        org_parts = parts
+        parts = parts[:-1]
+
+        for i in range(-1, -(len(parts)), -1):
+            if i == -1:
+                if len(os.path.join(*parts)) < max_path_length:
+                    trimmed_path = os.path.join(parts)
+                    break
+            pts = parts[:i]
+            assembled_path = None
+            if len(pts) == 1:
+                assembled_path = pts[0]
+            else:
+                assembled_path = os.path.join(*pts)
+
+            if (len(assembled_path) + len(path_replace) + 2 * len(os.sep)) <= max_path_length:
+                trimmed_path = os.path.join(assembled_path, path_replace)
+                break
+
+        if trimmed_path is None:
+            trimmed_path = path_replace
+        return os.path.join(trimmed_path, filename)
