@@ -151,14 +151,20 @@ def rotvec_to_rotmat(rotvec: torch.Tensor, epsilon=1e-6) -> torch.Tensor:
     return unflatten_batch_dims(R, batch_shape)
 
 
-def rotmat_to_rotvec(R):
+@torch.jit.script
+def rotmat_to_rotvec(R: torch.Tensor) -> torch.Tensor:
     """
     Converts rotation matrix to rotation vector representation.
 
-    Args:
-        R (...x3x3 tensor): batch of rotation matrices.
-    Returns:
-        batch of rotation vectors (...x3 tensor).
+    Parameters
+    ----------
+    R : torch.Tensor
+        batch of rotation matrices Shape ([..., B], 3, 3).
+    
+    Returns
+    ------
+    torch.Tensor
+        Batch of rotation vectors Shape ([..., B], 3).
     """
     q = rotmat_to_unitquat(R)
     return unitquat_to_rotvec(q)
@@ -268,6 +274,8 @@ def unitquat_to_euler(convention: str, quat: torch.Tensor, degrees: bool = False
     Args:
         convention (str): string of 3 characters belonging to {'x', 'y', 'z'} for extrinsic rotations, or {'X', 'Y', 'Z'} for intrinsic rotations.
             Consecutive axes should not be identical.
+            Extrinsic and intrinsic conventions cannot be mixed.
+            Extrinsic convention will return angles in the order of the axes, intrinsic convention will return angles in reverse order.
         quat (...x4 tensor, XYZW convention): input batch of unit quaternion.
         degrees (bool): if True, angles are returned in degrees.
         epsilon (float): a small value used to detect degenerate configurations.

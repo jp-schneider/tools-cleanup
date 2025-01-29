@@ -1308,8 +1308,8 @@ def _is_non_finite(x: torch.Tensor, info: bool = False) -> Union[bool, Tuple[boo
 def cummatmul(x: torch.Tensor) -> torch.Tensor:
     """
     Cumulative matrix multiplication along the batch dimension.
-    Given matricies {M1, M2, M3, ..., Mn} the result will be {M1, M2\*M1, M3\*M2\*M1, ..., Mn\*...\*M3\*M2\*M1}.
-    "\*" denotes matrix multiplication.
+    Given matricies {M1, M2, M3, ..., Mn} the result will be {M1, M2 @ M1, M3 @ M2 @ M1, ..., Mn @ ...@ M3 @ M2 @ M1}.
+    "@" denotes matrix multiplication.
     
 
     Parameters

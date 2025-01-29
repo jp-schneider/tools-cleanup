@@ -675,6 +675,83 @@ def vector_angle_3d(v1: VEC_TYPE, v2: VEC_TYPE, output_mode: Literal["deg", "rad
     return ret
 
 @torch.jit.script
+def _rotmat_from_vectors(a: torch.Tensor, b: torch.Tensor) -> torch.Tensor:
+    """
+    Returns a rotation matricies that rotates vectors a into vectors b.
+    
+    Good explanation can be found here:
+    https://math.stackexchange.com/questions/180418/calculate-rotation-matrix-to-align-vector-a-to-vector-b-in-3d/897677
+    
+    Parameters
+    ----------
+    a : torch.Tensor
+        Source direction vectors. Shape should be (..., 3).
+
+    b : torch.Tensor
+        Target direction vectors. Shape should be (..., 3).
+
+    Returns
+    -------
+    torch.Tensor
+        Rotation matricies. Shape is (..., 3, 3).
+    """
+
+    a, shp = flatten_batch_dims(a, -2)
+    b, bshp = flatten_batch_dims(b, -2)
+
+    if shp != bshp:
+        raise ValueError("a and b must have the same shape, got {} and {}".format(shp, bshp))
+
+    b = b.to(a.dtype)
+
+    # normalize
+    a = a / torch.norm(a, dim=-1, keepdim=True)
+    b = b / torch.norm(b, dim=-1, keepdim=True)
+
+    B, C = a.shape
+
+    v = torch.cross(a, b, dim=-1)
+    c = (a * b).sum(-1) # Dot product
+    s = torch.norm(v, dim=-1)
+
+    kmat = torch.zeros((3, 3), device=a.device)[None, ...].repeat(B, 1, 1)
+    kmat[:, 0, 1] = -v[..., 2]
+    kmat[:, 0, 2] = v[..., 1]
+    kmat[:, 1, 0] = v[..., 2]
+    kmat[:, 1, 2] = -v[..., 0]
+    kmat[:, 2, 0] = -v[..., 1]
+    kmat[:, 2, 1] = v[..., 0]
+
+    Id = torch.eye(3, device=a.device, dtype=a.dtype)[None, ...].expand(B, -1, -1) 
+
+    kProd = torch.bmm(kmat, kmat)
+    return (Id + kmat + kProd) * (((1 - c) / (s ** 2))[:, None, None])
+
+@as_tensors()
+def rotmat_from_vectors(a: VEC_TYPE, b: VEC_TYPE) -> VEC_TYPE:
+    """
+    Returns a rotation matricies that rotates vectors a into vectors b.
+    
+    Good explanation can be found here:
+    https://math.stackexchange.com/questions/180418/calculate-rotation-matrix-to-align-vector-a-to-vector-b-in-3d/897677
+    
+    Parameters
+    ----------
+    a : VEC_TYPE
+        Source direction vectors. Shape should be (..., 3).
+
+    b : VEC_TYPE
+        Target direction vectors. Shape should be (..., 3).
+
+    Returns
+    -------
+    VEC_TYPE
+        Rotation matricies. Shape is (..., 3, 3).
+    """
+    return _rotmat_from_vectors(a, b)
+
+
+@torch.jit.script
 def _norm_rotation_angles(v1: torch.Tensor) -> torch.Tensor:
     """Normalizes the rotation angles to the range of [-pi, pi).
 
