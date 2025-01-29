@@ -65,7 +65,8 @@ class DataFrameCSVFileHandle(FileHandle):
 
     dtypes: Dict[str, np.dtype]
 
-    def __init__(self, file_path: Union[str, Path],
+    def __init__(self,
+                 file_path: Union[str, Path],
                  sep: str = ";",
                  decoding: bool = False,
                  **kwargs):
@@ -74,11 +75,15 @@ class DataFrameCSVFileHandle(FileHandle):
         self.sep = sep
         self.header = True
 
-    def from_file_conversion(self, file):
+    def from_file_conversion(self, file, **kwargs):
         df = pd.read_csv(str(self.file_path), sep=self.sep,
                          dtype=self.dtypes,
                          header=0 if self.header else None)
-        df.set_index(self.index_col, inplace=True)
+        if len(self.index_col) == 1 and self.index_col[0] is None:
+            df.set_index("Unnamed: 0", inplace=True)
+            df.index.name = None
+        else:
+            df.set_index(self.index_col, inplace=True)
         self.check_for_parsable_columns(df)
         return df
 

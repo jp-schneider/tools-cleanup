@@ -7,6 +7,7 @@ from io import BytesIO
 from tools.util.path_tools import format_os_independent, numerated_file_name, relpath
 from tools.serialization.files.path import PATH_TYPE
 
+
 class FileHandle(JsonConvertible):
 
     is_binary: bool
@@ -45,7 +46,8 @@ class FileHandle(JsonConvertible):
         if isinstance(file_path, (str, Path)):
             if use_relative_path:
                 p = os.path.normpath(os.path.abspath(file_path))
-                rp = relpath(os.getcwd(), p, is_from_file=False, is_to_file=True)
+                rp = relpath(os.getcwd(), p, is_from_file=False,
+                             is_to_file=True)
                 file_path = rp
             self.file_path = format_os_independent(file_path)
         else:
@@ -58,7 +60,14 @@ class FileHandle(JsonConvertible):
         if decoding:
             return
 
-    def from_file_conversion(self, file: Optional[Any]) -> Any:
+    def reevaluate_file_path(self, **kwargs) -> None:
+        """Reevaluate the file path."""
+        if self.use_relative_path:
+            p = os.path.normpath(os.path.abspath(self.file_path))
+            rp = relpath(os.getcwd(), p, is_from_file=False, is_to_file=True)
+            self.file_path = rp
+
+    def from_file_conversion(self, file: Optional[Any], **kwargs) -> Any:
         """Gets the file handle and returns a reconstructed object.
 
         Parameters
@@ -92,7 +101,7 @@ class FileHandle(JsonConvertible):
             Anything which can be written.
         """
 
-    def read(self) -> Any:
+    def read(self, **kwargs) -> Any:
         """Read the file.
 
         Returns
@@ -102,9 +111,9 @@ class FileHandle(JsonConvertible):
         """
         if self.need_to_open:
             with open(self.file_path, "rb" if self.is_binary else "r") as f:
-                return self.from_file_conversion(f)
+                return self.from_file_conversion(f, **kwargs)
         else:
-            return self.from_file_conversion(None)
+            return self.from_file_conversion(None, **kwargs)
 
     def write(self, obj: Any) -> None:
         """Write the object to the file.
