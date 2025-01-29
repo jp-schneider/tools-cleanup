@@ -57,6 +57,8 @@ class Writer():
             Dtype is np.uint8.
             If C is 3 expect RGB. If C is 4 expect RGBA, while A is ignored.
         """
+        if len(frame.shape) == 2:
+            frame = frame[:, :, None]
         H, W, C = frame.shape
         if self.writer is None:
             self._init_writer(H, W)

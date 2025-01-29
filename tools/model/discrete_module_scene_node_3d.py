@@ -17,9 +17,98 @@ from tools.transforms.affine.transforms3d import (assure_affine_matrix,
                                                   component_rotation_matrix, position_quaternion_to_affine_matrix, rotmat_to_unitquat, split_transformation_matrix,
                                                   transformation_matrix)
 from tools.util.typing import NUMERICAL_TYPE, VEC_TYPE
-from tools.util.torch import tensorify
+from tools.util.torch import flatten_batch_dims, tensorify, unflatten_batch_dims
 from tools.viz.matplotlib import saveable
 
+
+
+@torch.jit.script
+def global_to_local(
+    global_position: torch.Tensor,
+    v: torch.Tensor,
+) -> torch.Tensor:
+    """Converts global vectors to local vectors.
+    Will return the local vectors for all times steps in global_position.
+
+    Parameters
+    ----------
+    global_position : torch.Tensor
+        The global position of the object. Shape is ([... B,], 4, 4).
+
+    v : torch.Tensor
+        Vectors of shape ([... B,], (3 | 4)) to convert.
+
+    Returns
+    -------
+    torch.Tensor
+        Vectors in local coordinates. Shape is ([... B,], 4).
+
+    """
+    v, v_batch_shape = flatten_batch_dims(
+        v, -2)
+    B = v.shape[0]
+    
+    glob_mat, _ = flatten_batch_dims(global_position, -3)
+    B_N = glob_mat.shape[0]
+
+    if B_N != B:
+        if B_N == 1:
+            glob_mat = glob_mat.repeat(B, 1, 1)
+        else:
+            raise ValueError("Batch dimensions of v and global_position must match.")
+        
+    # Check if last dim = 3, if 3 add w
+    if v.shape[-1] == 3:
+        v = torch.cat([v, torch.ones_like(v[..., :1])], dim=-1)
+
+    # Invert the global matrix
+    glob_mat = torch.inverse(glob_mat)
+
+    # Flatten both batch dimensions
+    res = torch.bmm(glob_mat, v.unsqueeze(-1)).squeeze(-1)
+    res = res.reshape(B, 4)
+    return unflatten_batch_dims(res, v_batch_shape)
+
+
+@torch.jit.script
+def local_to_global(
+    global_position: torch.Tensor,
+    v: torch.Tensor,
+) -> torch.Tensor:
+    """Converts local vectors to global vectors.
+
+    Parameters
+    ----------
+    global_position : torch.Tensor
+        The global position of the object. Shape is ([... B,], 4, 4).
+
+    v : torch.Tensor
+        Vectors of shape ([... B,] [3 | 4]) to convert.
+
+    Returns
+    -------
+    torch.Tensor
+        Vectors in global coordinates. Shape is ([... B,], 4).
+    """
+    v, v_batch_shape = flatten_batch_dims(
+        v, -2)
+    B = v.shape[0]
+    
+    glob_mat, _ = flatten_batch_dims(global_position, -3)
+    B_N = glob_mat.shape[0]
+
+    if B_N != B:
+        if B_N == 1:
+            glob_mat = glob_mat.repeat(B, 1, 1)
+        else:
+            raise ValueError("Batch dimensions of v and global_position must match.")
+        
+    if v.shape[-1] == 3:
+        v = torch.cat([v, torch.ones_like(v[..., :1])], dim=-1)
+
+    res = torch.bmm(glob_mat, v.unsqueeze(-1)).squeeze(-1)
+    res = res.reshape(B, 4)
+    return unflatten_batch_dims(res, v_batch_shape)
 
 class DiscreteModuleSceneNode3D(ModuleSceneNode3D):
     """Pytorch Module class for nodes within a scene which have discrete positions."""
@@ -49,6 +138,7 @@ class DiscreteModuleSceneNode3D(ModuleSceneNode3D):
             if translation is not None or orientation is not None:
                 raise ValueError(
                     "Cannot pass position and translation or orientation.")
+            position = tensorify(position)
             translation, orientation = self._parse_position(position)
         self._init_position(translation=translation,
                             orientation=orientation,
@@ -221,4 +311,40 @@ class DiscreteModuleSceneNode3D(ModuleSceneNode3D):
                                                   device=self._translation.device,
                                                   requires_grad=self._position.requires_grad))
 
+    def local_to_global(self,
+                        v: torch.Tensor,
+                        **kwargs) -> torch.Tensor:
+        """Converts local vectors to global vectors.
+
+        Parameters
+        ----------
+        v : torch.Tensor
+            Vectors of shape ([... B,] 4) to convert.
+
+        Returns
+        -------
+        torch.Tensor
+            Vectors in global coordinates. Shape is ([... B,], 4).
+        """
+        glob_mat = self.get_global_position(**kwargs)
+        return local_to_global(glob_mat, v)
+
+    def global_to_local(self,
+                        v: torch.Tensor,
+                        **kwargs) -> torch.Tensor:
+        """Converts global vectors to local vectors.
+
+        Parameters
+        ----------
+        v : torch.Tensor
+            Vectors of shape ([... B,], (3 | 4)) to convert.
+
+        Returns
+        -------
+        torch.Tensor
+            Vectors in local coordinates. Shape is ([... B,], 4).
+        """
+        glob_mat = self.get_global_position(**kwargs)
+        return global_to_local(glob_mat, v)
+    
     # endregion
