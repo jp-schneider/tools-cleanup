@@ -6,7 +6,7 @@ from typing import Any, Dict, Optional, Tuple, Union
 import pandas as pd
 from dataclasses import dataclass, field
 
-from tools.serialization.files.path import PATH_TYPE
+from tools.util.path import PATH_TYPE
 from tools.util.reflection import class_name
 from .metric_entry import MetricEntry
 import numpy as np

@@ -10,6 +10,7 @@ from tools.logger.logging import logger
 
 VSCODE_AVAILABLE = NOTSET
 
+
 def has_vscode() -> bool:
     """
     Checks if vscode is available on the system an on the path.
@@ -28,6 +29,7 @@ def has_vscode() -> bool:
     except Exception as err:
         VSCODE_AVAILABLE = False
     return VSCODE_AVAILABLE
+
 
 def is_headless() -> bool:
     """Checks if the current environment is headless.
@@ -139,7 +141,7 @@ def open_folder(path: str) -> None:
 def read_directory(
     path: str,
     pattern: str,
-    parser: Optional[Dict[str, callable]] = None,
+    parser: Optional[Dict[str, Callable]] = None,
     path_key: str = "path"
 ) -> List[Dict[str, Any]]:
     """Reads a directory for files matching a regex pattern and returns a list of dictionaries with the readed groups and full filepath.
@@ -193,7 +195,7 @@ def read_directory(
 
 def read_directory_recursive(
     path: str,
-    parser: Optional[Dict[str, callable]] = None,
+    parser: Optional[Dict[str, Callable]] = None,
     path_key: str = "path",
     recurse_in_matched_subdirs: bool = False,
     max_depth: int = 10,
@@ -211,7 +213,7 @@ def read_directory_recursive(
         The path to read the files from.
         Can contain a regex pattern with named groups at any point. "/" is used as a separator.
 
-    parser : Optional[Dict[str, callable]], optional
+    parser : Optional[Dict[str, Callable]], optional
         A parser dictionary which can contain keys which should correspond to named groups in the pattern,
         the value should be a callable which is invoked by the parsed value. The result is then written to the result dictionary, by default None
 
@@ -246,7 +248,7 @@ def read_directory_recursive(
     if len(p) == len(directory):
         # No regex in path, match all files
         return read_directory(path, ".*", parser, path_key)
-    
+
     path = "/".join(p)
     next_patterns = directory[pattern_start:]
     next_pattern = next_patterns.pop(0)
@@ -270,7 +272,7 @@ def read_directory_recursive(
                 # Reusing last-pattern on subdirs
                 new_path = sub_path + "/" + next_pattern
                 rec_results = read_directory_recursive(
-                    new_path, parser, path_key, 
+                    new_path, parser, path_key,
                     recurse_in_matched_subdirs=recurse_in_matched_subdirs,
                     max_depth=max_depth,
                     memo=memo)
@@ -285,8 +287,8 @@ def read_directory_recursive(
                 patterns = "/".join(next_patterns)
                 new_path = sub_path + "/" + patterns
                 rec_results = read_directory_recursive(
-                    new_path, 
-                    parser, path_key, 
+                    new_path,
+                    parser, path_key,
                     recurse_in_matched_subdirs=recurse_in_matched_subdirs,
                     reuse_last_pattern_on_subdirs=reuse_last_pattern_on_subdirs,
                     memo=memo)
@@ -301,7 +303,7 @@ def read_directory_recursive(
 def open_in_default_program(
         path_to_file: Union[str, Path],
         headless: Union[bool, _DEFAULT] = DEFAULT
-        ) -> None:
+) -> None:
     """Opens the given file in the systems default program.
 
     Parameters
@@ -325,7 +327,8 @@ def open_in_default_program(
                 if has_vscode():
                     subprocess.run(f"code {path_to_file} -r", shell=True)
                 else:
-                    logger.warning("Default program opening is not supported on MacOS. Consider an implementation.")
+                    logger.warning(
+                        "Default program opening is not supported on MacOS. Consider an implementation.")
             elif platform == "win32":
                 # Windows...
                 subprocess.run(f"powershell {path_to_file}")
@@ -333,7 +336,8 @@ def open_in_default_program(
             if has_vscode():
                 subprocess.run(f"code {path_to_file} -r", shell=True)
             else:
-                logger.warning("Could not open file in default program, vscode is not available and program is running in headless mode.")
+                logger.warning(
+                    "Could not open file in default program, vscode is not available and program is running in headless mode.")
 
 
 def numerated_file_name(path: str, max_check: int = 1000) -> str:
@@ -523,7 +527,7 @@ def process_path(
         The processed path as Path object.
     """
     from tools.util.format import parse_format_string
-    from tools.serialization.files.path import Path as ToolsPath
+    from tools.util.path import Path as ToolsPath
     from tools.serialization.files.context_path import ContextPath
 
     def _checks(p: Path):
@@ -657,13 +661,14 @@ def is_path_only_basename(path: str) -> bool:
     """
     return any([(x in path) for x in ["/", "\\", os.sep]])
 
+
 def display_path(
-        path: str, 
+        path: str,
         max_length: int = 30,
         filename_replace: str = "[...]",
         path_replace: str = "**"
-        ) -> str:
-    """Displays a path with a maximum length and adds 
+) -> str:
+    """Displays a path with a maximum length and adds
     "[... / ...]" for more directories than the first or [...] to shorten the basename.
 
     Parameters
@@ -691,7 +696,7 @@ def display_path(
         # If already the filename is too long
         fn, ext = os.path.splitext(filename)
         mle = max_path_filename_length - len(ext)
-        # Check if it has a path 
+        # Check if it has a path
         if len(parts) > 1:
             mle -= len(path_replace)
             filename = path_replace + fn[:mle] + filename_replace + ext

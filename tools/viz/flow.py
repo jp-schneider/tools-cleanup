@@ -10,8 +10,8 @@ from tools.transforms.to_numpy import numpyify
 from tools.util.format import destinctive_number_float_format
 import pandas as pd
 from typing import Any, Dict, Optional
-from matplotlib.figure import Figure
-import matplotlib.pyplot as plt
+from matplotlib.figure import Figure  # type: ignore
+import matplotlib.pyplot as plt  # type: ignore
 import math
 
 
@@ -188,7 +188,7 @@ def get_wheel_figure(
 
     """
     from tools.viz.matplotlib import align_marker
-    from mpl_toolkits.axisartist.axislines import SubplotZero, AxesZero
+    from mpl_toolkits.axisartist.axislines import SubplotZero, AxesZero  # type: ignore
     from matplotlib import patches
 
     if uv_min is None:

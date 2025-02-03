@@ -1,11 +1,11 @@
-from typing import Dict, Any, List, Tuple, Optional, Set
+from typing import Dict, Any, List, Tuple, Optional, Set, Union
 from enum import Enum
 from collections.abc import MutableMapping
 from tools.util.reflection import class_name
 from tools.util.typing import NOCHANGE, MISSING, CYCLE, _NOCHANGE, _MISSING, _CYCLE
 
 
-def dict_diff(base: Dict[str, Any], cmp: Dict[str, Any]) -> Dict[str, Any]:
+def dict_diff(base: Dict[str, Any], cmp: Dict[str, Any]) -> Union[Dict[str, Any], _NOCHANGE]:
     """Returns the difference between two dictionaries.
 
     Parameters
@@ -59,14 +59,14 @@ def object_diff(base: Any, cmp: Any) -> Dict[str, Any]:
     base_dict = base.__dict__
     cmp_dict = cmp.__dict__
     dd = dict_diff(base_dict, cmp_dict)
-    if dd != NOCHANGE:
+    if not isinstance(dd, _NOCHANGE) and dd != NOCHANGE:
         result.update(dd)
     if type(base) != type(cmp):
         result["__class__"] = class_name(cmp)
     return result
 
 
-def list_diff(base: List[Any], cmp: List[Any]) -> List[Any]:
+def list_diff(base: List[Any], cmp: List[Any]) -> Union[List[Any], _NOCHANGE]:
     """Returns the difference between two lists.
 
     Parameters
@@ -95,7 +95,7 @@ def list_diff(base: List[Any], cmp: List[Any]) -> List[Any]:
     return result
 
 
-def tuple_diff(base: tuple, cmp: tuple) -> tuple:
+def tuple_diff(base: tuple, cmp: tuple) -> Union[tuple, _NOCHANGE]:
     """Returns the difference between two tuples.
 
     Parameters
@@ -111,7 +111,7 @@ def tuple_diff(base: tuple, cmp: tuple) -> tuple:
         The difference between the two tuples.
     """
     result = list_diff(list(base), list(cmp))
-    if result == NOCHANGE:
+    if isinstance(result, _NOCHANGE) or result == NOCHANGE:
         return NOCHANGE
     return tuple(result)
 
@@ -192,7 +192,7 @@ def flatten(
         new_key = prefix + separator + key if prefix else key
         if isinstance(value, MutableMapping):
             items.extend(flatten(value, separator=separator,
-                         prefix=new_key, keep_empty=keep_empty).items())
+                         prefix=new_key, keep_empty=keep_empty).items())  # type: ignore
         else:
             items.append((new_key, value))
     return dict(items)

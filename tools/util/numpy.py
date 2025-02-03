@@ -6,7 +6,7 @@ from tools.transforms.to_numpy import numpyify
 from tools.transforms.to_numpy_image import numpyify_image
 
 
-def flatten_batch_dims(array: np.ndarray, end_dim: int) -> Tuple[np.ndarray, List[int]]:
+def flatten_batch_dims(array: np.ndarray, end_dim: int) -> Tuple[np.ndarray, Tuple[int, ...]]:
     """
 
     Utility function: flatten multiple batch dimensions into a single one, or add a batch dimension if there is none.
@@ -20,7 +20,7 @@ def flatten_batch_dims(array: np.ndarray, end_dim: int) -> Tuple[np.ndarray, Lis
 
     Returns
     -------
-    Tuple[np.ndarray, Tuple[int]]
+    Tuple[np.ndarray, Tuple[int, ...]]
         The flattend array and the original batch shape.
     """
     ed = end_dim + 1 if end_dim != -1 else None
@@ -72,6 +72,7 @@ def unflatten_batch_dims(array: np.ndarray, batch_shape: List[int]) -> np.ndarra
     else:
         return array.squeeze(0)
 
+
 def index_of_first(values: np.ndarray, search: np.ndarray) -> np.ndarray:
     """Searches for the index of the first occurence of the search array in the values array.
 
@@ -102,7 +103,7 @@ def index_of_first(values: np.ndarray, search: np.ndarray) -> np.ndarray:
     repeats_v = tuple(1 for _ in range(len(E))) + S
     repeats_s = E + tuple(1 for _ in range(len(S)))
     for ax, r in enumerate(repeats_v):
-        values_rep = np.repeat(values_rep, r, axis=ax) 
+        values_rep = np.repeat(values_rep, r, axis=ax)
     for ax, r in enumerate(repeats_s):
         search_rep = np.repeat(search_rep, r, axis=ax)
     res = values_rep == search_rep

@@ -1,14 +1,14 @@
 from abc import abstractmethod, ABC
 from typing import Any, Union
 from pathlib import Path as PathLibPath
-from tools.util.format import raise_on_none
+
 import os
 from copy import deepcopy
 
-from tools.util.reflection import class_name
-from tools.util.typing import MISSING
+from pathlib import Path as PathLibPath
 
 PATH_TYPE = Union[PathLibPath, "Path"]
+"""Path type which can be used for paths."""
 
 
 class Path(ABC):
@@ -18,6 +18,7 @@ class Path(ABC):
     """The underlying path object."""
 
     def __init__(self, path: Union[str, PATH_TYPE]):
+        from tools.util.format import raise_on_none  # type: ignore
         path = path = raise_on_none(path, "path")
         if isinstance(path, str):
             self._path = PathLibPath(path)

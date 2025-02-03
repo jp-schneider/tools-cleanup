@@ -5,7 +5,7 @@ from tools.serialization.json_convertible import JsonConvertible
 import os
 from io import BytesIO
 from tools.util.path_tools import format_os_independent, numerated_file_name, relpath
-from tools.serialization.files.path import PATH_TYPE
+from tools.util.path import PATH_TYPE
 
 
 class FileHandle(JsonConvertible):

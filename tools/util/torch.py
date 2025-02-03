@@ -452,7 +452,7 @@ def batched_generator_exec(
 
             if use_multiprocessing:
                 try:
-                    import pathos
+                    import pathos  # type: ignore
                 except (ImportError, ModuleNotFoundError) as e:
                     logger.warning(
                         "Multiprocessing is enabled, but pathos is not available. Disabling multiprocessing.")
@@ -470,7 +470,7 @@ def batched_generator_exec(
                         garbage_collect()
 
             else:
-                from pathos.pools import ProcessPool
+                from pathos.pools import ProcessPool  # type: ignore
 
                 listed_args = [list((bkw[k] for bkw in batched_kwargs))
                                for k in function_params if k in batched_kwargs[0]]
@@ -516,8 +516,8 @@ def batched_exec(*input,
 
     free_memory : bool, optional
         If memory should be freed after each batch, by default False
-        Will call torch.cuda.empty_cache() and gc.collect()    
-    
+        Will call torch.cuda.empty_cache() and gc.collect()
+
     Returns
     -------
     torch.Tensor
@@ -1083,6 +1083,7 @@ def unflatten_batch_dims(tensor: torch.Tensor, batch_shape: List[int]) -> torch.
     else:
         return tensor.squeeze(0)
 
+
 def grad_cached(
         device: torch.device = "cpu",
         return_key: str = "return",
@@ -1222,6 +1223,7 @@ def plot_weight(x: torch.Tensor, title: str = "Weights", cmap: str = "viridis", 
 
     return fig
 
+
 def rowwise_isin(x, y):
     """Checks if the elements of x are in y rowwise.
 
@@ -1242,6 +1244,7 @@ def rowwise_isin(x, y):
     # result: boolean tensor of shape (N, K) where result[n, k] is torch.isin(x[n, k], y[n])
     result = torch.sum(matches, dim=2, dtype=torch.bool)
     return result
+
 
 def consecutive_indices_string(x: VEC_TYPE, slice_sep: str = "-", item_sep: str = ",") -> str:
     """Formats a 1D tensor of (consecutive) indices into a string representation.
@@ -1310,7 +1313,7 @@ def cummatmul(x: torch.Tensor) -> torch.Tensor:
     Cumulative matrix multiplication along the batch dimension.
     Given matricies {M1, M2, M3, ..., Mn} the result will be {M1, M2 @ M1, M3 @ M2 @ M1, ..., Mn @ ...@ M3 @ M2 @ M1}.
     "@" denotes matrix multiplication.
-    
+
 
     Parameters
     ----------

@@ -5,6 +5,7 @@ from typing import Any, Callable, Dict
 from tools.serialization import configurable_object_hook
 from tools.serialization.json_convertible import (JsonConvertible)
 from tools.error import NoIterationTypeError, NoSimpleTypeError
+import inspect
 
 
 class ObjectDecoder():
@@ -26,6 +27,8 @@ class ObjectDecoder():
 
     def __init__(self, object_hook: Callable[[Dict[str, Any]], Any]) -> None:
         self.object_hook = object_hook
+        self.object_hook_property_path = "property_path" in inspect.signature(
+            object_hook).parameters
 
     def decode(self, obj: Dict[str, Any]) -> Any:
         """Decodes the object with the given object hook.
@@ -81,17 +84,22 @@ class ObjectDecoder():
         ret = {}
         # Handling internals
         for k, v in value.items():
-            ret[k] = self._convert_value(v, name, value)
+            new_name = f"{name}.{k}".lstrip(".")
+            ret[k] = self._convert_value(v, new_name, value)
         # Converting ret with hook if childrens are processed
-        return self.object_hook(ret)
+        if self.object_hook_property_path:
+            return self.object_hook(ret, property_path=name)
+        else:
+            return self.object_hook(ret, property)
 
     def _convert_iterable(self, value, name: str, object_context: Dict[str, Any]) -> Any:
         if isinstance(value, str):
             return value
         elif isinstance(value, (list, tuple)):
             a = []
-            for subval in value:
-                a.append(self._convert_value(subval, name, value))
+            for i, subval in enumerate(value):
+                new_name = f"{name}[{i}]"
+                a.append(self._convert_value(subval, new_name, value))
             return a
         elif isinstance(value, (dict)):
             return self._handle_dict(value, name, object_context)

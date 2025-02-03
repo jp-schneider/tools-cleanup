@@ -27,7 +27,7 @@ class ObjectFactory:
             if 'pydantic.main.BaseModel' in _type.__module__ + "." + _type.__name__:
                 return True
             else:
-                return ObjectFactory.is_pydantic_type(_type.__base__)
+                return ObjectFactory.is_pydantic_type(_type.__base__) if _type.__base__ is not None else False
 
     @staticmethod
     def create_from_kwargs(_type: Type, allow_dynamic_args: bool = True, **kwargs) -> Any:
@@ -44,13 +44,13 @@ class ObjectFactory:
             If dynamic args should be allowed, by default True
         kwargs
             All properties which should be set in the object.
-            
+
         Returns
         -------
         Any
             An object of type _type.
         """
-    
+
         is_pydantic = ObjectFactory.is_pydantic_type(_type)
 
         # If the type is from pydantic the object is directly created for validation.
@@ -58,7 +58,8 @@ class ObjectFactory:
             return _type(**kwargs)
 
         # Getting init properties from constructor
-        init_properties = list(inspect.signature(_type.__init__).parameters)[1:]
+        init_properties = list(inspect.signature(
+            _type.__init__).parameters)[1:]
 
         # Split kwargs in class declared args and dynamic args.
         declared_args, dynamic_args = {}, {}

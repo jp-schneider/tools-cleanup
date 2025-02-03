@@ -6,6 +6,7 @@ try:
 except (ModuleNotFoundError, ImportError):
     torch = None
 import decimal
+from tools.util.path import PATH_TYPE  # type: ignore
 
 if torch is not None:
     from torch import Tensor
@@ -21,7 +22,8 @@ if torch is not None:
         "NUMERICAL_TYPE", bound=Union[torch.Tensor, np.generic, int, float, complex, decimal.Decimal])  # type: ignore
     """Numerical type which can be converted to a tensor."""
 
-    INDEX_TYPE = TypeVar("INDEX_TYPE", bound=Union[int, np.ndarray, slice, List[int], torch.Tensor])  # type: ignore
+    INDEX_TYPE = TypeVar(
+        "INDEX_TYPE", bound=Union[int, np.ndarray, slice, List[int], torch.Tensor])  # type: ignore
     """Index type which can be used to index a certain type like numpy arrays for 1 dimensional indices."""
 else:
     VEC_TYPE = TypeVar("VEC_TYPE", bound=np.ndarray)
@@ -35,23 +37,25 @@ else:
         "NUMERICAL_TYPE", bound=Union[np.generic, int, float, complex, decimal.Decimal])
     """Numerical type which can be converted to a numpy.ndarray."""
 
-    INDEX_TYPE = TypeVar("INDEX_TYPE", bound=Union[int, np.ndarray, slice, List[int]])
+    INDEX_TYPE = TypeVar(
+        "INDEX_TYPE", bound=Union[int, np.ndarray, slice, List[int]])
     """Index type which can be used to index a certain type like numpy arrays for 1 dimensional indices."""
+
 
 class _DEFAULT():
     """Default value singleton."""
-    
+
     def __eq__(self, other: Any) -> bool:
         if isinstance(other, _DEFAULT):
             return True
         return False
-    
+
     def __repr__(self) -> str:
         return "DEFAULT"
-    
+
     def __str__(self) -> str:
         return "DEFAULT"
-    
+
     def __hash__(self) -> int:
         return 0
 
@@ -66,13 +70,13 @@ class _NOCHANGE:
         if isinstance(other, _NOCHANGE):
             return True
         return False
-    
+
     def __repr__(self) -> str:
         return "NOCHANGE"
-    
+
     def __str__(self) -> str:
         return "NOCHANGE"
-    
+
     def __hash__(self) -> int:
         return 0
 
@@ -82,13 +86,13 @@ class _CYCLE:
         if isinstance(other, _CYCLE):
             return True
         return False
-    
+
     def __repr__(self) -> str:
         return "CYCLE"
-    
+
     def __str__(self) -> str:
         return "CYCLE"
-    
+
     def __hash__(self) -> int:
         return 0
 
@@ -98,13 +102,13 @@ class _MISSING:
         if isinstance(other, _MISSING):
             return True
         return False
-    
+
     def __repr__(self) -> str:
         return "MISSING"
-    
+
     def __str__(self) -> str:
         return "MISSING"
-    
+
     def __hash__(self) -> int:
         return 0
 
@@ -119,16 +123,15 @@ class _NOTSET():
         if isinstance(other, _NOTSET):
             return True
         return False
-    
+
     def __repr__(self) -> str:
         return "NOTSET"
-    
+
     def __str__(self) -> str:
         return "NOTSET"
-    
+
     def __hash__(self) -> int:
         return 0
-    
 
 
 class _PATHNONE():
@@ -136,13 +139,13 @@ class _PATHNONE():
         if isinstance(other, _PATHNONE):
             return True
         return False
-    
+
     def __repr__(self) -> str:
         return "PATHNONE"
-    
+
     def __str__(self) -> str:
         return "PATHNONE"
-    
+
     def __hash__(self) -> int:
         return 0
 
@@ -173,7 +176,7 @@ def is_list_type(lst):
         get_origin(tp) is tuple  # Tuple prior to Python 3.7
     """
     from typing_inspect import NEW_TYPING
-    
+
     if NEW_TYPING:
         from typing_inspect import typingGenericAlias, Generic
         from typing import List

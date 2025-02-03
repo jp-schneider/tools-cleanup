@@ -3,7 +3,7 @@ from typing import List, Union
 from tools.util.format import parse_format_string, FormatVariable, raise_on_none
 from typing import Any, Dict, List, Tuple, Type, Optional, TypeVar, Union, get_type_hints
 from tools.util.reflection import class_name
-from tools.serialization.files.path import Path, PATH_TYPE
+from tools.util.path import Path, PATH_TYPE
 
 
 class ContextPath(Path):
@@ -15,10 +15,10 @@ class ContextPath(Path):
     _raw_path: str
     """The raw path string."""
 
-    def __init__(self, 
-                    path: Union[str, PATH_TYPE], 
-                    raw_path: str,
-                    context: List[FormatVariable]
+    def __init__(self,
+                 path: Union[str, PATH_TYPE],
+                 raw_path: str,
+                 context: List[FormatVariable]
                  ):
         super().__init__(path)
         self._context = raise_on_none(context, "context")
@@ -26,7 +26,7 @@ class ContextPath(Path):
 
     def __str__(self) -> str:
         return str(self._path)
-    
+
     def __truediv__(self, other):
         other_str = None
         if isinstance(other, Path):
@@ -40,8 +40,8 @@ class ContextPath(Path):
         raise NotImplementedError("Not implemented yet.")
 
     @classmethod
-    def from_format_path(cls, 
-                         path: str, 
+    def from_format_path(cls,
+                         path: str,
                          context: Optional[Any] = None,
                          **kwargs: Any
                          ) -> Union["ContextPath", PathLibPath]:
@@ -56,7 +56,8 @@ class ContextPath(Path):
             The context for the path.
         """
         fmt = []
-        new_path = parse_format_string(path, [context], found_variables=fmt, additional_variables=kwargs)[0]
+        new_path = parse_format_string(
+            path, [context], found_variables=fmt, additional_variables=kwargs)[0]
         fmt = fmt[0]
         if len(fmt) == 0:
             return PathLibPath(new_path)
@@ -71,8 +72,9 @@ class ContextPath(Path):
             The context to reevaluate the path.
         """
         fmt = []
-        new_path = parse_format_string(self._raw_path, [context], 
-                                       additional_variables={x.variable: x.value for x in self._context}, 
+        new_path = parse_format_string(self._raw_path, [context],
+                                       additional_variables={
+                                           x.variable: x.value for x in self._context},
                                        found_variables=fmt)[0]
         self._path = PathLibPath(new_path)
         self._context = fmt

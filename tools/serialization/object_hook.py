@@ -89,13 +89,18 @@ def _add_unresolved_references(memo: Dict[str, Any],
 def configurable_object_hook(on_error: Literal['raise', 'ignore', 'warning'] = 'raise',
                              memo: Dict[str, Any] = None,
                              **kwargs) -> Callable[[Dict[str, Any]], Any]:
-    def _object_hook(obj: Dict[str, Any]):
+    def _object_hook(obj: Dict[str, Any], property_path: Optional[str] = None) -> Any:
         nonlocal on_error
         nonlocal kwargs
         nonlocal memo
         from tools.serialization.rules.json_serialization_rule_registry import JsonSerializationRuleRegistry
         try:
+            local_kwargs = dict(kwargs)
             if '__class__' in obj:
+                # Add context to kwargs
+                if property_path is not None:
+                    local_kwargs['property_path'] = property_path
+
                 try:
                     object_type = dynamic_import(obj.get('__class__'))
                 except Exception as err:
@@ -124,7 +129,7 @@ def configurable_object_hook(on_error: Literal['raise', 'ignore', 'warning'] = '
                             if callable(fnc):
                                 params = inspect.signature(fnc).parameters
                                 if "kwargs" in params:
-                                    fnc(**kwargs)
+                                    fnc(**local_kwargs)
                                 else:
                                     fnc()
                             else:
@@ -132,13 +137,13 @@ def configurable_object_hook(on_error: Literal['raise', 'ignore', 'warning'] = '
                                     f"after_decoding property declared in {object_type.__name__} is not callable!")
 
                         after_decoding_hook = getattr(
-                            kwargs, 'after_decoding_hook', None)
+                            local_kwargs, 'after_decoding_hook', None)
                         if after_decoding_hook is not None and callable(after_decoding_hook):
-                            after_decoding_hook(ret, **kwargs)
+                            after_decoding_hook(ret, **local_kwargs)
 
                         rule = JsonSerializationRuleRegistry.instance().get_rule_backward(ret)
                         if rule is not None:
-                            ret = rule.backward(ret, **kwargs)
+                            ret = rule.backward(ret, **local_kwargs)
 
                         if isinstance(ret, ObjectReference):
                             if memo is not None:

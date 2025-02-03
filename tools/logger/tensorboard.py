@@ -10,6 +10,7 @@ try:
     import torch
     from torch.utils.tensorboard import SummaryWriter
 except (NameError, ImportError, ModuleNotFoundError) as err:
+    torch = None
     pass
 import json
 import logging
