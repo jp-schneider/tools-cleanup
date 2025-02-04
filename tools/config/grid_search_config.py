@@ -9,7 +9,7 @@ class MultiKey(frozenset):
     pass
 
 
-class MultiValue(dict):
+class MultiValue(list):
     """A MultiValue indicates that multiple values are part of the parameter grid."""
     pass
 

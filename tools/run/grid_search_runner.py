@@ -32,6 +32,19 @@ class GridSearchRunner(MultiRunner):
                     f"Cant set value {value} for atrribute {key} in config type {type(config).__name__}. Attribute does not exist.")
             setattr(config, key, value)
 
+        elif isinstance(key, MultiKey) and isinstance(value, MultiValue):
+            if len(key) != len(value):
+                raise ValueError(
+                    f"Key and value for propert must have the same length. Key: {key} Key-len: {len(key)}, Value-len: {len(value)}")
+            for k, v in zip(key, value):
+                if check_existing and not hasattr(config, k):
+                    raise ValueError(
+                        f"Cant set value {v} for atrribute {k} in config type {type(config).__name__}. Attribute does not exist.")
+                setattr(config, k, v)
+        else:
+            raise ValueError(
+                f"Inconsistent key and value types. Key: {key}, Value: {value}")
+
     def build(self, build_children: bool = True, **kwargs) -> None:
         # Build the config for each child runner by doing a cartesian product of the param_grid and insert it in base config
         keys = self.config.param_grid.keys()
@@ -47,7 +60,7 @@ class GridSearchRunner(MultiRunner):
                 config = copy.deepcopy(base_config)
                 # Insert values
                 for k, v_ in zip(keys, value_per_key):
-                    setattr(config, k, v_)
+                    self._set_values(config, k, v_)
 
                 # Create child runner
                 config.prepare()
@@ -56,9 +69,15 @@ class GridSearchRunner(MultiRunner):
                 # Create magic property diff-config to directly indicate the difference between the base config and the child config
                 rnr.diff_config = dict()
                 for k, v_ in zip(keys, value_per_key):
-                    chg = changes(getattr(base_config, k), v_)
-                    if chg != NOCHANGE:
-                        rnr.diff_config[k] = chg
+                    if isinstance(k, MultiKey):
+                        for sub_key, sub_value in zip(k, v_):
+                            chg = changes(getattr(base_config, sub_key), sub_value)
+                            if chg != NOCHANGE:
+                                rnr.diff_config[sub_key] = chg
+                    else:
+                        chg = changes(getattr(base_config, k), v_)
+                        if chg != NOCHANGE:
+                            rnr.diff_config[k] = chg
                 rnr.parent = self
                 rnr.config.diff_config = copy.deepcopy(rnr.diff_config)
 
