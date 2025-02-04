@@ -10,8 +10,8 @@ from tools.util.multi_dict import MultiDict
 class MultiKey(FrozenList):
     """A MultiKey indicates that multiple keys are part of the parameter grid."""
 
-    def __init__(self, keys: List[str]):
-        super().__init__(keys)
+    def __init__(self, _items: List[str], **kwargs):
+        super().__init__(_items)
         self.freeze()
 
 

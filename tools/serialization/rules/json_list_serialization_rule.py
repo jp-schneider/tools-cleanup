@@ -1,5 +1,5 @@
 from enum import Enum
-from typing import Any, Dict, List, Literal, Optional, Type, Union
+from typing import Any, Dict, List, Literal, MutableSequence, Optional, Type, Union
 from uuid import UUID
 
 from tools.serialization.json_convertible import convert
@@ -17,15 +17,15 @@ class ListValueWrapper(JsonConvertible):
 
     def get_type(self) -> Type[List]:
         if hasattr(self, "type"):
-            return parse_type(self.type, list, variable_name="type")
-        return set
+            return parse_type(self.type, (MutableSequence, list), variable_name="type")
+        return list
 
     def __init__(self,
                  value: list = None,
                  decoding: bool = False,
                  **kwargs):
         super().__init__(decoding, **kwargs)
-        if value is not None and not decoding and issubclass(type(value), list) and type(value) != list:
+        if value is not None and not decoding and issubclass(type(value), (MutableSequence, list)) and type(value) != list:
             self.type = class_name(value)
         if decoding:
             return
@@ -45,7 +45,7 @@ class JsonListSerializationRule(JsonSerializationRule):
 
     @classmethod
     def applicable_forward_types(self) -> List[Type]:
-        return [list]
+        return [list, MutableSequence]
 
     @classmethod
     def applicable_backward_types(self) -> List[Type]:
