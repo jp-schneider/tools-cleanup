@@ -8,7 +8,40 @@ from tools.util.diff import changes, NOCHANGE
 
 
 class GridSearchRunner(MultiRunner):
-    """Creates multiple child runners by doing a cartesian product of the param_grid of the config."""
+    """
+    Creates multiple child runners by doing a cartesian product of the param_grid of the config.
+    Uses as base_config as the base config for the child runners, which will be modified by the param_grid to create the child configs.
+    
+    If properties should not be treated as cartesian product, use MultiKey and MultiValue.
+
+    E.g. 
+    If 2 properties should be treated as cartesian product:
+    ```
+    param_grid = dict(
+        my_property= [1, 2],
+        my_property2= [3, 4]
+    )
+    ```
+    Will create 4 child runners with the following properties: with the combinations of the values:
+    ```
+    my_property=1, my_property2=3
+    my_property=1, my_property2=4
+    my_property=2, my_property2=3
+    my_property=2, my_property2=4
+    ```
+
+    If 2 properties should not be treated as cartesian product:
+    ```
+    param_grid = dict()
+    param_grid[MultiKey(["my_property", "my_property2"])] = [MultiValue([1, 2]), MultiValue([3, 4])]
+    ```
+
+    Will create 2 child runners with the following properties:
+    ```
+    my_property=1, my_property2=3
+    my_property=2, my_property2=4
+    ```
+    """
 
     def __init__(self,
                  config: GridSearchConfig,
