@@ -103,6 +103,8 @@ class WandbLogger(ExperimentLogger):
     ) -> 'ExperimentLogger':
 
         setup_args = cls.get_init_args_from_experiment_config(config)
+        if "reinit" not in setup_args:
+            setup_args["reinit"] = True
 
         l = WandbLogger.create(
             **setup_args)
