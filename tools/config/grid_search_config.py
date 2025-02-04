@@ -1,12 +1,18 @@
 from dataclasses import dataclass, field
+
+from frozenlist import FrozenList
 from tools.config.config import Config
 from tools.config.multi_runner_config import MultiRunnerConfig
 from typing import Dict, Any, List, Union
 from tools.util.multi_dict import MultiDict
 
-class MultiKey(frozenset):
+
+class MultiKey(FrozenList):
     """A MultiKey indicates that multiple keys are part of the parameter grid."""
-    pass
+
+    def __init__(self, keys: List[str]):
+        super().__init__(keys)
+        self.freeze()
 
 
 class MultiValue(list):
@@ -24,7 +30,6 @@ class GridSearchConfig(MultiRunnerConfig):
     """The parameter grid which will be used to create the child configs."""
 
     name_experiment: str = field(default="GridSearch")
-
 
     def __post_init__(self):
         # if not isinstance(self.param_grid, MultiDict):
