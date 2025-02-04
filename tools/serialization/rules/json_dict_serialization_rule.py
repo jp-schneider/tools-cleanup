@@ -4,7 +4,7 @@ from typing import Any, Dict, List, Literal, Optional, Type, Union
 
 from tools.serialization.json_convertible import JsonConvertible, convert
 from tools.util.format import parse_type
-from tools.util.reflection import class_name, dynamic_import
+from tools.util.reflection import class_name, dynamic_import, register_type
 
 from .json_serialization_rule import JsonSerializationRule
 from uuid import UUID
@@ -15,8 +15,9 @@ ALLOWED_KEY_TYPES = set([str, int, float, bool])
 NON_STRING_KEY_TYPES = set([int, float, bool])
 
 
+@register_type()
 class KeyValueItem(JsonConvertible):
-    
+
     __type_alias__ = "KeyValue"
 
     def __init__(self,
@@ -33,6 +34,7 @@ class KeyValueItem(JsonConvertible):
 
     def to_python(self) -> tuple:
         return (self.key, self.value)
+
 
 class KeyValueDictWrapper(JsonConvertible):
     """Type for a dictionary which keys are not strings or all from a different kind.
@@ -68,7 +70,7 @@ class KeyTypeDictWrapper(JsonConvertible):
     """Wrapper for a dictionary which keys are not a string, but a different type which can be easily converted to and from string.
     Assumes all keys are from the same type.
     """
- 
+
     __type_alias__ = "KeyTypeDict"
 
     def get_type(self) -> Type[dict]:
@@ -93,6 +95,7 @@ class KeyTypeDictWrapper(JsonConvertible):
         _type = type(self.values)
         _d = {parser_type(k): v for k, v in self.values.items()}
         return _type(_d)
+
 
 class JsonDictSerializationRule(JsonSerializationRule):
     """For lists of objects."""
@@ -133,13 +136,14 @@ class JsonDictSerializationRule(JsonSerializationRule):
         elif hasattr(value, '__iter__'):
             # Handling iterables which are not lists or tuples => return them as dict.
             # Iterate over items
-            
+
             # Check if all keys are allowed
             key_types = set([type(k) for k in value.keys()])
-            mismatch = len(key_types) > 1 or not key_types.issubset(ALLOWED_KEY_TYPES)
+            mismatch = len(key_types) > 1 or not key_types.issubset(
+                ALLOWED_KEY_TYPES)
             if mismatch:
                 return KeyValueDictWrapper(value).to_json_dict(handle_unmatched=handle_unmatched, memo=memo, **kwargs)
-            
+
             # Check if all keys are not strings
             if len(key_types) == 1 and next(iter(key_types)) in NON_STRING_KEY_TYPES:
                 return KeyTypeDictWrapper(value).to_json_dict(handle_unmatched=handle_unmatched, memo=memo, **kwargs)

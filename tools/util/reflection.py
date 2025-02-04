@@ -43,7 +43,8 @@ def _register_alias(cls_or_obj: Union[object, Type]) -> None:
             [a for a in alias if a in ALIAS_TYPE_CACHE])
         used_for = ", ".join([get_type_string(ALIAS_TYPE_CACHE[a])
                              for a in alias if a in ALIAS_TYPE_CACHE])
-        raise ValueError(f"Alias {alias} already used for {used_for} while trying to register {class_name(cls_or_obj)}!")
+        raise ValueError(
+            f"Alias {alias} already used for {used_for} while trying to register {class_name(cls_or_obj)}!")
     # Register alias
     TYPE_ALIAS_CACHE[cls_or_obj] = alias
     if alias != NOALIAS:
@@ -84,6 +85,16 @@ An alias is a string or a list of strings, which can be used to identify a class
     if alias == NOALIAS:
         return None
     return alias
+
+
+def register_type():
+    """
+    Register a type for serialization and deserialization.
+    """
+    def decorator(_type: Type) -> Type:
+        _ = get_alias(_type)
+        return _type
+    return decorator
 
 
 def get_alias_type(alias: str) -> Optional[Type]:
