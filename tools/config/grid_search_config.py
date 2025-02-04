@@ -5,7 +5,7 @@ from typing import Dict, Any, List, Union
 
 
 class MultiKey(frozenset):
-    """A MultiKey indicates that multiple values are part of the parameter grid."""
+    """A MultiKey indicates that multiple keys are part of the parameter grid."""
     pass
 
 

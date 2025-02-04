@@ -9,6 +9,7 @@ import os
 from tools.util.path_tools import relpath, format_os_independent
 from tools.util.format import parse_format_string
 
+
 class ContextPathValueWrapper(JsonConvertible):
 
     __type_alias__ = "ContextPath"
@@ -27,12 +28,12 @@ class ContextPathValueWrapper(JsonConvertible):
         self.value = value._path
         self.context = value._context
 
-
     def to_python(self, **kwargs) -> ContextPath:
         pt = ContextPath(self.value, self.raw_path, self.context)
         if len(kwargs) > 0:
             pt = pt.reevaluate(kwargs)
         return pt
+
 
 class JsonContextPathSerializationRule(JsonSerializationRule):
     """For the default singleton value."""
@@ -53,8 +54,12 @@ class JsonContextPathSerializationRule(JsonSerializationRule):
             name: str,
             object_context: Dict[str, Any],
             handle_unmatched: Literal['identity', 'raise', 'jsonpickle'],
+            no_context_paths: bool = False,
             **kwargs) -> Any:
-        return ContextPathValueWrapper(value).to_json_dict(handle_unmatched=handle_unmatched, **kwargs)
+        if no_context_paths:
+            return format_os_independent(str(value))
+        else:
+            return ContextPathValueWrapper(value).to_json_dict(handle_unmatched=handle_unmatched, **kwargs)
 
     def backward(self, value: ContextPathValueWrapper, **kwargs) -> _DEFAULT:
         return value.to_python(**kwargs)

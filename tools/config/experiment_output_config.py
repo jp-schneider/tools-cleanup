@@ -1,7 +1,7 @@
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional, Union
+from typing import Any, Dict, Literal, Optional, Union
 
 from tools.config.config import Config
 from tools.config.output_config import OutputConfig
@@ -82,3 +82,24 @@ class ExperimentOutputConfig(OutputConfig):
                                         make_exist=True,
                                         interpolate=True,
                                         interpolate_object=self, variable_name="output_path")
+
+    experiment_logger: Literal["tensorboard",
+                               "wandb"] = field(default="tensorboard")
+    """Experiment logger to use. Default is tensorboard."""
+
+    experiment_logger_kwargs: Dict[str, Any] = field(default_factory=dict)
+    """Keyword arguments for the experiment logger constructor. Unused for tensorboard."""
+
+    project: str = field(default="psf")
+    """Project name for the experiment. Used for wandb."""
+
+    def get_experiment_logger_logging_config(self) -> Dict[str, Any]:
+        """
+        Gets the dictionary which will be logged to the experiment logger.
+
+        Returns
+        -------
+        Dict[str, Any]
+            Logging configuration.
+        """
+        return self.to_json_dict(handle_unmatched="jsonpickle", no_uuid=True, no_large_data=True, no_context_paths=True)

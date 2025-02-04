@@ -49,6 +49,9 @@ class GridSearchRunner(MultiRunner):
                 for k, v_ in zip(keys, value_per_key):
                     setattr(config, k, v_)
 
+                # Create child runner
+                config.prepare()
+
                 rnr = self.runner_type(config=config)
                 # Create magic property diff-config to directly indicate the difference between the base config and the child config
                 rnr.diff_config = dict()
