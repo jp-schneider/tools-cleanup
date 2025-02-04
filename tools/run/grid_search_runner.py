@@ -1,17 +1,20 @@
-from typing import Any, Union
+from typing import Any, Literal, Union
 from tools.config.config import Config
 from tools.run.multi_runner import MultiRunner
 from tools.config.grid_search_config import GridSearchConfig, MultiKey, MultiValue
 import itertools
 import copy
 from tools.util.diff import changes, NOCHANGE
-
-
+from tools.util.reflection import get_nested_value, set_nested_value
+from tools.util.typing import NOTSET
+from tools.logger.logging import logger
 class GridSearchRunner(MultiRunner):
     """
     Creates multiple child runners by doing a cartesian product of the param_grid of the config.
     Uses as base_config as the base config for the child runners, which will be modified by the param_grid to create the child configs.
-    
+    Supports setting nested properties in the config, then keys should be "paths" to the nested properties. E.g. "my_property.sub_property".
+    This works for objects and dicts.
+
     If properties should not be treated as cartesian product, use MultiKey and MultiValue.
 
     E.g. 
@@ -53,27 +56,36 @@ class GridSearchRunner(MultiRunner):
                     config: Config,
                     key: Union[str, MultiKey],
                     value: Union[Any, MultiValue],
-                    check_existing: bool = True
+                    check_existing: bool = True,
+                    non_existing_handling: Literal["raise", "warning"] = "raise"
                     ) -> None:
         if isinstance(key, MultiKey) and not isinstance(value, MultiValue) or isinstance(value, MultiKey) and not isinstance(key, MultiValue):
             raise ValueError(
                 f"Key and value must be of the same type. Key: {key}, Value: {value}")
 
         if isinstance(key, str) and not isinstance(value, MultiValue):
-            if check_existing and not hasattr(config, key):
-                raise ValueError(
-                    f"Cant set value {value} for atrribute {key} in config type {type(config).__name__}. Attribute does not exist.")
-            setattr(config, key, value)
+            if check_existing and (get_nested_value(config, key) == NOTSET):
+                if non_existing_handling == "warning":
+                    logger.warning(
+                        f"Attribute {key} does not exist in config type {type(config).__name__}.")
+                else:
+                    raise ValueError(
+                        f"Cant set value {value} for atrribute {key} in config type {type(config).__name__}. Attribute does not exist.")
+            set_nested_value(config, key, value)
 
         elif isinstance(key, MultiKey) and isinstance(value, MultiValue):
             if len(key) != len(value):
                 raise ValueError(
                     f"Key and value for propert must have the same length. Key: {key} Key-len: {len(key)}, Value-len: {len(value)}")
             for k, v in zip(key, value):
-                if check_existing and not hasattr(config, k):
-                    raise ValueError(
-                        f"Cant set value {v} for atrribute {k} in config type {type(config).__name__}. Attribute does not exist.")
-                setattr(config, k, v)
+                if check_existing and (get_nested_value(config, k) == NOTSET):
+                    if non_existing_handling == "warning":
+                        logger.warning(
+                            f"Attribute {k} does not exist in config type {type(config).__name__}.")
+                    else:
+                        raise ValueError(
+                            f"Cant set value {v} for attribute {k} in config type {type(config).__name__}. Attribute does not exist.")
+                set_nested_value(config, k, v)
         else:
             raise ValueError(
                 f"Inconsistent key and value types. Key: {key}, Value: {value}")
@@ -93,7 +105,7 @@ class GridSearchRunner(MultiRunner):
                 config = copy.deepcopy(base_config)
                 # Insert values
                 for k, v_ in zip(keys, value_per_key):
-                    self._set_values(config, k, v_)
+                    self._set_values(config, k, v_, non_existing_handling="warning")
 
                 # Create child runner
                 config.prepare()
@@ -104,11 +116,11 @@ class GridSearchRunner(MultiRunner):
                 for k, v_ in zip(keys, value_per_key):
                     if isinstance(k, MultiKey):
                         for sub_key, sub_value in zip(k, v_):
-                            chg = changes(getattr(base_config, sub_key), sub_value)
+                            chg = changes(get_nested_value(base_config, sub_key), sub_value)
                             if chg != NOCHANGE:
                                 rnr.diff_config[sub_key] = chg
                     else:
-                        chg = changes(getattr(base_config, k), v_)
+                        chg = changes(get_nested_value(base_config, k), v_)
                         if chg != NOCHANGE:
                             rnr.diff_config[k] = chg
                 rnr.parent = self

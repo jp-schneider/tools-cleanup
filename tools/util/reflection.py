@@ -316,12 +316,19 @@ def _set_nested_value(obj: Any, path: str, value: Any):
         return
     if '.' in path:
         path, rest = path.split('.', 1)
-        return _set_nested_value(getattr(obj, path), rest, value)
+        current_obj = getattr(obj, path)
+        return _set_nested_value(current_obj, rest, value)
     else:
         if value == NOTSET:
-            delattr(obj, path)
+            if isinstance(obj, dict):
+                obj.pop(path, None)
+            else:
+                delattr(obj, path)
         else:
-            setattr(obj, path, value)
+            if isinstance(obj, dict):
+                obj[path] = value
+            else:
+                setattr(obj, path, value)
 
 
 def set_nested_value(obj: Any, path: str, value: Any):
