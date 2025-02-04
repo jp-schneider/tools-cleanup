@@ -26,7 +26,8 @@ class JsonSerializationRule(ABC):
         ...
 
     def is_forward_applicable(self, value: Any) -> bool:
-        """Testing whether a rules is applicable agains a given value.
+        """
+        Testing whether a rules is applicable agains a given value.
         Can be overriden.
 
         Parameters

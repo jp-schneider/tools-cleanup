@@ -2,7 +2,7 @@ from dataclasses import dataclass, field
 from tools.config.config import Config
 from tools.config.multi_runner_config import MultiRunnerConfig
 from typing import Dict, Any, List, Union
-
+from tools.util.multi_dict import MultiDict
 
 class MultiKey(frozenset):
     """A MultiKey indicates that multiple keys are part of the parameter grid."""
@@ -20,8 +20,13 @@ class GridSearchConfig(MultiRunnerConfig):
     base_config: Union[str, Config, List[Config]] = None
     """The base config which will be used for the child runners. If it is a list, the cartesian product will be created for each config in the list."""
 
-    param_grid: Dict[Union[str, MultiKey],
-                     Union[Any, MultiValue]] = field(default_factory=dict)
+    param_grid: MultiDict = field(default_factory=dict)
     """The parameter grid which will be used to create the child configs."""
 
     name_experiment: str = field(default="GridSearch")
+
+
+    def __post_init__(self):
+        # if not isinstance(self.param_grid, MultiDict):
+        #     self.param_grid = MultiDict(self.param_grid)
+        pass

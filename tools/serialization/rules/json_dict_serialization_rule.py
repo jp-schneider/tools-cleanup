@@ -1,16 +1,98 @@
 from enum import Enum
 import logging
-from typing import Any, Dict, List, Literal, Optional, Type
+from typing import Any, Dict, List, Literal, Optional, Type, Union
 
-from tools.serialization.json_convertible import convert
+from tools.serialization.json_convertible import JsonConvertible, convert
+from tools.util.format import parse_type
+from tools.util.reflection import class_name, dynamic_import
 
 from .json_serialization_rule import JsonSerializationRule
 from uuid import UUID
 import inspect
 import torch
 
-ALLOWED_KEY_TYPES = [str, int, float, bool, None]
+ALLOWED_KEY_TYPES = set([str, int, float, bool])
+NON_STRING_KEY_TYPES = set([int, float, bool])
 
+
+class KeyValueItem(JsonConvertible):
+    
+    __type_alias__ = "KeyValue"
+
+    def __init__(self,
+                 value: tuple = None,
+                 decoding: bool = False,
+                 **kwargs):
+        super().__init__(decoding, **kwargs)
+        if decoding:
+            return
+        if value is None:
+            raise ArgumentNoneError("value")
+        self.key = value[0]
+        self.value = value[1]
+
+    def to_python(self) -> tuple:
+        return (self.key, self.value)
+
+class KeyValueDictWrapper(JsonConvertible):
+    """Type for a dictionary which keys are not strings or all from a different kind.
+    Converts these into a key-value list, where each key-value pair is serialized independently.
+    """
+
+    __type_alias__ = "KVDict"
+
+    def get_type(self) -> Type[dict]:
+        if hasattr(self, "dict_type"):
+            return parse_type(self.dict_type, dict, variable_name="dict_type")
+        return dict
+
+    def __init__(self,
+                 value: dict = None,
+                 decoding: bool = False,
+                 **kwargs):
+        super().__init__(decoding, **kwargs)
+        if decoding:
+            return
+        if value is None:
+            raise ArgumentNoneError("value")
+        self.values = [KeyValueItem((k, v)) for k, v in value.items()]
+        self.dict_type = class_name(value)
+
+    def to_python(self) -> dict:
+        _type = self.get_type()
+        _d = {v.key: v.value for v in self.values}
+        return _type(_d)
+
+
+class KeyTypeDictWrapper(JsonConvertible):
+    """Wrapper for a dictionary which keys are not a string, but a different type which can be easily converted to and from string.
+    Assumes all keys are from the same type.
+    """
+ 
+    __type_alias__ = "KeyTypeDict"
+
+    def get_type(self) -> Type[dict]:
+        if hasattr(self, "key_parser"):
+            return parse_type(self.key_parser, tuple(ALLOWED_KEY_TYPES), variable_name="key_parser")
+        return dict
+
+    def __init__(self,
+                 value: dict = None,
+                 decoding: bool = False,
+                 **kwargs):
+        super().__init__(decoding, **kwargs)
+        if decoding:
+            return
+        if value is None:
+            raise ArgumentNoneError("value")
+        self.key_parser = class_name(next(iter(value.keys())))
+        self.values = {str(k): v for k, v in value.items()}
+
+    def to_python(self) -> dict:
+        parser_type = self.get_type()
+        _type = type(self.values)
+        _d = {parser_type(k): v for k, v in self.values.items()}
+        return _type(_d)
 
 class JsonDictSerializationRule(JsonSerializationRule):
     """For lists of objects."""
@@ -22,19 +104,9 @@ class JsonDictSerializationRule(JsonSerializationRule):
     def applicable_forward_types(self) -> List[Type]:
         return [dict]
 
-    def is_forward_applicable(self, value: Any) -> bool:
-        res = super().is_forward_applicable(value)
-        if res:
-            if not all([isinstance(k, tuple(ALLOWED_KEY_TYPES)) for k in value.keys()]):
-                logging.warning(
-                    f"Keys of dict are not of allowed types: {value.keys()}")
-                return False
-            return res
-        return not (isinstance(value, type)) and (hasattr(value, '__iter__') or hasattr(value, 'to_json_dict'))
-
     @classmethod
     def applicable_backward_types(self) -> List[Type]:
-        return []
+        return [KeyValueDictWrapper, KeyTypeDictWrapper]
 
     def forward(
             self,
@@ -61,6 +133,19 @@ class JsonDictSerializationRule(JsonSerializationRule):
         elif hasattr(value, '__iter__'):
             # Handling iterables which are not lists or tuples => return them as dict.
             # Iterate over items
+            
+            # Check if all keys are allowed
+            key_types = set([type(k) for k in value.keys()])
+            mismatch = len(key_types) > 1 or not key_types.issubset(ALLOWED_KEY_TYPES)
+            if mismatch:
+                return KeyValueDictWrapper(value).to_json_dict(handle_unmatched=handle_unmatched, memo=memo, **kwargs)
+            
+            # Check if all keys are not strings
+            if len(key_types) == 1 and next(iter(key_types)) in NON_STRING_KEY_TYPES:
+                return KeyTypeDictWrapper(value).to_json_dict(handle_unmatched=handle_unmatched, memo=memo, **kwargs)
+
+            # All keys are strings use native dict serialization
+
             ret = {}
             as_dict = dict(value)
             for k, v in as_dict.items():
@@ -70,5 +155,5 @@ class JsonDictSerializationRule(JsonSerializationRule):
         else:
             raise ValueError(f"Dont know how to handle Type: {type(value)}")
 
-    def backward(self, value: Dict[str, Any], **kwargs) -> Any:
-        raise NotImplementedError()  # Done by others
+    def backward(self, value: Union[KeyValueDictWrapper, KeyTypeDictWrapper], **kwargs) -> Any:
+        return value.to_python()

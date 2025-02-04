@@ -19,7 +19,7 @@ class SetValueWrapper(JsonConvertible):
         return set
 
     def __init__(self,
-                 value: list = None,
+                 value: Set = None,
                  decoding: bool = False,
                  **kwargs):
         super().__init__(decoding, **kwargs)
@@ -29,7 +29,7 @@ class SetValueWrapper(JsonConvertible):
             return
         if value is None:
             raise ArgumentNoneError("value")
-        self.values = value
+        self.values = list(value)
 
     def to_python(self) -> complex:
         return self.get_type()(self.values)
@@ -56,7 +56,7 @@ class JsonSetSerializationRule(JsonSerializationRule):
             **kwargs) -> Any:
         if memo is None:
             memo = set()
-        return SetValueWrapper(list(value)).to_json_dict(handle_unmatched=handle_unmatched, memo=memo, **kwargs)
+        return SetValueWrapper(value).to_json_dict(handle_unmatched=handle_unmatched, memo=memo, **kwargs)
 
     def backward(self, value: SetValueWrapper, **kwargs) -> Any:
         return value.to_python()
