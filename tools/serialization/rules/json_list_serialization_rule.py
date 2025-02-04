@@ -1,10 +1,40 @@
 from enum import Enum
-from typing import Any, Dict, List, Literal, Optional, Type
+from typing import Any, Dict, List, Literal, Optional, Type, Union
 from uuid import UUID
 
 from tools.serialization.json_convertible import convert
 
-from .json_serialization_rule import JsonSerializationRule
+from tools.serialization.json_convertible import JsonConvertible
+from tools.serialization.rules.json_serialization_rule import JsonSerializationRule
+from tools.util.format import parse_type
+from tools.util.reflection import class_name
+from tools.error.argument_none_error import ArgumentNoneError
+
+
+class ListValueWrapper(JsonConvertible):
+
+    __type_alias__ = "list"
+
+    def get_type(self) -> Type[List]:
+        if hasattr(self, "type"):
+            return parse_type(self.type, list, variable_name="type")
+        return set
+
+    def __init__(self,
+                 value: list = None,
+                 decoding: bool = False,
+                 **kwargs):
+        super().__init__(decoding, **kwargs)
+        if value is not None and not decoding and issubclass(type(value), list) and type(value) != list:
+            self.type = class_name(value)
+        if decoding:
+            return
+        if value is None:
+            raise ArgumentNoneError("value")
+        self.values = list(value)
+
+    def to_python(self) -> complex:
+        return self.get_type()(self.values)
 
 
 class JsonListSerializationRule(JsonSerializationRule):
@@ -19,7 +49,7 @@ class JsonListSerializationRule(JsonSerializationRule):
 
     @classmethod
     def applicable_backward_types(self) -> List[Type]:
-        return []
+        return [ListValueWrapper]
 
     def forward(
             self, value: list, name: str, object_context: Dict[str, Any],
@@ -29,9 +59,17 @@ class JsonListSerializationRule(JsonSerializationRule):
         if memo is None:
             memo = set()
         a = []
+        if type(value) != list:
+            # Handle subclasses of list
+            return ListValueWrapper(value).to_json_dict(handle_unmatched=handle_unmatched, memo=memo, **kwargs)
+
         for subval in value:
-            a.append(convert(subval, name, object_context, handle_unmatched=handle_unmatched, memo=memo, **kwargs))
+            a.append(convert(subval, name, object_context,
+                     handle_unmatched=handle_unmatched, memo=memo, **kwargs))
         return a
 
-    def backward(self, value: Dict[str, Any], **kwargs) -> Any:
-        raise NotImplementedError()  # Done by others
+    def backward(self, value: Union[list, ListValueWrapper], **kwargs) -> Any:
+        if isinstance(value, ListValueWrapper):
+            return value.to_python()
+        else:
+            return value
