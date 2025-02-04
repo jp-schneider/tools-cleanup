@@ -43,7 +43,7 @@ def _register_alias(cls_or_obj: Union[object, Type]) -> None:
             [a for a in alias if a in ALIAS_TYPE_CACHE])
         used_for = ", ".join([get_type_string(ALIAS_TYPE_CACHE[a])
                              for a in alias if a in ALIAS_TYPE_CACHE])
-        raise ValueError(f"Alias {alias} already used for {used_for}!")
+        raise ValueError(f"Alias {alias} already used for {used_for} while trying to register {class_name(cls_or_obj)}!")
     # Register alias
     TYPE_ALIAS_CACHE[cls_or_obj] = alias
     if alias != NOALIAS:
@@ -54,7 +54,7 @@ def _register_alias(cls_or_obj: Union[object, Type]) -> None:
 
 def get_alias(cls_or_obj: Union[object, Type]) -> Optional[List[str]]:
     """Get the alias of a class or object.
-    An alias is a string or a list of strings, which can be used to identify a class or object.
+An alias is a string or a list of strings, which can be used to identify a class or object.
     The alias is used for serialization and deserialization of objects.
 
     The alias can be set by the `__type_alias__` attribute of a class or object.
@@ -316,12 +316,19 @@ def _set_nested_value(obj: Any, path: str, value: Any):
         return
     if '.' in path:
         path, rest = path.split('.', 1)
-        return _set_nested_value(getattr(obj, path), rest, value)
+        current_obj = getattr(obj, path)
+        return _set_nested_value(current_obj, rest, value)
     else:
         if value == NOTSET:
-            delattr(obj, path)
+            if isinstance(obj, dict):
+                obj.pop(path, None)
+            else:
+                delattr(obj, path)
         else:
-            setattr(obj, path, value)
+            if isinstance(obj, dict):
+                obj[path] = value
+            else:
+                setattr(obj, path, value)
 
 
 def set_nested_value(obj: Any, path: str, value: Any):

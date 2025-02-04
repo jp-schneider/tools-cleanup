@@ -148,7 +148,7 @@ class Tensorboard(ExperimentLogger):
                     run_name: Optional[str] = None,
                     step: Optional[int] = None, **kwargs):
         self.summary_writer.add_hparams(
-            hparam_dict, metric_dict, hparam_domain_discrete, run_name, global_step=step, **kwargs)
+            hparam_dict, metric_dict, hparam_domain_discrete, run_name, global_step=step)
 
     def add_figure(self, tag: str, figure: Any, step: int, **kwargs):
         """Adds a figure to tensorboard.
@@ -165,7 +165,7 @@ class Tensorboard(ExperimentLogger):
         from matplotlib.pyplot import Figure
         if not isinstance(figure, Figure):
             raise ValueError("Figure must be a matplotlib.pyplot.Figure.")
-        self.summary_writer.add_figure(tag, figure, step, close=True, **kwargs)
+        self.summary_writer.add_figure(tag, figure, step, close=True)
 
     @classmethod
     def to_tensorboard_tag(cls, metric_tag: str) -> str:
