@@ -809,6 +809,7 @@ def plot_as_image(data: VEC_TYPE,
                   norm: bool = False,
                   keep_transparency: bool = False,
                   inpaint_title: Union[bool, _DEFAULT] = DEFAULT,
+                  inpaint_title_kwargs: Optional[Dict[str, Any]] = None,
                   numbering: bool = True,
                   ) -> AxesImage:
     """Plots a 2D (complex) image with matplotib. Supports numpy arrays and torch tensors.
@@ -855,7 +856,9 @@ def plot_as_image(data: VEC_TYPE,
         If the title should be inpainted, by default DEFAULT
         If True, the title will be inpainted, if False it will not be inpainted.
         If DEFAULT, the title will be inpainted if the title is not empty and tight is True.
-
+    inpaint_title_kwargs : Optional[Dict[str, Any]], optional
+        Additional kwargs for the inpaint_title function, by default None
+        
     Returns
     -------
     AxesImage
@@ -1092,7 +1095,7 @@ def plot_as_image(data: VEC_TYPE,
                 _cmap.set_bad(color='white')
 
             if inpaint_title == True or (inpaint_title == DEFAULT and tight):
-                _image = _inpaint_title(_image, _title)
+                _image = _inpaint_title(_image, _title, **(inpaint_title_kwargs if inpaint_title_kwargs is not None else dict()))
 
             ax.imshow(_image, vmin=vmin, vmax=vmax, cmap=_cmap,
                       interpolation=interpolation, **imshow_kw)
@@ -1134,6 +1137,149 @@ def plot_as_image(data: VEC_TYPE,
     if title is not None:
         fig.suptitle(title)
     return fig
+
+
+def assemble_coords_to_image(
+        coords: VEC_TYPE,
+        data: VEC_TYPE,
+        resolution: VEC_TYPE,
+        domain: Optional[VEC_TYPE] = None,
+) -> np.ndarray:
+    """
+    Inserts data / image given as per pixel values into an image (stack).
+    May have whole if data is not dense.
+
+    Parameters
+    ----------
+    coords : VEC_TYPE
+        Coordinates of the data points.
+        Shape should be ([..., B], R, 2)
+        Where B is the batch dimension and R is the number of points.
+        2 is the x and y coordinate within the domain.
+    data : VEC_TYPE
+        The data points for the image.
+        Shape should be ([..., B], R, D)
+    resolution : VEC_TYPE
+        Image resolution.
+        Given as (width, height)
+    domain : VEC_TYPE
+        Valid image domain of the data coords.
+        Shape should be (2, 2) for min and max values.
+        E.g. 
+        [[x_min, y_min],
+         [x_max, y_max]]
+        Default is None, which assumes domain is
+        [[0, 0], [1, 1]]
+         
+
+    Returns
+    -------
+    np.ndarray
+        The assembled image. Shape is ([..., B], H, W, D)
+    """
+    from tools.util.numpy import flatten_batch_dims, unflatten_batch_dims
+    from tools.transforms.numpy.min_max import MinMax
+    coords = numpyify(coords)
+    data = numpyify(data)
+    resolution = numpyify(resolution)
+    if domain is None:
+        domain = np.array([[0, 0], [1, 1]])
+    else:
+        domain = numpyify(domain)
+    
+    coords, shp = flatten_batch_dims(coords, -3) # Shape is (BC, RC, 2)
+    data, data_shp = flatten_batch_dims(data, -3) # Shape is (BD, RD, D)
+
+    BC, RC, CC = coords.shape
+    BD, RD, CD = data.shape
+
+    if CC != 2:
+        raise ValueError("Coordinates should have 2 dimensions.")
+    
+    if RD != RC:
+        raise ValueError("Number of points should match in data and coords. But got {} and {}.".format(RD, RC))
+
+    if BD != BC:
+        if BC == 1:
+            coords = np.repeat(coords, BD, axis=0)
+        else:
+            raise ValueError("Number of batches should match in data and coords. But got {} and {}.".format(BD, BC))
+        
+    img = np.zeros((BD, *resolution[::-1], CD), dtype=data.dtype)
+
+    mmx = MinMax(new_min=0, new_max=resolution[0])
+    mmx.min = domain[0, 0]
+    mmx.max = domain[1, 0]
+    mmx.fitted = True
+
+    mmy = MinMax(new_min=0, new_max=resolution[1])
+    mmy.min = domain[0, 1]
+    mmy.max = domain[1, 1]
+    mmy.fitted = True
+
+    coords = coords.copy()
+    coords[..., 0] = mmx.transform(coords[..., 0])
+    coords[..., 1] = mmy.transform(coords[..., 1])
+
+    coords = coords[..., ::-1]
+    coords = coords.round().astype(int) # Shape is (BC, RC, 2) (y, x)
+
+    # In domain filter
+    in_domain_y = np.logical_and(coords[..., 0] >= 0, coords[..., 0] < resolution[1])
+    in_domain_x = np.logical_and(coords[..., 1] >= 0, coords[..., 1] < resolution[0])
+    in_domain = np.logical_and(in_domain_y, in_domain_x)
+
+    # Add batch_idx
+    bidx_coords = np.arange(BD)[:, None, None].repeat(RC, axis=1)
+    coords = np.concatenate([bidx_coords, coords], axis=-1)
+
+    img[coords[in_domain, 0], coords[in_domain, 1], coords[in_domain, 2]] = data[in_domain]
+    return unflatten_batch_dims(img, data_shp)
+
+
+def plot_coords_as_image(
+        coords: VEC_TYPE,
+        data: VEC_TYPE,
+        resolution: VEC_TYPE,
+        domain: Optional[VEC_TYPE] = None,
+        **kwargs,
+) -> Figure:
+    """
+    Plots data / image given as per pixel values into an image.
+    May have whole if data is not dense.
+
+    Parameters
+    ----------
+    coords : VEC_TYPE
+        Coordinates of the data points.
+        Shape should be ([..., B], R, 2)
+        Where B is the batch dimension and R is the number of points.
+        2 is the x and y coordinate within the domain.
+    data : VEC_TYPE
+        The data points for the image.
+        Shape should be ([..., B], R, D)
+    resolution : VEC_TYPE
+        Image resolution.
+        Given as (width, height)
+    domain : VEC_TYPE
+        Valid image domain of the data coords.
+        Shape should be (2, 2) for min and max values.
+        E.g. 
+        [[x_min, y_min],
+         [x_max, y_max]]
+        Default is None, which assumes domain is
+        [[0, 0], [1, 1]]
+         
+
+    Returns
+    -------
+    Figure
+        Matplot lib figure.
+    """
+    img = assemble_coords_to_image(coords, data, resolution, domain)
+    return plot_as_image(img, **kwargs)
+
+
 
 def _inpaint_title(image: VEC_TYPE, title: str, **kwargs):
     import torch
