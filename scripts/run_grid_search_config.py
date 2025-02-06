@@ -5,9 +5,12 @@ import asyncio
 import os
 
 from tools.logger.logging import basic_config
-
+import matplotlib
+import matplotlib.pyplot as plt
 from tools.config.grid_search_config import GridSearchConfig
 from tools.run.grid_search_runner import GridSearchRunner
+plt.ioff()
+matplotlib.use('agg')
 
 
 def current_filename() -> str:

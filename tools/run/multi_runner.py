@@ -1,5 +1,6 @@
 from dataclasses import field
 
+import sys
 from typing import List, Type, Optional, Tuple
 
 from matplotlib import pyplot as plt
@@ -17,6 +18,7 @@ from tools.util.path_tools import format_os_independent, relpath, replace_file_u
 from tools.run.config_runner import ConfigRunner
 from tools.logger.logging import logger
 from tools.util.format import parse_type
+import gc
 
 
 class MultiRunner(TrainableRunner):
@@ -258,11 +260,15 @@ class MultiRunner(TrainableRunner):
     def train(self, *args, **kwargs):
         runner = self
         config = self.config
-        for i, child_runner in enumerate(runner.child_runners):
+        for i, child_runner in enumerate(list(runner.child_runners)):
             try:
                 cfg = child_runner.config
                 cfg.prepare()
                 with ScriptExecution(cfg), plt.ioff():
+                    gc.collect()
+                    if "torch" in sys.modules:
+                        import torch
+                        torch.cuda.empty_cache()
 
                     logger.info(f"Building child runner #{i}...")
                     child_runner.build()
@@ -277,6 +283,8 @@ class MultiRunner(TrainableRunner):
 
                     logger.info(
                         f"Training done with child runner #{i}")
+
+                    child_runner.finalize()
 
             except Exception as err:
                 logger.exception(
