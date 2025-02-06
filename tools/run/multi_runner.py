@@ -260,6 +260,7 @@ class MultiRunner(TrainableRunner):
     def train(self, *args, **kwargs):
         runner = self
         config = self.config
+        status = dict()
         for i, child_runner in enumerate(list(runner.child_runners)):
             try:
                 cfg = child_runner.config
@@ -283,9 +284,18 @@ class MultiRunner(TrainableRunner):
 
                     logger.info(
                         f"Training done with child runner #{i}")
-
+                    
                     child_runner.finalize()
-
+                    logger.info(
+                        f"Finalized child runner #{i}")
+                    
+                    status[i] = "success"
+            
             except Exception as err:
                 logger.exception(
                     f"Raised {type(err).__name__} in training child runner #{i}")
+                status[i] = "Error: " + str(err)
+        logger.info("All child runners executed.")
+        status_msg = "\n".join([f"Runner #{i}: {status[i]}" for i in status])
+        logger.info(f"Child runner status:\n{status_msg}")
+        logger.info("MultiRunner finished.")
