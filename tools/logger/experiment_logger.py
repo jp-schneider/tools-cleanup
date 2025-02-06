@@ -154,10 +154,10 @@ class ExperimentLogger():
             value = float("inf")
             logging.warning(f"Loss {tag} was None! Setting it to inf.")
         self.log_value(
-            tag,
-            value,
+            tag=tag,
+            value=value,
             step=entry.global_step,
-            walltime=output_args.time)
+            time=output_args.time)
 
     def log_metric(self, metric_column: str) -> Callable:
         """Getting a logger function for the given metric name.
@@ -206,7 +206,7 @@ class ExperimentLogger():
         value = entry.value
         self.log_value(value=value, tag=tag, step=entry.global_step, time=time)
 
-    def log_value(self, value: Union[VEC_TYPE, int, float, complex], tag: str, step: int, time: Optional[float] = None):
+    def log_value(self, value: Union[VEC_TYPE, int, float, complex], tag: str, step: int, time: Optional[float] = None, **kwargs):
         """Logs a numeric value to tensorboard.
         This can also be used for logging numpy arrays or tensors.
         If array or tensor is multi dimensional, then the dimensions will be flattened and logged as scalars.
