@@ -199,7 +199,8 @@ def read_directory_recursive(
     path_key: str = "path",
     recurse_in_matched_subdirs: bool = False,
     max_depth: int = 10,
-    memo: Optional[Set[str]] = None
+    memo: Optional[Set[str]] = None,
+    no_special_chars_check: bool = False
 ) -> List[Dict[str, Any]]:
     """Reads a directory for files matching a regex pattern and returns a
     list of dictionaries with the readed groups and full filepath.
@@ -217,6 +218,22 @@ def read_directory_recursive(
         A parser dictionary which can contain keys which should correspond to named groups in the pattern,
         the value should be a callable which is invoked by the parsed value. The result is then written to the result dictionary, by default None
 
+    path_key : str, optional
+        The key to store the path in the result dictionary, by default "path"
+
+    recurse_in_matched_subdirs : bool, optional
+        If matched subdirectories should be recursively searched, by default False
+
+    max_depth : int, optional
+        The maximum depth to search for subdirectories, by default 10
+
+    memo : Optional[Set[str]], optional
+        A memo set to keep track of already visited directories, by default None
+
+    no_special_chars_check : bool, optional
+        If special characters should be checked in the path, by default False
+        Its used to determine if the path is a regex or not. If set to True, the path is never considered as a regex.
+        
     Returns
     -------
     List[Dict[str, Any]]
@@ -240,7 +257,7 @@ def read_directory_recursive(
         if d == "." or d == "..":
             p.append(d)
             continue
-        if set(d).intersection(special_chars):
+        if set(d).intersection(special_chars) and not no_special_chars_check:
             pattern_start = i
             break
         else:
@@ -275,7 +292,8 @@ def read_directory_recursive(
                     new_path, parser, path_key,
                     recurse_in_matched_subdirs=recurse_in_matched_subdirs,
                     max_depth=max_depth,
-                    memo=memo)
+                    memo=memo,
+                    no_special_chars_check=no_special_chars_check)
                 for rec_result in rec_results:
                     rec_result.update(result)
                     super_results.append(rec_result)
@@ -291,7 +309,8 @@ def read_directory_recursive(
                     parser, path_key,
                     recurse_in_matched_subdirs=recurse_in_matched_subdirs,
                     reuse_last_pattern_on_subdirs=reuse_last_pattern_on_subdirs,
-                    memo=memo)
+                    memo=memo,
+                    no_special_chars_check=no_special_chars_check)
                 for rec_result in rec_results:
                     rec_result.update(result)
                     super_results.append(rec_result)
