@@ -76,5 +76,9 @@ class ScriptExecution:
                 filename = os.path.basename(self.scope.filename).split(".")[0]
                 logger.exception(
                     f"Raised {type(exc_val).__name__} in {filename}, exiting...")
+                logger.info(f"Exception occured, Context Terminated with Exit Code: {exit_code}")
+        else:
+            # No error occurred
+            logger.info(f"Script Context executed successfully. Exit Code: {exit_code}")
         write_exit(self.config, exit_code, exc_val)
         return False

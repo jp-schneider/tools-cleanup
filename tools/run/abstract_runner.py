@@ -20,6 +20,7 @@ from tools.logger.logging import logger
 from tools.util.seed import seed_all
 from tools.util.typing import MISSING
 
+
 class AbstractRunner():
     """Abstract Runner, a runner can be setup "builded" and "run"."""
 
@@ -27,7 +28,7 @@ class AbstractRunner():
     """Stores type hints for runner classes"""
 
     __runner_context__: Dict[str, Any]
-    """Context vars which are additionally declared within the runner. 
+    """Context vars which are additionally declared within the runner.
     contain the actual value fields of the runner, while metadata is stored as usually in __dict__.
     These vars are not annotated with type hints and values are autmatically filled within if assigned to instance."""
 
@@ -70,3 +71,11 @@ class AbstractRunner():
     @abstractmethod
     def run(self, *args, **kwargs) -> None:
         pass
+
+    @abstractmethod
+    def finalize(self, *args, **kwargs) -> None:
+        """Method to finalize the runner and makes all necessary cleanup.
+        """
+        for key, value in dict(self.__runner_context__):
+            self.__runner_context__.pop(key)
+            del value
