@@ -582,11 +582,13 @@ def index_of_first(values: torch.Tensor, search: torch.Tensor) -> torch.Tensor:
     torch.Tensor
         Index tensor of the first occurence of the search tensor in the values tensor.
     """
-    E = values.shape
-    S = search.shape
-    res = values[..., None].repeat(*tuple(1 for _ in range(len(E))), *
-                                   S) == search[None, ...].repeat(*E, *tuple((1 for _ in range(len(S)))))
-    out = torch.zeros(tuple(S), dtype=torch.int)
+    E = tuple(values.shape)
+    S = tuple(search.shape)
+    ER = tuple(torch.ones(len(E), device=values.device, dtype=torch.int))
+    ES = tuple(torch.ones(len(S), device=values.device, dtype=torch.int))
+    res = values[..., None].repeat(
+        *ER, *S) == search[None, ...].repeat(*E, *ES)
+    out = torch.zeros(S, dtype=torch.int)
     out.fill_(-1)
     aw = torch.argwhere(res)
     search_found, where_inverse = torch.unique(aw[:, -1], return_inverse=True)

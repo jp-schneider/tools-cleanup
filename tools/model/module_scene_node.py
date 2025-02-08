@@ -79,6 +79,8 @@ class ModuleSceneNode(SceneNode, TorchDtypeMixin, torch.nn.Module):
             if child not in self._scene_children:
                 continue
             child.set_parent(None)
-            self._scene_children.remove(child)
+            idx = next(
+                (k for k, v in self._scene_children._modules.items() if v == child))
+            self._scene_children.pop(int(idx))
             ret.add(child)
         return ret
