@@ -371,3 +371,25 @@ def compute_diff_string(
         flattened_dict = ret
     comp = [k + value_separator + v for k, v in flattened_dict.items()]
     return item_separator.join(comp)
+
+
+def flatten_list(value: List[Any]) -> List[Any]:
+    """Flattens a list of lists.
+
+    Parameters
+    ----------
+    value : List[Any]
+        The list to flatten.
+
+    Returns
+    -------
+    List[Any]
+        The flattened list.
+    """
+    result = []
+    for v in value:
+        if isinstance(v, list):
+            result.extend(flatten_list(v))
+        else:
+            result.append(v)
+    return result
