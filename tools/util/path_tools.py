@@ -309,6 +309,9 @@ def read_directory_recursive(
             for result in results:
                 sub_path = result.pop(path_key)
                 patterns = "/".join(next_patterns)
+                # Check if subpath is a directory
+                if not os.path.isdir(sub_path):
+                    continue
                 new_path = sub_path + "/" + patterns
                 rec_results = read_directory_recursive(
                     new_path,

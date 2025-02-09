@@ -38,6 +38,7 @@ from tools.util.typing import DEFAULT, _DEFAULT
 from pathlib import Path
 from mpl_toolkits.mplot3d import Axes3D
 
+
 def set_default_output_dir(output_dir: Optional[Union[str, Path]] = None):
     """Sets the default output directory for saving figures.
 
@@ -709,6 +710,7 @@ def create_alpha_colormap(
 
     return map_object
 
+
 def get_tab40_colors() -> LinearSegmentedColormap:
     """
     Returns a colormap with the colors of the tab20b + tab20c colormaps,
@@ -723,6 +725,7 @@ def get_tab40_colors() -> LinearSegmentedColormap:
     tab20c = plt.get_cmap("tab20c")
     colors = np.concatenate([tab20b.colors, tab20c.colors], axis=0)
     return LinearSegmentedColormap.from_list("tab40", colors)
+
 
 def register_alpha_colormap(color: np.ndarray,
                             name: str,
@@ -858,7 +861,7 @@ def plot_as_image(data: VEC_TYPE,
         If DEFAULT, the title will be inpainted if the title is not empty and tight is True.
     inpaint_title_kwargs : Optional[Dict[str, Any]], optional
         Additional kwargs for the inpaint_title function, by default None
-        
+
     Returns
     -------
     AxesImage
@@ -930,6 +933,8 @@ def plot_as_image(data: VEC_TYPE,
         else:
             v_name = variable_name
 
+        v_name = str(v_name)
+
         used_mj, v_name = used_mathjax(v_name)
 
         if (len(input_data) > 1) and numbering:
@@ -981,8 +986,6 @@ def plot_as_image(data: VEC_TYPE,
             images = (images * 255).astype(np.uint8)
         else:
             images = alpha_compose_with_background_grid(images)[..., :3]
-        
-
 
     if cols == 1:
         # If just one column, and images are not in landscape mode, flip rows and cols
@@ -1095,7 +1098,8 @@ def plot_as_image(data: VEC_TYPE,
                 _cmap.set_bad(color='white')
 
             if inpaint_title == True or (inpaint_title == DEFAULT and tight):
-                _image = _inpaint_title(_image, _title, **(inpaint_title_kwargs if inpaint_title_kwargs is not None else dict()))
+                _image = _inpaint_title(
+                    _image, _title, **(inpaint_title_kwargs if inpaint_title_kwargs is not None else dict()))
 
             ax.imshow(_image, vmin=vmin, vmax=vmax, cmap=_cmap,
                       interpolation=interpolation, **imshow_kw)
@@ -1165,12 +1169,12 @@ def assemble_coords_to_image(
     domain : VEC_TYPE
         Valid image domain of the data coords.
         Shape should be (2, 2) for min and max values.
-        E.g. 
+        E.g.
         [[x_min, y_min],
          [x_max, y_max]]
         Default is None, which assumes domain is
         [[0, 0], [1, 1]]
-         
+
 
     Returns
     -------
@@ -1186,25 +1190,27 @@ def assemble_coords_to_image(
         domain = np.array([[0, 0], [1, 1]])
     else:
         domain = numpyify(domain)
-    
-    coords, shp = flatten_batch_dims(coords, -3) # Shape is (BC, RC, 2)
-    data, data_shp = flatten_batch_dims(data, -3) # Shape is (BD, RD, D)
+
+    coords, shp = flatten_batch_dims(coords, -3)  # Shape is (BC, RC, 2)
+    data, data_shp = flatten_batch_dims(data, -3)  # Shape is (BD, RD, D)
 
     BC, RC, CC = coords.shape
     BD, RD, CD = data.shape
 
     if CC != 2:
         raise ValueError("Coordinates should have 2 dimensions.")
-    
+
     if RD != RC:
-        raise ValueError("Number of points should match in data and coords. But got {} and {}.".format(RD, RC))
+        raise ValueError(
+            "Number of points should match in data and coords. But got {} and {}.".format(RD, RC))
 
     if BD != BC:
         if BC == 1:
             coords = np.repeat(coords, BD, axis=0)
         else:
-            raise ValueError("Number of batches should match in data and coords. But got {} and {}.".format(BD, BC))
-        
+            raise ValueError(
+                "Number of batches should match in data and coords. But got {} and {}.".format(BD, BC))
+
     img = np.zeros((BD, *resolution[::-1], CD), dtype=data.dtype)
 
     mmx = MinMax(new_min=0, new_max=resolution[0])
@@ -1222,18 +1228,21 @@ def assemble_coords_to_image(
     coords[..., 1] = mmy.transform(coords[..., 1])
 
     coords = coords[..., ::-1]
-    coords = coords.round().astype(int) # Shape is (BC, RC, 2) (y, x)
+    coords = coords.round().astype(int)  # Shape is (BC, RC, 2) (y, x)
 
     # In domain filter
-    in_domain_y = np.logical_and(coords[..., 0] >= 0, coords[..., 0] < resolution[1])
-    in_domain_x = np.logical_and(coords[..., 1] >= 0, coords[..., 1] < resolution[0])
+    in_domain_y = np.logical_and(
+        coords[..., 0] >= 0, coords[..., 0] < resolution[1])
+    in_domain_x = np.logical_and(
+        coords[..., 1] >= 0, coords[..., 1] < resolution[0])
     in_domain = np.logical_and(in_domain_y, in_domain_x)
 
     # Add batch_idx
     bidx_coords = np.arange(BD)[:, None, None].repeat(RC, axis=1)
     coords = np.concatenate([bidx_coords, coords], axis=-1)
 
-    img[coords[in_domain, 0], coords[in_domain, 1], coords[in_domain, 2]] = data[in_domain]
+    img[coords[in_domain, 0], coords[in_domain, 1],
+        coords[in_domain, 2]] = data[in_domain]
     return unflatten_batch_dims(img, data_shp)
 
 
@@ -1264,12 +1273,12 @@ def plot_coords_as_image(
     domain : VEC_TYPE
         Valid image domain of the data coords.
         Shape should be (2, 2) for min and max values.
-        E.g. 
+        E.g.
         [[x_min, y_min],
          [x_max, y_max]]
         Default is None, which assumes domain is
         [[0, 0], [1, 1]]
-         
+
 
     Returns
     -------
@@ -1278,7 +1287,6 @@ def plot_coords_as_image(
     """
     img = assemble_coords_to_image(coords, data, resolution, domain)
     return plot_as_image(img, **kwargs)
-
 
 
 def _inpaint_title(image: VEC_TYPE, title: str, **kwargs):
@@ -1299,7 +1307,7 @@ def _inpaint_title(image: VEC_TYPE, title: str, **kwargs):
     if "background_stroke" not in args:
         args["background_stroke"] = 3
 
-    title_img = put_text(np.zeros((*img_shape[:2], 4)), 
+    title_img = put_text(np.zeros((*img_shape[:2], 4)),
                          title, **args).astype(np.float32) / 255
     mm = MinMax(new_min=0, new_max=1, axis=(-3, -2))
     transformed = mm.fit_transform(image)
@@ -1322,6 +1330,7 @@ def _inpaint_title(image: VEC_TYPE, title: str, **kwargs):
     else:
         image = inpainted
     return image
+
 
 @saveable()
 def plot_vectors(y: VEC_TYPE,
@@ -1690,7 +1699,7 @@ def set_axes_equal_3d(ax: Axes3D):
     ax : Axes3D
         3D axis to set the aspect ratio for.
     """
-    import numpy as np  
+    import numpy as np
     x_limits = ax.get_xlim3d()
     y_limits = ax.get_ylim3d()
     z_limits = ax.get_zlim3d()
@@ -1850,10 +1859,11 @@ def plot_mask(image: VEC_TYPE,
               alpha=darkening_background, label='')
 
     if inpaint_title == True or (inpaint_title == DEFAULT and tight):
-        _img = np.zeros_like(background_mask)[..., np.newaxis].repeat(4, axis=-1)
-        _image = _inpaint_title(_img, title, **(inpaint_title_kwargs if inpaint_title_kwargs is not None else dict()))
+        _img = np.zeros_like(
+            background_mask)[..., np.newaxis].repeat(4, axis=-1)
+        _image = _inpaint_title(
+            _img, title, **(inpaint_title_kwargs if inpaint_title_kwargs is not None else dict()))
         ax.imshow(_image)
-
 
     if not tight:
         ax.axis('off')

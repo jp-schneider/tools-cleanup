@@ -582,7 +582,13 @@ def index_of_first(values: torch.Tensor, search: torch.Tensor) -> torch.Tensor:
     torch.Tensor
         Index tensor of the first occurence of the search tensor in the values tensor.
     """
+    is_scalar = False
     E = tuple(values.shape)
+
+    if len(search.shape) == 0:
+        search = search.unsqueeze(0)
+        is_scalar = True
+
     S = tuple(search.shape)
     ER = tuple(torch.ones(len(E), device=values.device, dtype=torch.int))
     ES = tuple(torch.ones(len(S), device=values.device, dtype=torch.int))
@@ -595,6 +601,9 @@ def index_of_first(values: torch.Tensor, search: torch.Tensor) -> torch.Tensor:
     for i, s in enumerate(search_found):
         widx = aw[where_inverse == i][0]  # Select first match
         out[s] = widx[0]
+
+    if is_scalar:
+        return out.squeeze(0)
     return out
 
 
