@@ -47,7 +47,18 @@ def convert_string_to_array(value: str) -> np.ndarray:
     value = re.sub(line_feed_comma, sub_line_feed, value)
     # Replace nan with np.nan
     value = value.replace("nan", "np.nan")
-    arr = np.array(eval(value))
+    try:
+        arr = np.array(eval(value))
+    except Exception as e:
+        if "invalid syntax" in str(e):
+            # Check if still \n in the string
+            # If so, replace it with a comma
+            if "\n" in value:
+                value = value.replace("\n", ",")
+                arr = np.array(eval(value))  # Try again
+            else:
+                raise ValueError(
+                    "Could not parse the string to an array.") from e
     return arr
 
 
