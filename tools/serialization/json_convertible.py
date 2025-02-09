@@ -222,7 +222,15 @@ class JsonConvertible:
             if not (isinstance(obj, type)) and hasattr(obj, "__hash__") and obj.__hash__ is not None and callable(obj.__hash__) and obj.__hash__() is not None:
                 if obj in memo:
                     # Returning a object reference as marker for already serialized object.
-                    return ObjectReference(uuid=str(memo[obj]), object_type=class_name(obj)).to_dict()
+                    if not no_uuid:
+                        return ObjectReference(uuid=str(memo[obj]), object_type=class_name(obj)).to_dict()
+                    else:
+                        # If uuid is disabled, we cannot use object reference, so we need to copy the object
+                        cp = copy.deepcopy(obj)
+                        fresh_added = True
+                        uid = uuid4()
+                        memo[cp] = uid
+                        obj = cp
                 else:
                     fresh_added = True
                     uid = uuid4()
