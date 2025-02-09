@@ -521,7 +521,8 @@ def process_path(
     allow_none: bool = False,
     interpolate: bool = False,
     interpolate_object: Optional[object] = None,
-    variable_name: Optional[str] = None
+    variable_name: Optional[str] = None,
+    reevaluate: bool = False,
 ) -> Optional[Path]:
     """Preprocesses a path string or Path object.
 
@@ -544,7 +545,8 @@ def process_path(
         The object to lookup for when having interpolation active, by default None
     variable_name : Optional[str], optional
         The current variable name to display in errors, by default None
-
+    reevaluate : bool, optional
+        If the path is a ContextPath, reevaluate it with the given context, by default False.
     Returns
     -------
     Optional[Path]
@@ -567,10 +569,13 @@ def process_path(
         else:
             raise ValueError(
                 f"Path {'for ' + variable_name + ' ' if variable_name is not None else ''}must be set.")
-    if isinstance(path, (Path, ToolsPath)):
+    if isinstance(path, Path):
         return _checks(path)
     elif isinstance(path, ToolsPath):
-        return _checks(path)
+        if reevaluate and isinstance(path, ContextPath):
+            path = path.reevaluate(interpolate_object)
+        pth = _checks(path)
+        return pth
     elif not isinstance(path, str):
         raise ValueError(
             f"Path {'for ' + variable_name + ' ' if variable_name is not None else ''}must be a string or Path object.")

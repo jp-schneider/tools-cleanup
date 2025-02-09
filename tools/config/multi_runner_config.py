@@ -18,6 +18,12 @@ class MultiRunnerConfig(ExperimentConfig):
     config_directory: str = field(default="./config")
     """The directory where the child configs will be stored."""
 
+    config_filename_format: str = field(default="{name}_{index:02d}.yaml")
+    """The format string for the child config filenames."""
+
+    prune_child_experiment_time_on_save: bool = field(default=False)
+    """If True, the child experiment time will be pruned when saving the child config."""
+
     runner_script_path: str = field(default="./run.py")
     """The path to the runner script."""
 

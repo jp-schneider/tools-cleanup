@@ -77,5 +77,5 @@ class ContextPath(Path):
                                            x.variable: x.value for x in self._context},
                                        found_variables=fmt)[0]
         self._path = PathLibPath(new_path)
-        self._context = fmt
+        self._context = fmt[0]
         return self

@@ -17,9 +17,9 @@ from tools.serialization.json_convertible import JsonConvertible
 from tools.util.path_tools import format_os_independent, relpath, replace_file_unallowed_chars, replace_unallowed_chars
 from tools.run.config_runner import ConfigRunner
 from tools.logger.logging import logger
-from tools.util.format import parse_type
+from tools.util.format import parse_type, parse_format_string
 import gc
-
+import copy
 
 class MultiRunner(TrainableRunner):
     """A runner which can run multiple child runners. Typically used to find the best hyperparameters."""
@@ -80,7 +80,12 @@ class MultiRunner(TrainableRunner):
     def build(self, build_children: bool = True, **kwargs) -> None:
         pass
 
-    def save_child_configs(self, directory: str, prefix: Optional[str] = None) -> List[str]:
+    def save_child_configs(self, 
+                           directory: str, 
+                           prefix: Optional[str] = None,
+                           filename_format: Optional[str] = None,
+                           purge_datetime: bool = False,
+                           ) -> List[str]:
         """Saves the configs of the child runners to a directory.
 
         Parameters
@@ -91,6 +96,15 @@ class MultiRunner(TrainableRunner):
         prefix : Optional[str], optional
             The prefix which will be added to the config names, by default None
 
+        filename_format : Optional[str], optional
+            The format string for the filenames, by default None
+            Default: "config_{index}.yaml"
+            Can be an interpolation string with support of all config properties.
+            Example: "{name}_{index}.yaml"
+
+        purge_datetime : bool, optional
+            If the datetime should be purged from the config, by default False
+
         Returns
         -------
         List[str]
@@ -99,19 +113,27 @@ class MultiRunner(TrainableRunner):
         # Create directory if it does not exist
         if not os.path.exists(directory):
             os.makedirs(directory)
+
+        if filename_format is None:
+            num_digits = len(str(len(self.child_configs)))
+            num_fmt = f"{{index:0{num_digits}d}}"
+            filename_format = (f"{prefix}_" if prefix is not None else "") + \
+                f"config_{num_fmt}.yaml"
+
         # Save configs
-        num_digits = len(str(len(self.child_configs)))
-        num_fmt = f"{{:0{num_digits}d}}"
-        fmt = (f"{prefix}_" if prefix is not None else "") + \
-            f"config_{num_fmt}.yaml"
         paths = []
 
         for i, config in enumerate(self.child_configs):
-            base_name = fmt.format(i)
+            base_name = parse_format_string(filename_format, [config], index_offset=i)[0]
             base_name = replace_file_unallowed_chars(base_name)
             path = os.path.join(directory, base_name)
+
+            if purge_datetime and hasattr(config, "experiment_datetime"):
+                config = copy.deepcopy(config)
+                config.experiment_datetime = None
+
             path = config.save_to_file(
-                path, no_uuid=True, no_large_data=True, override=True)
+                path, no_uuid=True, override=True, )
             paths.append(path)
         return paths
 
@@ -129,7 +151,7 @@ class MultiRunner(TrainableRunner):
         preset_output_folder = self.config.preset_output_folder
         job_file_path = self.config.job_file_path
 
-        exp_name_date = f"{self.base_config.name_experiment}_{self.date_created}"
+        exp_name_date = f"{self.base_config.get_experiment_name()}_{self.date_created}"
 
         # Create job file
         if job_file_path is None or (
@@ -175,7 +197,7 @@ class MultiRunner(TrainableRunner):
             raise FileNotFoundError(
                 f"Runner script not found at {runner_script_path}")
 
-        exp_name_date = f"{self.base_config.name_experiment}_{self.date_created}"
+        exp_name_date = f"{self.base_config.get_experiment_name()}_{self.date_created}"
 
         paths = self.save_child_configs(config_directory, exp_name_date)
         runner_script_path = os.path.abspath(runner_script_path)
