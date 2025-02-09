@@ -133,7 +133,7 @@ class MultiRunner(TrainableRunner):
                 config.experiment_datetime = None
 
             path = config.save_to_file(
-                path, no_uuid=True, override=True, )
+                path, no_uuid=True, override=True)
             paths.append(path)
         return paths
 
