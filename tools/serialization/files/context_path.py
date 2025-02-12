@@ -4,7 +4,7 @@ from tools.util.format import parse_format_string, FormatVariable, raise_on_none
 from typing import Any, Dict, List, Tuple, Type, Optional, TypeVar, Union, get_type_hints
 from tools.util.reflection import class_name
 from tools.util.path import Path, PATH_TYPE
-
+from tools.util.diff import flatten_list
 
 class ContextPath(Path):
     """Context path for a file. Path which depends on a context which can be reevaluated once it has changed."""
@@ -58,7 +58,7 @@ class ContextPath(Path):
         fmt = []
         new_path = parse_format_string(
             path, [context], found_variables=fmt, additional_variables=kwargs)[0]
-        fmt = fmt[0]
+        fmt = flatten_list(fmt)
         if len(fmt) == 0:
             return PathLibPath(new_path)
         return cls(new_path, path, fmt)
@@ -74,8 +74,8 @@ class ContextPath(Path):
         fmt = []
         new_path = parse_format_string(self._raw_path, [context],
                                        additional_variables={
-                                           x.variable: x.value for x in self._context},
+                                           x.variable: x.value for x in flatten_list(self._context)},
                                        found_variables=fmt)[0]
         self._path = PathLibPath(new_path)
-        self._context = fmt[0]
+        self._context = flatten_list(fmt)
         return self
