@@ -145,6 +145,7 @@ class VisualNode3D(SceneNode):
                                                             Iterable[Any]]] = None,
                    object_indices_whitelist: Optional[Union[Any,
                                                             Iterable[Any]]] = None,
+                   
                    **kwargs
                    ) -> Figure:
         """Returns a matplotlib 3d plot with the scene.
@@ -179,7 +180,7 @@ class VisualNode3D(SceneNode):
         elev = kwargs.pop("elevation", None)
         azim = kwargs.pop("azimuth", None)
         roll = kwargs.pop("roll", None)
-
+        zoom = kwargs.pop("zoom", None)
 
         if ax is None:
             fig = plt.figure()
@@ -285,7 +286,11 @@ class VisualNode3D(SceneNode):
             if z_lim is not None:
                 ax.set_zlim(z_lim)
 
-            ax.set_box_aspect([1.0, 1.0, 1.0])
+            sba = dict()
+            if zoom is not None:
+                sba["zoom"] = zoom
+
+            ax.set_box_aspect([1.0, 1.0, 1.0], **sba)
             set_axes_equal_3d(ax)
             #ax.set_aspect('equal', adjustable='box')
             # ax.set_box_aspect((np.ptp(all_positions[..., 0]), np.ptp(all_positions[..., 1]), np.ptp(all_positions[..., 2])))
