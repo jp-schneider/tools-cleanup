@@ -36,4 +36,5 @@ class TimedBox3D(JsonConvertible):
     coordinate_system: CoordinateSystem3D = field(default_factory=lambda: CoordinateSystem3D.from_string("rfu"))
     """Coordinate system of the box coordinates."""
 
-    
+    speed: np.ndarray = field(default_factory=lambda: np.array([]))
+    """Speed of the box at each frame. In (x, y, z) format. In m/s."""

@@ -343,7 +343,7 @@ class ArgparserMixin:
 
     @classmethod
     def parse_args(cls,
-                   parser: ArgumentParser,
+                   parser: ArgumentParser = None,
                    add_config_path: bool = True,
                    sep: str = "-",
                    ) -> "ArgparserMixin":
@@ -366,11 +366,12 @@ class ArgparserMixin:
             The instance of the object filled with cli data.
         """
         from tools.logger.logging import logger
+        parser = cls.get_parser(parser, sep=sep)
+
         if add_config_path:
             parser.add_argument("--config-path", type=str,
                                 default=None, required=False)
 
-        parser = cls.get_parser(parser, sep=sep)
         args = parser.parse_args()
 
         config: ArgparserMixin = None

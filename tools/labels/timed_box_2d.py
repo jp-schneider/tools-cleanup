@@ -153,6 +153,17 @@ class TimedBox2D(JsonConvertible):
             images[i] = cv2.rectangle(images[i], tuple(edges[i, 0]), tuple(edges[i, 1]), color[i].astype(int).tolist(), thickness=int(thickness[i]))
         return images
 
+    def get_ll_tr(self) -> np.ndarray:
+        """
+        Returns the lower left and top right corner of the box.
+
+        Returns
+        -------
+        np.ndarray
+            Array of shape [T, 2, 2] representing the lower left and top right corner of the box.
+        """
+        return np.stack([self.center - np.stack([self.width / 2, self.height / 2], axis=-1), 
+                         self.center + np.stack([self.width / 2, self.height / 2], axis=-1)], axis=1)
 
     def inpaint(self,
                 images: np.ndarray,
