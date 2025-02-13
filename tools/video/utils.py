@@ -174,6 +174,9 @@ def write_mask_mp4_generator(
     ----------
     frame_generator : np.ndarray
         Frame generator to write frames to a video in shape HxWxC or HxW. C is either 1 or 3.
+    mask_generator : np.ndarray
+        Mask generator to write frames to a video in shape HxWxC or HxW. C should be the number of masks.
+        Accepts channel masks.
     path : str, optional
         Path to the video file, by default 'test.mp4'
     fps : float, optional
