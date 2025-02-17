@@ -2,12 +2,12 @@ from abc import ABC, abstractmethod
 from typing import Any, Dict, Optional, Union
 
 
-class BaseDataset(ABC):
+class BaseDataset():
     """Abstract dataset definition for all datasets."""
 
     def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
-        
+
     @abstractmethod
     def __getitem__(self, index: int) -> Any:
         """Returns an item at the given index.

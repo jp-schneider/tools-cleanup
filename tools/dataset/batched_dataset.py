@@ -2,7 +2,7 @@ from typing import Dict, Any
 from abc import ABC
 
 
-class BatchedDataset(ABC):
+class BatchedDataset():
     """Dataset that supports splitting in batches and defining indices."""
 
     def __init__(self, batch_size: int = 32, shuffle_in_dataloader: bool = True, **kwargs) -> None:

@@ -25,7 +25,7 @@ from tools.serialization.object_reference import ObjectReference
 
 from tools.util.path_tools import numerated_file_name
 from tools.util.reflection import class_name, dynamic_import, propagate_init_kwargs
-
+import copy
 from tools.error import NoSimpleTypeError, NoIterationTypeError, NoSerializationRuleFoundError
 from uuid import UUID, uuid4
 

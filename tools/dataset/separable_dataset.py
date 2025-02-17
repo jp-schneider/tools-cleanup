@@ -7,17 +7,19 @@ try:
     from sklearn.model_selection import train_test_split
 except ModuleNotFoundError:
     logger.warning("Scikit-learn not installed, using custom implementation.")
+
     def train_test_split(*args, **kwargs):
         raise ModuleNotFoundError("Scikit-learn not installed.")
 import numpy as np
 import os
 from tools.serialization.json_convertible import JsonConvertible
 
-class SeparableDataset(ABC):
 
-    def __init__(self, 
-                 split_seed: int = 946817, 
-                 split_ratio: float = 0.7, 
+class SeparableDataset():
+
+    def __init__(self,
+                 split_seed: int = 946817,
+                 split_ratio: float = 0.7,
                  indices_file: str = None,
                  **kwargs) -> None:
         """Splittable dataset which implements a seed and split ration.
@@ -49,16 +51,17 @@ class SeparableDataset(ABC):
         Returns
         -------
         Tuple[np.ndarray, np.ndarray]
-            Array with train and test indices. 
+            Array with train and test indices.
         """
         if self.training_indices is None or self.validation_indices is None:
-            logger.debug(f"Split indices with seed {self.split_seed} and ratio {self.split_ratio}.")
+            logger.debug(
+                f"Split indices with seed {self.split_seed} and ratio {self.split_ratio}.")
             self.training_indices, self.validation_indices = self._split_indices()
         return self.training_indices, self.validation_indices
 
     def _split_indices(self) -> Tuple[List[int], List[int]]:
         # If indices file is given, load indices from file if exists, else generate new indices
-        
+
         loaded_indices = False
         train_idx = None
         test_idx = None
@@ -67,14 +70,16 @@ class SeparableDataset(ABC):
             if os.path.exists(self.indices_file):
                 index_obj = JsonConvertible.load_from_file(self.indices_file)
                 train_idx = np.array(index_obj['training_indices']).astype(int)
-                test_idx = np.array(index_obj['validation_indices']).astype(int)
+                test_idx = np.array(
+                    index_obj['validation_indices']).astype(int)
                 train_idx = np.sort(train_idx)
                 test_idx = np.sort(test_idx)
                 loaded_indices = True
-                logger.info(f"Loaded splitted indices from {self.indices_file}.")
+                logger.info(
+                    f"Loaded splitted indices from {self.indices_file}.")
             else:
                 pass
-       
+
         if not loaded_indices:
             if not 0.0 <= self.split_ratio <= 1.0:
                 raise ValueError(
@@ -92,13 +97,12 @@ class SeparableDataset(ABC):
                 test_idx = np.arange(0, 0, 1, dtype=int)
             if n_train != 0 and n_test != 0:
                 train_idx, test_idx = train_test_split(np.arange(0, len(self),
-                                                                1, dtype=int),
-                                                    train_size=n_train, test_size=n_test,
-                                                    random_state=self.split_seed, shuffle=True)
+                                                                 1, dtype=int),
+                                                       train_size=n_train, test_size=n_test,
+                                                       random_state=self.split_seed, shuffle=True)
             train_idx = np.sort(train_idx)
             test_idx = np.sort(test_idx)
 
-        
         # Store indices in file
         if self.indices_file is not None and not loaded_indices:
             index_obj = {

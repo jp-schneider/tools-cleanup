@@ -119,6 +119,7 @@ def str_to_bool(value: str) -> bool:
     else:
         raise ValueError(f"Invalid boolean string: {value}")
 
+
 class TimeDeltaTemplate(Template):
     """Class for formating timedelta with strftime like syntax"""
     delimiter = "%"
@@ -153,6 +154,22 @@ def strfdelta(delta: timedelta, format: str = "%D days %H:%M:%S.%f") -> str:
     t = TimeDeltaTemplate(format)
     d = {k: f'{v:02d}' for k, v in d.items()}
     return t.substitute(**d)
+
+
+def preceding_zeros_format(max_value: int) -> str:
+    """Determines the number of preceding zeros for a number.
+
+    Parameters
+    ----------
+    max_value : int
+        The maximum value.
+
+    Returns
+    -------
+    str
+        The format string.
+    """
+    return f"{{:0{len(str(max_value))}d}}"
 
 
 def destinctive_number_float_format(values: Series,
@@ -766,6 +783,7 @@ def get_leading_zeros_format_string(max_number: int) -> str:
     """Gets the format string for leading zeros for strings, directly usable in format strings."""
     return f"{{:{get_leading_zeros_format(max_number)}}}"
 
+
 def consecutive_indices_string(x: VEC_TYPE, slice_sep: str = "-", item_sep: str = ",") -> str:
     """Formats a 1D tensor of (consecutive) indices into a string representation.
 
@@ -803,7 +821,7 @@ def consecutive_indices_string(x: VEC_TYPE, slice_sep: str = "-", item_sep: str 
     grad = x[1:] - x[:-1]
     rets = []
 
-    def _append(l, start, end, step): 
+    def _append(l, start, end, step):
         if start == end:
             l.append(f"{start}")
         elif (end - start) == step:
