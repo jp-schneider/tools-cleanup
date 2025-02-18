@@ -101,7 +101,9 @@ def write_mp4_generator(
         frame_counter: bool = False,
         codec: str = DEFAULT,
         progress_bar: bool = False,
-        progress_factory: Optional[ProgressFactory] = None):
+        progress_factory: Optional[ProgressFactory] = None,
+        frame_counter_offset: int = 0
+):
     """Writes the frames to a video file.
 
     Parameters
@@ -123,6 +125,8 @@ def write_mp4_generator(
         If not set, will use the environment variable VIDEO_CODEC or 'avc1' if not set.
     progress_bar : bool, optional
         Show progress bar, by default False
+    frame_counter_offset : int, optional
+        Offset for the frame counter, by default 0
 
     Raises
     ------
@@ -149,12 +153,15 @@ def write_mp4_generator(
                        inpaint_counter=frame_counter,
                        counter_format=fmt,
                        use_transparency_grid=True,
-                       codec=codec) as writer:
+                       codec=codec,
+                       counter_offset=frame_counter_offset
+                       ) as writer:
         for frame in frame_generator:
             writer.write(frame)
             if progress_bar:
                 bar.update(1)
     return path
+
 
 @filer(default_ext='mp4')
 def write_mask_mp4_generator(

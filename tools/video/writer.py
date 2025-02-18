@@ -109,13 +109,15 @@ class Writer():
     def __init__(self,
                  filename: str,
                  fps: float = 24.0,
-                 codec: str = DEFAULT):
+                 codec: str = DEFAULT,
+                 counter_offset: int = 0
+                 ):
         self.numpify_image = ToNumpyImage(output_dtype=np.uint8)
         self.filename = filename
         self.fourcc = self.get_fourcc(codec)
         self.fps = fps
         self.writer = None
-        self.frame_counter = 0
+        self.frame_counter = counter_offset
 
     def __enter__(self):
         return self
