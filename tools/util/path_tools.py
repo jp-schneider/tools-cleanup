@@ -213,6 +213,7 @@ def read_directory_recursive(
     path : str
         The path to read the files from.
         Can contain a regex pattern with named groups at any point. "/" is used as a separator.
+        Must be a path in linux format e.g. call (format_os_independent).
 
     parser : Optional[Dict[str, Callable]], optional
         A parser dictionary which can contain keys which should correspond to named groups in the pattern,
