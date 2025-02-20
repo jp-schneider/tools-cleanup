@@ -16,8 +16,11 @@ class InpaintWriter(Writer):
                  counter_format: str = "{:03d}",
                  use_transparency_grid: bool = True,
                  fps: float = 24.0,
-                 codec: str = DEFAULT):
-        super().__init__(filename=filename, fps=fps, codec=codec)
+                 codec: str = DEFAULT,
+                 counter_offset: int = 0
+                 ):
+        super().__init__(filename=filename, fps=fps,
+                         codec=codec, counter_offset=counter_offset)
         self.inpaint_title = inpaint_title
         self.inpaint_counter = inpaint_counter
         self.counter_format = counter_format

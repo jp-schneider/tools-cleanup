@@ -18,7 +18,8 @@ except Exception as err:
     if "cannot import name 'Base' from 'PIL.ExifTags'" in str(err):
         from PIL.ExifTags import TAGS as Exif_Tags
         from enum import Enum
-        ExifTagsBase = Enum('ExifTagsBase', {v: k for k, v in Exif_Tags.items()})
+        ExifTagsBase = Enum(
+            'ExifTagsBase', {v: k for k, v in Exif_Tags.items()})
     else:
         ExifTagsBase = object
 
@@ -787,6 +788,50 @@ def rgba_to_rgb(img: VEC_TYPE, base_color: VEC_TYPE) -> VEC_TYPE:
     return img
 
 
+def check_text_overlap(occupied_area: np.ndarray,
+                       position: Tuple[int, int],
+                       text_width: int,
+                       text_height: int) -> Tuple[int, np.ndarray]:
+    """
+    Checks for overlap with image boundaries and occupied areas.
+
+    Parameters
+    ----------
+    occupied_area : np.ndarray
+        Binary mask of the already occupied area.
+
+    position : Tuple[int, int]
+        Position of the text in the image.
+        X, Y coordinates.
+
+    text_width : int
+        Width of the text.
+
+    text_height : int
+        Height of the text.
+
+    Returns
+    -------
+    Tuple[int, np.ndarray]
+        Tuple of the overlap area and the new occupied area.
+    """
+    H, W = occupied_area.shape
+    col, row = position
+
+    if row < 0 or row + text_height > H or col < 0 or col + text_width > W:
+        return float('inf'), occupied_area
+
+    overlap_area = 0
+
+    text_mask = np.zeros_like(occupied_area, dtype=bool)
+    text_mask[int(row):int(row + text_height), int(col)
+                  :int(col + text_width)] = True
+    overlap_with_occupied = np.sum(occupied_area[text_mask])
+    overlap_area += overlap_with_occupied
+
+    return overlap_area, np.logical_or(occupied_area, text_mask)
+
+
 def put_text(
         img: VEC_TYPE,
         text: str,
@@ -803,6 +848,8 @@ def put_text(
         background_stroke: Optional[int] = None,
         background_stroke_color: Any = "black",
         padding: int = 5,
+        check_overlap: bool = True,
+        overlap_area: List[np.ndarray] = None
 ) -> np.ndarray:
     """Renders text on an image with a given placement or absolute position and alignment.
 
@@ -867,6 +914,14 @@ def put_text(
     padding : int, optional
         Inner padding of the background stroke w.r.t the drawn text, by default 5
 
+    check_overlap : bool, optional
+        Whether to check for overlap with the image boundaries and occupied areas, by default True
+
+    overlap_area : List[np.ndarray], optional
+        List containing the occupied area of the image, by default None
+        First element should be the occupied area as a binary mask.
+        Will be updated with the new occupied area and can be reused.
+
     Returns
     -------
     np.ndarray
@@ -925,10 +980,22 @@ def put_text(
                         horizontal_alignment, family, size, thickness)
 
     position = (position[0] + offset[0], position[1] + offset[1])
+    text_width, text_height = cv.getTextSize(text, family, size, thickness)[0]
+
+    if check_overlap and overlap_area is not None:
+        ova = overlap_area[0] if len(overlap_area) > 0 else None
+        best_pos, ova = find_best_text_position(
+            img.shape[0], img.shape[1],
+            position, offset, text_width, text_height, ova)
+        if best_pos is not None:
+            if len(overlap_area) > 0:
+                overlap_area[0] = ova
+            else:
+                overlap_area.append(ova)
+            position = best_pos
 
     if background_color is not None:
-        text_width, text_height = cv.getTextSize(
-            text, family, size, thickness)[0]
+
         p = np.array(position)
         bl = p + np.array([-padding, padding])
         tr = p + np.array([text_width, -text_height]) + \
@@ -955,6 +1022,63 @@ def put_text(
         cv.LINE_AA,
     )
     return img
+
+
+def find_best_text_position(
+    image_height: int,
+    image_width: int,
+    position: Tuple[int, int],
+    offset: Tuple[int, int],
+    text_width: int,
+    text_height: int,
+    occupied_area: Optional[np.ndarray] = None
+) -> Tuple[Optional[Tuple[int, int]], np.ndarray]:  # Return tuple of position and occupied_area
+    """Finds the best position for text, minimizing overlap."""
+
+    if occupied_area is None:
+        occupied_area = np.zeros(
+            (image_height, image_width), dtype=bool)  # Initialize if None
+
+    best_position = None
+    best_overlap = float('inf')
+    # Keep track of the best occupied area
+    best_occupied_area = occupied_area.copy()
+
+    search_center = position
+
+    max_search_radius = 20  # Initial maximum search radius
+    search_radius = 1  # Start small
+    num_search_steps = 8  # Number of search steps in a circle
+
+    while search_radius <= max_search_radius:
+        for i in range(num_search_steps):
+            angle = 2 * np.pi * i / num_search_steps
+            row_offset = int(round(search_radius * np.sin(angle)))
+            col_offset = int(round(search_radius * np.cos(angle)))
+
+            candidate_position = (search_center[0] + offset[0] + col_offset,
+                                  search_center[1] + offset[1] + row_offset)
+
+            overlap, new_occupied_area = check_text_overlap(
+                occupied_area, candidate_position, text_width, text_height)  # Get new occupied area
+
+            if overlap < best_overlap:
+                best_overlap = overlap
+                best_position = candidate_position
+                best_occupied_area = new_occupied_area  # Update best occupied area
+            if overlap == 0:
+                break
+
+        if best_overlap > 0:  # Increase search radius if still overlapping
+            search_radius *= 2  # Or any other factor
+        else:  # If a good position is found exit the loop
+            break
+
+    if best_position is None:
+        return None, occupied_area
+
+    # Return best position and updated occupied area
+    return best_position, best_occupied_area
 
 
 def alpha_compose_with_background_grid(
@@ -1138,7 +1262,8 @@ def n_layers_alpha_compositing_numpy(
 
     alpha_chain = np.cumprod(rolled_inv_alpha, axis=0)
     sorted_per_layer_alphas = alpha_chain * sorted_alphas
-    fused_color = (sorted_per_layer_alphas[..., np.newaxis].repeat(3, axis=-1) * sorted_colors).sum(axis=0)  # (B, 3)
+    fused_color = (sorted_per_layer_alphas[..., np.newaxis].repeat(
+        3, axis=-1) * sorted_colors).sum(axis=0)  # (B, 3)
     out_image = np.zeros((B, 4))
     out_image[:, :3] = fused_color  # (3, H, W)
     out_image[:, 3] = sorted_per_layer_alphas.sum(axis=0)

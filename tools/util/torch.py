@@ -582,6 +582,8 @@ def index_of_first(values: torch.Tensor, search: torch.Tensor) -> torch.Tensor:
     torch.Tensor
         Index tensor of the first occurence of the search tensor in the values tensor.
     """
+    values = tensorify(values)
+    search = tensorify(search)
     is_scalar = False
     E = tuple(values.shape)
 

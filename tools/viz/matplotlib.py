@@ -1727,7 +1727,7 @@ def plot_mask(image: VEC_TYPE,
               background_value: int = 0,
               ignore_class: Optional[int] = None,
               _colors: Optional[List[str]] = None,
-              color: str = "#5999cb",
+              color: Union[List[str], str] = "#5999cb",
               contour_linewidths: float = 2,
               mask_mode: Literal['channel_mask',
                                  'value_mask'] = 'channel_mask',
@@ -1744,6 +1744,8 @@ def plot_mask(image: VEC_TYPE,
               inpaint_title: bool = DEFAULT,
               inpaint_title_kwargs: Optional[Dict[str, Any]] = None,
               legend: bool = DEFAULT,
+              overlap_area: Optional[List[np.ndarray]] = None,
+              transparent_image: bool = False,
               **kwargs) -> Figure:  # type: ignore
     import matplotlib.patches as mpatches
     from tools.transforms import ToNumpyImage
@@ -1801,7 +1803,7 @@ def plot_mask(image: VEC_TYPE,
     else:
         fig = ax.figure
 
-    if image is not None:
+    if image is not None and not transparent_image:
         ax.imshow(image, cmap=image_cmap)
 
     cmap = plt.get_cmap("alpha_binary")
@@ -1811,12 +1813,50 @@ def plot_mask(image: VEC_TYPE,
         colors = color
     else:
         cmap = plt.get_cmap(cmap)
-        colors = [color] if not multi_class else cmap(
-            [x % cmap.N for x in range(channel_mask.shape[-1])])
+        if not multi_class:
+            if isinstance(color, (list)):
+                if len(color) == 1:
+                    if len(color[0]) not in [3, 4]:
+                        raise ValueError("Color should be RGB or RGBA.")
+                    else:
+                        colors = color
+                elif len(color) not in [3, 4]:
+                    raise ValueError("Color should be RGB or RGBA.")
+                else:
+                    colors = [color]
+        else:
+            colors = cmap(
+                [x % cmap.N for x in range(channel_mask.shape[-1])])
 
     m_inv = np.ones(mask.shape[:-1])
 
     patches = []
+
+    if overlap_area is None:
+        overlap_area = list()
+
+    def _inpaint_indices(mask, image, color):
+        if np.any(mask):
+            com = np.argwhere(mask).mean(axis=0).round().astype(int)[::-1]
+            background_color = "white" if np.mean(
+                color[:3]) < 0.5 else "black"
+            stroke_color = "black" if np.mean(
+                color[:3]) < 0.5 else "white"
+            inp = put_text(image, f"{label}",
+                           placement=None,
+                           position=com,
+                           vertical_alignment='center',
+                           horizontal_alignment='center',
+                           background_color=background_color,
+                           background_stroke_color=stroke_color,
+                           background_stroke=1,
+                           color=color,
+                           check_overlap=True,
+                           overlap_area=overlap_area
+                           )
+            return inp
+        return image
+
     for i in range(channel_mask.shape[-1]):
         m = channel_mask[..., i]
         label = None
@@ -1835,23 +1875,14 @@ def plot_mask(image: VEC_TYPE,
             c_img[:, :, :] = _color
             c_img[:, :, -1] = c_img[:, :, -1] * m
             if inpaint_indices:
-                if np.any(m):
-                    com = np.argwhere(m).mean(axis=0).round().astype(int)[::-1]
-                    background_color = "white" if np.mean(
-                        _color[:3]) < 0.5 else "black"
-                    stroke_color = "black" if np.mean(
-                        _color[:3]) < 0.5 else "white"
-                    inp = put_text(c_img, f"{label}",
-                                   placement=None,
-                                   position=com,
-                                   vertical_alignment='center',
-                                   horizontal_alignment='center',
-                                   background_color=background_color,
-                                   background_stroke_color=stroke_color,
-                                   background_stroke=1,
-                                   color=_color)
-                    c_img = inp
+                c_img = _inpaint_indices(m, c_img, _color)
             ax.imshow(c_img)
+        if not filled_contours and inpaint_indices:
+            _color = to_rgba(colors[i][:])
+            c_img = np.zeros((*m.shape, 4))
+            c_img = _inpaint_indices(m, c_img, _color)
+            ax.imshow(c_img)
+
         if label is not None:
             patches.append(mpatches.Patch(color=colors[i], label=label))
 

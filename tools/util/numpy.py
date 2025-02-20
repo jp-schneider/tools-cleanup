@@ -96,6 +96,8 @@ def index_of_first(values: np.ndarray, search: np.ndarray) -> np.ndarray:
     np.ndarray
         Index array of the first occurence of the search value in the values array.
     """
+    values = numpyify(values)
+    search = numpyify(search)
     E = values.shape
     S = search.shape
     values_rep = values[..., None]
