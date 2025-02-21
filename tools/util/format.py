@@ -17,6 +17,7 @@ from tools.util.typing import DEFAULT, MISSING
 from tools.util.reflection import dynamic_import
 from traceback import FrameSummary, extract_stack
 from types import FrameType, TracebackType
+import pandas as pd
 from dataclasses import dataclass, field
 CAMEL_SEPERATOR_PATTERN = re.compile(
     r'((?<!^)(?<!_))((?=[A-Z][a-z])|((?<=[a-z])(?=[A-Z])))')
@@ -782,6 +783,22 @@ def get_leading_zeros_format(max_number: int) -> str:
 def get_leading_zeros_format_string(max_number: int) -> str:
     """Gets the format string for leading zeros for strings, directly usable in format strings."""
     return f"{{:{get_leading_zeros_format(max_number)}}}"
+
+
+def format_dataframe_string(df: pd.DataFrame) -> str:
+    """Formats a dataframe into a string representation.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        The dataframe to format.
+
+    Returns
+    -------
+    str
+        The formatted string.
+    """
+    return '\t' + df.to_string().replace('\n', '\n\t')
 
 
 def consecutive_indices_string(x: VEC_TYPE, slice_sep: str = "-", item_sep: str = ",") -> str:

@@ -46,7 +46,7 @@ tools_logger: logging.Logger = get_logger(
 """Logger for the tools package."""
 
 
-def basic_config(level: int = logging.INFO):
+def basic_config(level: int = logging.INFO, filename: Optional[str] = None, reinit: bool = False) -> None:
     """Basic logging configuration with sysout logger.
 
     Parameters
@@ -58,15 +58,22 @@ def basic_config(level: int = logging.INFO):
     root.setLevel(level)
     _fmt = '%(asctime)s.%(msecs)03d %(levelname)-8s [%(filename)s:%(lineno)d] %(message)s'
     _date_fmt = '%Y-%m-%d:%H:%M:%S'
+    handlers = []
+    if filename is not None:
+        fh = logging.FileHandler(filename)
+        fh.setFormatter(logging.Formatter(_fmt, _date_fmt))
+        handlers.append(fh)
     logging.basicConfig(
-                        #format=_fmt,
-                        format="%(message)s",
-                        datefmt=_date_fmt,
-                        level=level,
-                        handlers=[RichHandler(rich_tracebacks=True, console=Console(width=255))]
-                        )
-    #fmt = logging.Formatter(_fmt, _date_fmt)
-    #root.handlers[0].setFormatter(fmt)
+        # format=_fmt,
+        format="%(message)s",
+        datefmt=_date_fmt,
+        level=level,
+        handlers=[RichHandler(
+            rich_tracebacks=True, console=Console(width=255))] + handlers,
+        force=reinit
+    )
+    # fmt = logging.Formatter(_fmt, _date_fmt)
+    # root.handlers[0].setFormatter(fmt)
     # Set default for other loggers
     if check_package("matplotlib"):
         logger = logging.getLogger("matplotlib")

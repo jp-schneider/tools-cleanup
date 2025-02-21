@@ -1824,6 +1824,8 @@ def plot_mask(image: VEC_TYPE,
                     raise ValueError("Color should be RGB or RGBA.")
                 else:
                     colors = [color]
+            else:
+                colors = [color]
         else:
             colors = cmap(
                 [x % cmap.N for x in range(channel_mask.shape[-1])])

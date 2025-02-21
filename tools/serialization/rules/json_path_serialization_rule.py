@@ -9,6 +9,7 @@ import os
 from tools.util.path_tools import relpath, format_os_independent
 from tools.util.format import parse_format_string
 
+
 class PathValueWrapper(JsonConvertible):
 
     __type_alias__ = "Path"
@@ -24,13 +25,21 @@ class PathValueWrapper(JsonConvertible):
             return
         path_str = str(value)
         if convert_path_to_cwd_relative:
-            path_str = relpath(os.getcwd(), path_str,
-                               is_from_file=False, is_to_file=not value.is_dir())
+            try:
+                path_str = relpath(os.getcwd(), path_str,
+                                   is_from_file=False, is_to_file=not value.is_dir())
+            except ValueError as e:
+                if "path is on mount" in str(e):
+                    # Use absolute path if path is on mount
+                    path_str = os.path.abspath(path_str)
+                else:
+                    raise e
         self.value = format_os_independent(path_str)
 
     def to_python(self) -> Path:
         path = parse_format_string(self.value, [dict()])[0]
         return Path(path)
+
 
 class JsonPathSerializationRule(JsonSerializationRule):
     """For the default singleton value."""

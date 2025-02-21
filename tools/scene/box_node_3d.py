@@ -9,11 +9,15 @@ import torch
 from tools.viz.matplotlib import parse_color_rgba
 from tools.labels.timed_box_3d import TimedBox3D
 
+
 class BoxNode3D(DiscreteModuleSceneNode3D, VisualNode3D):
     """Pytorch Module class for a 3D box."""
 
-    _size : torch.Tensor
-    """Size of the box as (width, height, depth) vector."""
+    size: torch.Tensor
+    """
+    Size of the box as (width, height, depth) vector.
+    Width is along the x-axis, height is along the y-axis, depth is along the z-axis.
+    """
 
     def __init__(self,
                  name: Optional[str] = None,
@@ -23,9 +27,11 @@ class BoxNode3D(DiscreteModuleSceneNode3D, VisualNode3D):
         super().__init__(name=name, **kwargs)
         # Test if size is given
         if size is None:
-            size = torch.tensor([1., 1., 1.], dtype=self.dtype, device=self._translation.device)
+            size = torch.tensor([1., 1., 1.], dtype=self.dtype,
+                                device=self._translation.device)
         else:
-            size = tensorify(size, dtype=self.dtype, device=self._translation.device)
+            size = tensorify(size, dtype=self.dtype,
+                             device=self._translation.device)
         if size.dim() != 1 or size.shape[0] != 3:
             raise ValueError("Size must be a 3D vector.")
         self.size = size
@@ -36,7 +42,7 @@ class BoxNode3D(DiscreteModuleSceneNode3D, VisualNode3D):
         When viewed in a right-handed coordinate system x-right, y-forward, z-up (matpotlib)
         from the top, the first 4 corners are the bottom face, the last 4 corners are the top face.
         Starting from the bottom left corner and going anti-clockwise.
-        
+
         Returns
         -------
         torch.Tensor
@@ -48,19 +54,19 @@ class BoxNode3D(DiscreteModuleSceneNode3D, VisualNode3D):
         corners = torch.tensor([
             # Bottom fact
             [-1, -1, -1],
-            [ 1, -1, -1],
-            [ 1,  1, -1],
+            [1, -1, -1],
+            [1,  1, -1],
             [-1,  1, -1],
             # Top face
             [-1, -1,  1],
-            [ 1, -1,  1],
-            [ 1,  1,  1],
+            [1, -1,  1],
+            [1,  1,  1],
             [-1,  1,  1]], dtype=self.dtype, device=self._translation.device)
         corners = corners * half_size
         return corners
 
-    def plot_corners(self, 
-                     ax: Axes, 
+    def plot_corners(self,
+                     ax: Axes,
                      box_color: Any = "yellow",
                      plot_box_edge_markers: bool = False,
                      bottom_start_corner_color: Any = "red",
@@ -73,9 +79,9 @@ class BoxNode3D(DiscreteModuleSceneNode3D, VisualNode3D):
         top_start_corner_color = parse_color_rgba(top_start_corner_color)
 
         lines = [
-            (0, 1), (1, 2), (2, 3), (3, 0), # Bottom face
-            (4, 5), (5, 6), (6, 7), (7, 4), # Top face
-            (0, 4), (1, 5), (2, 6), (3, 7) # Connections
+            (0, 1), (1, 2), (2, 3), (3, 0),  # Bottom face
+            (4, 5), (5, 6), (6, 7), (7, 4),  # Top face
+            (0, 4), (1, 5), (2, 6), (3, 7)  # Connections
         ]
         for line in lines:
             ax.plot(*global_corners[line, :].T, color=box_color)
@@ -87,11 +93,9 @@ class BoxNode3D(DiscreteModuleSceneNode3D, VisualNode3D):
 
             # Add arrow pointing to the next corner
             ax.quiver(*global_corners[0, :3], *((global_corners[1, :3] - global_corners[0, :3]) / 5),
-                    color=bottom_start_corner_color)
+                      color=bottom_start_corner_color)
             ax.quiver(*global_corners[4, :3], *((global_corners[5, :3] - global_corners[4, :3]) / 5),
-                        color=top_start_corner_color)
-
-
+                      color=top_start_corner_color)
 
     def plot_object(self, ax: Axes, **kwargs):
         fig = super().plot_object(ax, **kwargs)
