@@ -50,14 +50,20 @@ class JsonContextPathSerializationRule(JsonSerializationRule):
         return [ContextPathValueWrapper]
 
     def forward(
-            self, value: Any,
+            self,
+            value: ContextPath,
             name: str,
             object_context: Dict[str, Any],
             handle_unmatched: Literal['identity', 'raise', 'jsonpickle'],
             no_context_paths: bool = False,
+            use_raw_context_paths: bool = False,
             **kwargs) -> Any:
-        if no_context_paths:
-            return format_os_independent(str(value))
+
+        if no_context_paths or use_raw_context_paths:
+            if no_context_paths:
+                return format_os_independent(str(value))
+            else:
+                return format_os_independent(value.raw_path)
         else:
             return ContextPathValueWrapper(value).to_json_dict(handle_unmatched=handle_unmatched, **kwargs)
 
