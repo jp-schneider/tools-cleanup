@@ -63,7 +63,7 @@ class JsonContextPathSerializationRule(JsonSerializationRule):
             if no_context_paths:
                 return format_os_independent(str(value))
             else:
-                return format_os_independent(value.raw_path)
+                return format_os_independent(value._raw_path)
         else:
             return ContextPathValueWrapper(value).to_json_dict(handle_unmatched=handle_unmatched, **kwargs)
 

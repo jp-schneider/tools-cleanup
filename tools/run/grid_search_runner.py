@@ -1,4 +1,4 @@
-from typing import Any, Literal, Union
+from typing import Any, Literal, Union, Dict
 from tools.config.config import Config
 from tools.run.multi_runner import MultiRunner
 from tools.config.grid_search_config import GridSearchConfig, MultiKey, MultiValue
@@ -90,7 +90,11 @@ class GridSearchRunner(MultiRunner):
             raise ValueError(
                 f"Inconsistent key and value types. Key: {key}, Value: {value}")
 
-    def build(self, build_children: bool = True, **kwargs) -> None:
+    def build(self, 
+            build_children: bool = True, 
+            config_prepare_kwargs: Dict[str, Any] = None,
+            **kwargs) -> None:
+        config_prepare_kwargs = config_prepare_kwargs if config_prepare_kwargs is not None else dict()
         # Build the config for each child runner by doing a cartesian product of the param_grid and insert it in base config
         keys = self.config.param_grid.keys()
         values = self.config.param_grid.values()
@@ -108,7 +112,7 @@ class GridSearchRunner(MultiRunner):
                     self._set_values(config, k, v_, non_existing_handling="warning")
 
                 # Create child runner
-                config.prepare()
+                config.prepare(**config_prepare_kwargs)
 
                 rnr = self.runner_type(config=config)
                 # Create magic property diff-config to directly indicate the difference between the base config and the child config

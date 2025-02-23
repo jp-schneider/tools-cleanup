@@ -85,6 +85,7 @@ class MultiRunner(TrainableRunner):
                            prefix: Optional[str] = None,
                            filename_format: Optional[str] = None,
                            purge_datetime: bool = False,
+                           use_raw_context_paths: bool = True
                            ) -> List[str]:
         """Saves the configs of the child runners to a directory.
 
@@ -133,7 +134,7 @@ class MultiRunner(TrainableRunner):
                 config.experiment_datetime = None
 
             path = config.save_to_file(
-                path, no_uuid=True, override=True)
+                path, no_uuid=True, override=True, use_raw_context_paths=use_raw_context_paths)
             paths.append(path)
         return paths
 
