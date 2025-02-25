@@ -1883,7 +1883,7 @@ def plot_mask(image: VEC_TYPE,
             _color = to_rgba(colors[i][:])
             c_img = np.zeros((*m.shape, 4))
             c_img = _inpaint_indices(m, c_img, _color)
-            ax.imshow(c_img)
+            ax.imshow(c_img, zorder=1000)
 
         if label is not None:
             patches.append(mpatches.Patch(color=colors[i], label=label))

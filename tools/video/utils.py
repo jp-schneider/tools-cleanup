@@ -1,4 +1,4 @@
-from typing import Generator, Optional
+from typing import Generator, Optional, Union, Tuple, Literal, Optional
 import numpy as np
 import cv2
 from tqdm.auto import tqdm
@@ -166,7 +166,7 @@ def write_mp4_generator(
 @filer(default_ext='mp4')
 def write_mask_mp4_generator(
         frame_generator: Generator[np.ndarray, None, None],
-        mask_generator: Generator[np.ndarray, None, None],
+        mask_generator: Generator[Union[np.ndarray, Tuple[np.ndarray, np.ndarray]], None, None],
         path: str = 'test.mp4',
         fps: float = 24.0,
         title: str = None,
@@ -174,6 +174,7 @@ def write_mask_mp4_generator(
         darkening_background_alpha: float = 0.5,
         codec: str = DEFAULT,
         progress_bar: bool = False,
+        backend: Literal["opencv", "matplotlib"] = "opencv",
         progress_factory: Optional[ProgressFactory] = None):
     """Writes the frames to a video file.
 
@@ -228,7 +229,31 @@ def write_mask_mp4_generator(
                        codec=codec) as writer:
         for frame in frame_generator:
             masks = next(mask_generator)
-            inpainted_frame = inpaint_masks(frame, masks)
+            oids = None
+            if isinstance(masks, tuple):
+                masks, oids = masks
+            if backend == "opencv":
+                inpainted_frame = inpaint_masks(frame, masks)
+            elif backend == "matplotlib":
+                from tools.viz.matplotlib import plot_mask, figure_to_numpy
+                import matplotlib.pyplot as plt
+                with plt.ioff():
+                    fig = plot_mask(frame,
+                                    masks,
+                                    labels=[
+                                        str(x) for x in oids] if oids is not None else None,
+                                    inpaint_indices=True,
+                                    filled_contours=False,
+                                    lined_contours=True,
+                                    legend=False, tight=True,
+                                    inpaint_title=False,
+                                    overlap_area=[],
+                                    darkening_background=darkening_background_alpha,
+                                    )
+                    inpainted_frame = figure_to_numpy(fig)
+                    plt.close(fig)
+            else:
+                raise ValueError(f"Unsupported backend: {backend}.")
             writer.write(inpainted_frame)
             if progress_bar:
                 bar.update(1)
