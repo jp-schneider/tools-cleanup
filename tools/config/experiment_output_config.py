@@ -73,15 +73,21 @@ class ExperimentOutputConfig(OutputConfig):
     def second(self) -> int:
         return self.experiment_datetime.second
 
-    def prepare(self):
+    def prepare(self, 
+        create_output_path: bool = True,
+        reevaluate_output_path: bool = True,
+        ):
         super().prepare()
         if self.experiment_datetime is None:
             self.experiment_datetime = datetime.now()
 
         self.output_path = process_path(self.output_path,
-                                        make_exist=True,
-                                        interpolate=True,
-                                        interpolate_object=self, variable_name="output_path")
+                                            make_exist=create_output_path,
+                                            interpolate=True,
+                                            interpolate_object=self, 
+                                            variable_name="output_path",
+                                            reevaluate=reevaluate_output_path
+                                        )
 
     experiment_logger: Literal["tensorboard",
                                "wandb"] = field(default="tensorboard")
