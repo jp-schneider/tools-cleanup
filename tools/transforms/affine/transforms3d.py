@@ -591,6 +591,26 @@ def scale_matrix(vector: VEC_TYPE,
     return mat
 
 
+@torch.jit.script
+def _vector_angle(v1: torch.Tensor, v2: torch.Tensor) -> torch.Tensor:
+    """Computes the angle between two vectors.
+
+    Parameters
+    ----------
+    v1 : torch.Tensor
+        The first input vector Shape ([..., B], 3)
+    v2 : torch.Tensor
+        The second input vector Shape ([..., B], 3)
+
+    Returns
+    -------
+    torch.Tensor
+        Angle between vector. Shape ([..., B])
+    """
+    return torch.acos((v1 * v2).sum(dim=-1) / (torch.norm(v1, dim=-1) * torch.norm(v2, dim=-1)))
+
+
+@as_tensors()
 def vector_angle(v1: VEC_TYPE, v2: VEC_TYPE) -> torch.Tensor:
     """Computes the angle between vector v1 and v2.
 
@@ -606,7 +626,7 @@ def vector_angle(v1: VEC_TYPE, v2: VEC_TYPE) -> torch.Tensor:
     torch.Tensor
         Angle between vector.
     """
-    return torch.acos(torch.dot(v1, v2) / (torch.norm(v1, keepdim=True) * torch.norm(v2, keepdim=True)))
+    return torch.acos((v1 * v2).sum(dim=-1) / (torch.norm(v1, dim=-1) * torch.norm(v2, dim=-1)))
 
 
 @torch.jit.script
@@ -674,14 +694,20 @@ def vector_angle_3d(v1: VEC_TYPE, v2: VEC_TYPE, output_mode: Literal["deg", "rad
         ret = torch.rad2deg(ret)
     return ret
 
+
 @torch.jit.script
-def _rotmat_from_vectors(a: torch.Tensor, b: torch.Tensor) -> torch.Tensor:
+def _rotmat_from_vectors(a: torch.Tensor, b: torch.Tensor, atol: float = 1e-6) -> torch.Tensor:
     """
     Returns a rotation matricies that rotates vectors a into vectors b.
-    
+
     Good explanation can be found here:
     https://math.stackexchange.com/questions/180418/calculate-rotation-matrix-to-align-vector-a-to-vector-b-in-3d/897677
-    
+
+    If the vectors are parallel, the rotation matrix will be the identity matrix.
+
+    If the vectors are antiparallel, the rotation matrix will be a rotation around the x axis by 180 degrees.
+    E.g this will not necessarily produce the expected result, depeding on the context.
+
     Parameters
     ----------
     a : torch.Tensor
@@ -700,7 +726,8 @@ def _rotmat_from_vectors(a: torch.Tensor, b: torch.Tensor) -> torch.Tensor:
     b, bshp = flatten_batch_dims(b, -2)
 
     if shp != bshp:
-        raise ValueError("a and b must have the same shape, got {} and {}".format(shp, bshp))
+        raise ValueError(
+            "a and b must have the same shape, got {} and {}".format(shp, bshp))
 
     b = b.to(a.dtype)
 
@@ -711,7 +738,7 @@ def _rotmat_from_vectors(a: torch.Tensor, b: torch.Tensor) -> torch.Tensor:
     B, C = a.shape
 
     v = torch.cross(a, b, dim=-1)
-    c = (a * b).sum(-1) # Dot product
+    c = (a * b).sum(-1)  # Dot product
     s = torch.norm(v, dim=-1)
 
     kmat = torch.zeros((3, 3), device=a.device)[None, ...].repeat(B, 1, 1)
@@ -722,19 +749,49 @@ def _rotmat_from_vectors(a: torch.Tensor, b: torch.Tensor) -> torch.Tensor:
     kmat[:, 2, 0] = -v[..., 1]
     kmat[:, 2, 1] = v[..., 0]
 
-    Id = torch.eye(3, device=a.device, dtype=a.dtype)[None, ...].expand(B, -1, -1) 
+    Id = torch.eye(3, device=a.device, dtype=a.dtype)[
+        None, ...].expand(B, -1, -1)
 
     kProd = torch.bmm(kmat, kmat)
-    return (Id + kmat + kProd) * (((1 - c) / (s ** 2))[:, None, None])
+    res = (Id + kmat + kProd) * (((1 - c) / (s ** 2))[:, None, None])
+
+    # Check for parallel vectors
+    parallel = torch.isclose(v.norm(p=2, dim=-1), torch.tensor(
+        0., device=a.device, dtype=a.dtype), atol=atol)  # Check for parallel vectors
+
+    if torch.any(parallel):
+        # Check for antiparallel vectors
+        pvec = _vector_angle(a[parallel], b[parallel])
+        antiparallel = torch.isclose(pvec, torch.tensor(
+            torch.pi, device=a.device, dtype=a.dtype), atol=atol).any(dim=-1)
+
+        real_antiparallel = torch.zeros_like(parallel, dtype=torch.bool)
+        real_antiparallel[parallel] = antiparallel
+
+        real_parallel = torch.zeros_like(parallel, dtype=torch.bool)
+        real_parallel[parallel] = ~antiparallel
+
+        # If antiparallel rotate around x axis by 180 degrees
+        if torch.any(real_antiparallel):
+            R = torch.eye(3, device=a.device, dtype=a.dtype)
+            R[1, 1] = -1
+            R[1, 2] = 0
+            R[2, 1] = 0
+            R[2, 2] = -1
+            res[real_antiparallel] = R
+        if torch.any(real_parallel):
+            res[real_parallel] = torch.eye(3, device=a.device, dtype=a.dtype)
+    return res
+
 
 @as_tensors()
 def rotmat_from_vectors(a: VEC_TYPE, b: VEC_TYPE) -> VEC_TYPE:
     """
     Returns a rotation matricies that rotates vectors a into vectors b.
-    
+
     Good explanation can be found here:
     https://math.stackexchange.com/questions/180418/calculate-rotation-matrix-to-align-vector-a-to-vector-b-in-3d/897677
-    
+
     Parameters
     ----------
     a : VEC_TYPE
@@ -769,6 +826,7 @@ def _norm_rotation_angles(v1: torch.Tensor) -> torch.Tensor:
     pi_normed = torch.fmod(v1, 2 * np.pi)
     above_half = pi_normed > np.pi
     return torch.where(above_half, pi_normed - 2 * np.pi, pi_normed)
+
 
 @as_tensors()
 def norm_rotation_angles(v1: VEC_TYPE) -> VEC_TYPE:
