@@ -3,7 +3,8 @@ from typing import Any, Callable, Optional, Tuple, Type, Union, Set, Dict, List
 from types import ModuleType, FunctionType
 import importlib
 
-from tools.util.typing import NOTSET, PATHNONE
+from tools.util.typing import NOTSET, PATHNONE, MISSING
+from collections.abc import Sequence
 
 IMPORT_CACHE = {}
 
@@ -312,14 +313,54 @@ def propagate_init_kwargs(cls_or_obj: Type, type_in_mro: Type, kwargs: Dict[str,
     return accepted_params, left_params
 
 
+def _get_attribute(obj: Any, path: str, default: Any = NOTSET) -> Any:
+    if isinstance(obj, dict):
+        # Check if path is a key in the dictionary
+        return obj.get(path, default)
+    if path.isnumeric():
+        # Check if path is a number, if so check if obj is a Sequnece
+        if not isinstance(obj, Sequence):
+            raise ValueError(f"Object {obj} is not a sequence, but path {path} is a number.")
+        index = int(path)
+        if index >= len(obj):
+            return NOTSET
+        return obj[index]
+    return getattr(obj, path, default)
+
+def _set_attribute(obj: Any, path: str, value: Any):
+    if isinstance(obj, dict):
+        # Check if path is a key in the dictionary
+        if value == NOTSET:
+            obj.pop(path, None)
+            return
+        else:
+            obj[path] = value
+            return
+    if path.isnumeric():
+        # Check if path is a number, if so check if obj is a Sequnece
+        if not isinstance(obj, Sequence):
+            raise ValueError(f"Object {obj} is not a sequence, but path {path} is a number.")
+        index = int(path)
+        if index >= len(obj) and value != NOTSET:
+            raise ValueError(f"Index {index} is out of bounds for object {obj}.")
+        if value == NOTSET:
+            if index < len(obj):
+                # Remove the value from the sequence
+                obj.pop(index)
+            return
+        obj[index] = value
+        return
+    setattr(obj, path, value)
+    return
+
 def _get_nested_value(obj: Any, path: str, default: Any = NOTSET) -> Any:
     if obj is None and len(path) > 0:
         return PATHNONE
     if '.' in path:
         path, rest = path.split('.', 1)
-        return _get_nested_value(getattr(obj, path, default), rest, default)
+        return _get_nested_value(_get_attribute(obj, path, default), rest, default)
     else:
-        return getattr(obj, path, default)
+        return _get_attribute(obj, path, default)
 
 
 def _set_nested_value(obj: Any, path: str, value: Any):
@@ -327,19 +368,12 @@ def _set_nested_value(obj: Any, path: str, value: Any):
         return
     if '.' in path:
         path, rest = path.split('.', 1)
-        current_obj = getattr(obj, path)
+        current_obj = _get_attribute(obj, path, MISSING)
+        if current_obj == MISSING:
+            raise ValueError(f"Object {obj} does not have attribute {path}.")
         return _set_nested_value(current_obj, rest, value)
     else:
-        if value == NOTSET:
-            if isinstance(obj, dict):
-                obj.pop(path, None)
-            else:
-                delattr(obj, path)
-        else:
-            if isinstance(obj, dict):
-                obj[path] = value
-            else:
-                setattr(obj, path, value)
+        _set_attribute(obj, path, value)
 
 
 def set_nested_value(obj: Any, path: str, value: Any):
