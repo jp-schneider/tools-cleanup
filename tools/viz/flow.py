@@ -336,7 +336,8 @@ def _flow_uv_to_color(flow: VEC_TYPE) -> torch.Tensor:
 
     flow, shape = flatten_batch_dims(flow, -4)
 
-    B, H, W, _ = flow.shape
+    # Expand wheel to batch size
+    wheel_polar = wheel_polar.expand(flow.shape[0], -1, -1, -1)
 
     if (flow.abs().amax(dim=(-2, -1)) > 1).any():
         raise ValueError("Flow values must be normalized to [-1, 1].")
