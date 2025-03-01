@@ -1,24 +1,26 @@
 from dataclasses import field, dataclass
 from enum import Enum
-from tools.util.format import parse_enum    
+from tools.util.format import parse_enum
 from typing import Union, List, Tuple, Optional
-import numpy as np 
+import numpy as np
 from tools.util.typing import VEC_TYPE
 from tools.util.numpy import flatten_batch_dims, unflatten_batch_dims
 from tools.util.numpy import numpyify
 from tools.serialization.json_convertible import JsonConvertible
+
 
 class Handiness(Enum):
     """Handiness of a coordinate system."""
 
     LEFT = "l"
     """Left-handed coordinate system."""
-    
+
     RIGHT = "r"
     """Right-handed coordinate system."""
 
     def __str__(self):
         return self.value
+
 
 class AxisSpecifier(Enum):
     """Axis specifier for 3D coordinate systems, defines the axis direction from a neutral view."""
@@ -32,7 +34,7 @@ class AxisSpecifier(Enum):
 
     def __str__(self):
         return self.name
-    
+
     def opposide_identifier(self) -> "AxisSpecifier":
         """
         Returns the opposite axis specifier.
@@ -86,7 +88,7 @@ class AxisSpecifier(Enum):
 
         Corresponds to a right-handed coordinate system, where v1 x v2 * v3 >= 0.
         From viewers perspective, z would be backward, x would be right and y would be up.
-        
+
         Returns
         -------
         np.ndarray
@@ -109,6 +111,7 @@ class AxisSpecifier(Enum):
         else:
             raise ValueError("Unknown axis specifier.")
 
+
 @dataclass
 class CoordinateSystem3D(JsonConvertible):
     """Definition class for a 3D coordinate system."""
@@ -124,7 +127,7 @@ class CoordinateSystem3D(JsonConvertible):
 
     def validate(self):
         """Validate the coordinate system.
-        
+
         Raises
         ------
         ValueError
@@ -169,12 +172,11 @@ class CoordinateSystem3D(JsonConvertible):
         else:
             raise ValueError("Coordinate system is degenerate.")
 
-
     def get_permutation_matrix(self) -> np.ndarray:
         """
         Get the permutation matrix of the coordinate system,
-        which is defined as the permutation matrix which transforms 
-        a native right-handed coordinate system (x-right, y-up, z-backward) 
+        which is defined as the permutation matrix which transforms
+        a native right-handed coordinate system (x-right, y-up, z-backward)
         to the current coordinate system.
 
         Returns
@@ -224,11 +226,11 @@ class CoordinateSystem3D(JsonConvertible):
             if validate:
                 value.validate()
             return value
-        
+
         value = value.lower()
         if len(value) != 3:
             raise ValueError("Invalid coordinate system string length.")
-        system =  cls(
+        system = cls(
             x=parse_enum(AxisSpecifier, value[0]),
             y=parse_enum(AxisSpecifier, value[1]),
             z=parse_enum(AxisSpecifier, value[2])
@@ -236,11 +238,10 @@ class CoordinateSystem3D(JsonConvertible):
         if validate:
             system.validate()
         return system
-    
 
     def convert_vector(self,
                        other: Union[str, "CoordinateSystem3D"],
-                          vector: VEC_TYPE) -> np.ndarray:
+                       vector: VEC_TYPE) -> np.ndarray:
         """
         Convert a vector from this coordinate system to another coordinate system.
 
@@ -269,8 +270,8 @@ class CoordinateSystem3D(JsonConvertible):
 
         return unflatten_batch_dims(new_vector, shp)
 
-    def convert(self, 
-                other: Union[str, "CoordinateSystem3D"], 
+    def convert(self,
+                other: Union[str, "CoordinateSystem3D"],
                 matrix: VEC_TYPE) -> np.ndarray:
         """
         Convert a vector from this coordinate system to another coordinate system.
@@ -279,7 +280,7 @@ class CoordinateSystem3D(JsonConvertible):
         ----------
         other : CoordinateSystem3D
             The other coordinate system to convert to.
-        
+
         matrix : np.ndarray
             A affine transformation matrix of shape ([..., B] 4, 4) which should be converted to the other coordinate system.
 
@@ -290,19 +291,21 @@ class CoordinateSystem3D(JsonConvertible):
         """
         if isinstance(other, str):
             other = CoordinateSystem3D.from_string(other, validate=True)
-        
+
         matrix, shp = flatten_batch_dims(numpyify(matrix), -3)
-        
+
         B, _, _ = matrix.shape
 
         rots = matrix[..., :3, :3]
         positions = matrix[..., :3, 3]
 
-        new_positions = self.convert_vector(other, positions)
+        current_to_native = np.linalg.inv(self.get_permutation_matrix())
+        native_to_other = other.get_permutation_matrix()
+        current_to_other = native_to_other @ current_to_native
 
-        converted_matrix = np.eye(4, dtype=matrix.dtype)[np.newaxis].repeat(B, axis=0)
-        converted_matrix[..., :3, :3] = rots
-        converted_matrix[..., :3, 3] = new_positions
+        A = np.eye(4, dtype=matrix.dtype)
+        A[:3, :3] = current_to_other
+        A = A[np.newaxis].repeat(B, axis=0)
 
+        converted_matrix = A @ matrix @ np.linalg.inv(A)
         return unflatten_batch_dims(converted_matrix, shp)
-

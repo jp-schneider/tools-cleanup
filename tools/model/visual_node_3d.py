@@ -19,12 +19,11 @@ class VisualNode3D(SceneNode):
 
     # region Visualization
 
-
     def _plot_scene_should_plot_object(self,
-                        object_indices_blacklist: Optional[Set[Any]] = None,
-                        object_indices_whitelist: Optional[Set[Any]] = None,
-                        **kwargs
-                        ) -> bool:
+                                       object_indices_blacklist: Optional[Set[Any]] = None,
+                                       object_indices_whitelist: Optional[Set[Any]] = None,
+                                       **kwargs
+                                       ) -> bool:
         """Checks if the object should be plotted.
 
         Parameters
@@ -56,6 +55,59 @@ class VisualNode3D(SceneNode):
                 return False
         return True
 
+    def _get_global_node_coordinate_system_vectors(self,
+                                                   length: float = 1.0,
+                                                   global_positions: Optional[torch.Tensor] = None,
+                                                   **kwargs
+                                                   ) -> torch.Tensor:
+        """Gets the coordinate system vectors of the node.
+
+        Parameters
+        ----------
+        length : float, optional
+            The length of the coordinate system vectors, by default 1.0.
+
+        global_positions : Optional[torch.Tensor], optional
+            The global positions of the node, by default None.
+            Will be calculated if not provided.
+            Should be of shape ([...,B], 4, 4).
+
+        Returns
+        -------
+        torch.Tensor
+            The coordinate system vectors in global coordinates.
+            Shape: ([...,B], 3, 2, 3).
+            Explanation:
+            - The first dims are for the batch.
+            - The 3rd to last dims are for the 3 vectors (x, y, z).
+            - The 2nd to last dims are for the start and end of the vector.
+            - The last is the 3D coordinate.
+            2 Dim is for start (=global position) and end (=global position @ vector).
+        """
+        from tools.util.torch import flatten_batch_dims, unflatten_batch_dims
+
+        if global_positions is None:
+            pos = self.get_global_position(**kwargs)
+
+        pos, shp = flatten_batch_dims(pos, -3)
+        cord_vec_x = component_position_matrix(
+            x=length, dtype=pos.dtype, device=pos.device).repeat(pos.shape[0], 1, 1)
+        cord_vec_y = component_position_matrix(
+            y=length, dtype=pos.dtype, device=pos.device).repeat(pos.shape[0], 1, 1)
+        cord_vec_z = component_position_matrix(
+            z=length, dtype=pos.dtype, device=pos.device).repeat(pos.shape[0], 1, 1)
+
+        x_vec = torch.bmm(pos, cord_vec_x)[..., :3, 3]
+        y_vec = torch.bmm(pos, cord_vec_y)[..., :3, 3]
+        z_vec = torch.bmm(pos, cord_vec_z)[..., :3, 3]
+
+        vecs = torch.stack([x_vec, y_vec, z_vec], dim=-2)  # ([...,B], 3, 3)
+        vecs = vecs.unsqueeze(-2)  # ([...,B], 3, 1, 3)
+
+        # ([...,B], 3, 1, 3)
+        start = pos[..., :3, 3].unsqueeze(-2).unsqueeze(-2).repeat(1, 3, 1, 1)
+        v = torch.cat([start, vecs], dim=-2)  # ([...,B], 3, 2, 3)
+        return unflatten_batch_dims(v, shp)
 
     def _plot_scene_get_positions(
             self,
@@ -67,65 +119,65 @@ class VisualNode3D(SceneNode):
             object_indices_whitelist: Optional[Set[Any]] = None,
             child_args: Optional[Dict[str, Any]] = None,
             **kwargs
-            ) -> List[
-            Tuple[torch.Tensor, 
-                  List[torch.Tensor], 
+    ) -> List[
+            Tuple[torch.Tensor,
+                  List[torch.Tensor],
                   List[str]]]:
-            # Get global position
-            pos = component.get_global_position(**kwargs)
-            origin = pos[..., :3, 3]
+        # Get global position
+        pos = component.get_global_position(**kwargs)
+        origin = pos[..., :3, 3]
 
-            if len(pos.shape) == 2:
-                pos = pos.unsqueeze(0)
+        if len(pos.shape) == 2:
+            pos = pos.unsqueeze(0)
 
-            if len(origin.shape) == 1:
-                origin = origin.unsqueeze(0)
+        if len(origin.shape) == 1:
+            origin = origin.unsqueeze(0)
 
-            T, _, _ = pos.shape
+        T, _, _ = pos.shape
 
-            # 3 Vectors indicating local coordinate system
-            cord_vec_x = component_position_matrix(
-                x=coordinate_system_indicator_length, dtype=pos.dtype, device=pos.device).repeat(pos.shape[0], 1, 1)
-            cord_vec_y = component_position_matrix(
-                y=coordinate_system_indicator_length, dtype=pos.dtype, device=pos.device).repeat(pos.shape[0], 1, 1)
-            cord_vec_z = component_position_matrix(
-                z=coordinate_system_indicator_length, dtype=pos.dtype, device=pos.device).repeat(pos.shape[0], 1, 1)
+        # 3 Vectors indicating local coordinate system
+        cord_vec_x = component_position_matrix(
+            x=coordinate_system_indicator_length, dtype=pos.dtype, device=pos.device).repeat(pos.shape[0], 1, 1)
+        cord_vec_y = component_position_matrix(
+            y=coordinate_system_indicator_length, dtype=pos.dtype, device=pos.device).repeat(pos.shape[0], 1, 1)
+        cord_vec_z = component_position_matrix(
+            z=coordinate_system_indicator_length, dtype=pos.dtype, device=pos.device).repeat(pos.shape[0], 1, 1)
 
-            x_vec = torch.bmm(pos, cord_vec_x)[..., :3, 3]
-            y_vec = torch.bmm(pos, cord_vec_y)[..., :3, 3]
-            z_vec = torch.bmm(pos, cord_vec_z)[..., :3, 3]
+        x_vec = torch.bmm(pos, cord_vec_x)[..., :3, 3]
+        y_vec = torch.bmm(pos, cord_vec_y)[..., :3, 3]
+        z_vec = torch.bmm(pos, cord_vec_z)[..., :3, 3]
 
-            vecs = []
-            for b in range(T):
-                local_vecs = [x_vec[b], y_vec[b], z_vec[b]]
-                texts = ["x", "y", "z"]
-                vecs.append((origin[b], local_vecs, texts))
+        vecs = []
+        for b in range(T):
+            local_vecs = [x_vec[b], y_vec[b], z_vec[b]]
+            texts = ["x", "y", "z"]
+            vecs.append((origin[b], local_vecs, texts))
 
-            for child in component.get_scene_children():
-                child: VisualNode3D
-                target = child.get_global_position()[..., :3, 3]
-                should_plot = child._plot_scene_should_plot_object(
-                    object_indices_blacklist, 
-                    object_indices_whitelist,
-                    **child_args
-                    )
-                if should_plot:
-                    if plot_line_to_child:
-                        local_vecs.append(target)
-                        texts.append("")
-                    child.plot_object(ax, **child_args)
-                child_vecs = self._plot_scene_get_positions(child,
-                                                            ax=ax,
-                                                            coordinate_system_indicator_length=coordinate_system_indicator_length,
-                                                            plot_line_to_child=plot_line_to_child,
-                                                            object_indices_blacklist=object_indices_blacklist,
-                                                            object_indices_whitelist=object_indices_whitelist,
-                                                            child_args=child_args,
-                                                            **kwargs
-                                                            )
-                for cv in child_vecs:
-                    vecs.append(cv)
-            return vecs
+        for child in component.get_scene_children():
+            child: VisualNode3D
+            target = child.get_global_position()[..., :3, 3]
+            should_plot = child._plot_scene_should_plot_object(
+                object_indices_blacklist,
+                object_indices_whitelist,
+                **child_args
+            )
+            if should_plot:
+                if plot_line_to_child:
+                    local_vecs.append(target)
+                    texts.append("")
+                child.plot_object(ax, **child_args)
+            child_vecs = self._plot_scene_get_positions(child,
+                                                        ax=ax,
+                                                        coordinate_system_indicator_length=coordinate_system_indicator_length,
+                                                        plot_line_to_child=plot_line_to_child,
+                                                        object_indices_blacklist=object_indices_blacklist,
+                                                        object_indices_whitelist=object_indices_whitelist,
+                                                        child_args=child_args,
+                                                        **kwargs
+                                                        )
+            for cv in child_vecs:
+                vecs.append(cv)
+        return vecs
 
     @saveable()
     def plot_scene(self,
@@ -145,7 +197,7 @@ class VisualNode3D(SceneNode):
                                                             Iterable[Any]]] = None,
                    object_indices_whitelist: Optional[Union[Any,
                                                             Iterable[Any]]] = None,
-                   
+
                    **kwargs
                    ) -> Figure:
         """Returns a matplotlib 3d plot with the scene.
@@ -191,31 +243,31 @@ class VisualNode3D(SceneNode):
             fig = ax.get_figure()
 
         args = dict(
-                    plot_coordinate_systems=plot_coordinate_systems,
-                    plot_coordinate_annotations=plot_coordinate_annotations,
-                    coordinate_system_indicator_length=coordinate_system_indicator_length)
+            plot_coordinate_systems=plot_coordinate_systems,
+            plot_coordinate_annotations=plot_coordinate_annotations,
+            coordinate_system_indicator_length=coordinate_system_indicator_length)
         args.update(kwargs)
 
         # Plot self
 
         should_plot = self._plot_scene_should_plot_object(
-            object_indices_blacklist, 
+            object_indices_blacklist,
             object_indices_whitelist,
             **kwargs
-            )
+        )
         if should_plot:
             self.plot_object(ax, **args)
 
         # Plot all children recursively, and get the positions of the coordinate systems
         vec_positions = self._plot_scene_get_positions(
-            self, ax, 
+            self, ax,
             coordinate_system_indicator_length=coordinate_system_indicator_length,
             plot_line_to_child=plot_line_to_child,
             object_indices_blacklist=object_indices_blacklist,
             object_indices_whitelist=object_indices_whitelist,
             child_args=args,
             **kwargs)
-        
+
         start_x = []
         start_y = []
         start_z = []
@@ -292,9 +344,9 @@ class VisualNode3D(SceneNode):
 
             ax.set_box_aspect([1.0, 1.0, 1.0], **sba)
             set_axes_equal_3d(ax)
-            #ax.set_aspect('equal', adjustable='box')
+            # ax.set_aspect('equal', adjustable='box')
             # ax.set_box_aspect((np.ptp(all_positions[..., 0]), np.ptp(all_positions[..., 1]), np.ptp(all_positions[..., 2])))
-        
+
         if elev or azim or roll:
             ax.view_init(elev=elev, azim=azim, roll=roll)
         return fig
