@@ -32,6 +32,8 @@ def get_exit_code(err: Optional[Exception]) -> int:
 
 
 def write_exit(config: OutputConfig, exit_code: int, err: Optional[Exception] = None):
+    if config is None or not hasattr(config, "output_folder"):
+        return
     try:
         # Write exit code within a text file called exit_{exit_code}.txt
         path = os.path.join(config.output_folder, f"exit_{exit_code:03d}.txt")
