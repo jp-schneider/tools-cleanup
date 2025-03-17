@@ -171,11 +171,12 @@ def write_mask_mp4_generator(
         fps: float = 24.0,
         title: str = None,
         frame_counter: bool = False,
-        darkening_background_alpha: float = 0.5,
         codec: str = DEFAULT,
         progress_bar: bool = False,
         backend: Literal["opencv", "matplotlib"] = "opencv",
-        progress_factory: Optional[ProgressFactory] = None):
+        progress_factory: Optional[ProgressFactory] = None,
+        **kwargs
+):
     """Writes the frames to a video file.
 
     Parameters
@@ -233,7 +234,7 @@ def write_mask_mp4_generator(
             if isinstance(masks, tuple):
                 masks, oids = masks
             if backend == "opencv":
-                inpainted_frame = inpaint_masks(frame, masks)
+                inpainted_frame = inpaint_masks(frame, masks, **kwargs)
             elif backend == "matplotlib":
                 from tools.viz.matplotlib import plot_mask, figure_to_numpy
                 import matplotlib.pyplot as plt
@@ -242,13 +243,11 @@ def write_mask_mp4_generator(
                                     masks,
                                     labels=[
                                         str(x) for x in oids] if oids is not None else None,
-                                    inpaint_indices=True,
-                                    filled_contours=False,
-                                    lined_contours=True,
-                                    legend=False, tight=True,
+                                    legend=False,
+                                    tight=True,
                                     inpaint_title=False,
                                     overlap_area=[],
-                                    darkening_background=darkening_background_alpha,
+                                    **kwargs
                                     )
                     inpainted_frame = figure_to_numpy(fig)
                     plt.close(fig)
