@@ -1097,17 +1097,20 @@ def plot_as_image(data: VEC_TYPE,
                     interpolation = 'nearest'
                 _cmap.set_bad(color='white')
 
-            if inpaint_title == True or (inpaint_title == DEFAULT and tight):
-                _image = _inpaint_title(
-                    _image, _title, **(inpaint_title_kwargs if inpaint_title_kwargs is not None else dict()))
-
             ax.imshow(_image, vmin=vmin, vmax=vmax, cmap=_cmap,
                       interpolation=interpolation, **imshow_kw)
 
-            if not tight:
+            if inpaint_title == True or (inpaint_title == DEFAULT and tight):
+                _inp_raw = np.zeros(
+                    tuple(_image.shape[:2] + (4,)), dtype=np.uint8)
+                _inpaint_img = _inpaint_title(
+                    _inp_raw, _title, **(inpaint_title_kwargs if inpaint_title_kwargs is not None else dict()))
+                ax.imshow(_inpaint_img)
+            elif not tight:
                 if _use_mathjax:
                     _title = f"${_title}$"
                 ax.set_title(_title)
+
             if colorbar:
                 _cbar_format = None
                 if colorbar_tick_format is not None:
