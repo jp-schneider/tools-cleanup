@@ -1448,6 +1448,10 @@ def plot_vectors(y: VEC_TYPE,
             raise ValueError("Mode should be either plot or scatter.")
         handles.append(handle)
 
+    if mode == "bar":
+        from matplotlib.ticker import (MultipleLocator, AutoMinorLocator)
+        ax.xaxis.set_minor_locator(MultipleLocator(1))
+
     if xlim is not None:
         ax.set_xlim(*tuple(xlim))
     if ylim is not None:

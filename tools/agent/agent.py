@@ -6,12 +6,16 @@ from tools.event.agent_save_event_args import AgentSaveEventArgs
 from tools.event.model_step_event_args import ModelStepEventArgs
 from datetime import datetime
 from tools.event import Event
+from tools.logger.experiment_logger import ExperimentLogger
 from tools.util.torch import VEC_TYPE
 from tools.util.path_tools import open_folder
 
 
 class Agent(ABC):
     """Abstract agent implementation."""
+
+    logger: Optional[ExperimentLogger] = None
+    """Experiment logger instance."""
 
     def __init__(self,
                  name: Optional[str] = None,
@@ -78,6 +82,8 @@ class Agent(ABC):
             self.agent_directory = agent_directory
 
         self.progress_bar = True
+
+        self.logger = None
         self._attach_events()
 
     def get_shared_event_context(self) -> Dict[str, Any]:

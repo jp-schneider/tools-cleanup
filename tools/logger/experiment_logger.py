@@ -2,9 +2,9 @@ from abc import abstractmethod
 import logging
 from ast import Import
 import time as pytime
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union, TYPE_CHECKING
 
-from tools.agent.agent import Agent
+
 from tools.config.experiment_output_config import ExperimentOutputConfig
 from tools.metric.metric_entry import MetricEntry
 from tools.util.path import PATH_TYPE
@@ -29,9 +29,15 @@ from tools.event import ModelStepEventArgs
 from tools.event.torch_model_step_event_args import TorchModelStepEventArgs
 from tools.agent.util import Tracker
 from tools.agent.util import LearningMode, LearningScope
-from tools.agent.torch_agent import TorchAgent
 from tools.serialization import ObjectEncoder, JsonConvertible
 from tools.config.experiment_config import ExperimentConfig
+
+if TYPE_CHECKING:
+    from tools.agent.agent import Agent
+    from tools.agent.torch_agent import TorchAgent
+else:
+    Agent = None
+    TorchAgent = None
 
 
 class ExperimentLogger():
