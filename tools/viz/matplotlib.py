@@ -1347,6 +1347,9 @@ def plot_vectors(y: VEC_TYPE,
                  xlabel: Optional[str] = None,
                  ylabel: Optional[str] = None,
                  tick_right: bool = False,
+                 xticks: Optional[Union[List[str], List[float]]] = None,
+                 xticks_rotation: Optional[float] = None,
+                 xticks_horizontal_alignment: Optional[str] = None,
                  ) -> Figure:
     """Gets a matplotlib line figure with a plot of vectors.
 
@@ -1392,6 +1395,12 @@ def plot_vectors(y: VEC_TYPE,
 
     tick_right : bool, optional
         If the ticks should be on the right side, by default False
+
+    xticks : Optional[Tuple[List[float], List[str]]], optional
+        X ticks for the plot, by default None
+        Specifies the
+        1. Positions of the ticks
+        2. Labels of the ticks
 
     Returns
     -------
@@ -1442,8 +1451,9 @@ def plot_vectors(y: VEC_TYPE,
         elif mode == "bar":
             position = x + i * bar_width
             # Center the bars
-            position = position - bar_width * y.shape[-1] / 2
-            handle = ax.bar(position, y[:, i], width=bar_width, label=label[i])
+            position = position - (bar_width * y.shape[-1]) / 2
+            handle = ax.bar(
+                position, y[:, i], width=bar_width, label=label[i], align="edge")
         else:
             raise ValueError("Mode should be either plot or scatter.")
         handles.append(handle)
@@ -1451,6 +1461,11 @@ def plot_vectors(y: VEC_TYPE,
     if mode == "bar":
         from matplotlib.ticker import (MultipleLocator, AutoMinorLocator)
         ax.xaxis.set_minor_locator(MultipleLocator(1))
+
+    if xticks is not None:
+        tpos, tlab = xticks
+        ax.set_xticks(ticks=tpos, labels=tlab,
+                      rotation=xticks_rotation, ha=xticks_horizontal_alignment)
 
     if xlim is not None:
         ax.set_xlim(*tuple(xlim))
