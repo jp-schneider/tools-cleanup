@@ -21,7 +21,6 @@ from tools.util.torch import flatten_batch_dims, tensorify, unflatten_batch_dims
 from tools.viz.matplotlib import saveable
 
 
-
 @torch.jit.script
 def global_to_local(
     global_position: torch.Tensor,
@@ -47,7 +46,7 @@ def global_to_local(
     v, v_batch_shape = flatten_batch_dims(
         v, -2)
     B = v.shape[0]
-    
+
     glob_mat, _ = flatten_batch_dims(global_position, -3)
     B_N = glob_mat.shape[0]
 
@@ -55,8 +54,9 @@ def global_to_local(
         if B_N == 1:
             glob_mat = glob_mat.repeat(B, 1, 1)
         else:
-            raise ValueError("Batch dimensions of v and global_position must match.")
-        
+            raise ValueError(
+                "Batch dimensions of v and global_position must match.")
+
     # Check if last dim = 3, if 3 add w
     if v.shape[-1] == 3:
         v = torch.cat([v, torch.ones_like(v[..., :1])], dim=-1)
@@ -93,7 +93,7 @@ def local_to_global(
     v, v_batch_shape = flatten_batch_dims(
         v, -2)
     B = v.shape[0]
-    
+
     glob_mat, _ = flatten_batch_dims(global_position, -3)
     B_N = glob_mat.shape[0]
 
@@ -101,14 +101,16 @@ def local_to_global(
         if B_N == 1:
             glob_mat = glob_mat.repeat(B, 1, 1)
         else:
-            raise ValueError("Batch dimensions of v and global_position must match.")
-        
+            raise ValueError(
+                "Batch dimensions of v and global_position must match.")
+
     if v.shape[-1] == 3:
         v = torch.cat([v, torch.ones_like(v[..., :1])], dim=-1)
 
     res = torch.bmm(glob_mat, v.unsqueeze(-1)).squeeze(-1)
     res = res.reshape(B, 4)
     return unflatten_batch_dims(res, v_batch_shape)
+
 
 class DiscreteModuleSceneNode3D(ModuleSceneNode3D):
     """Pytorch Module class for nodes within a scene which have discrete positions."""
@@ -346,5 +348,5 @@ class DiscreteModuleSceneNode3D(ModuleSceneNode3D):
         """
         glob_mat = self.get_global_position(**kwargs)
         return global_to_local(glob_mat, v)
-    
+
     # endregion
