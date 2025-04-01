@@ -1119,3 +1119,104 @@ def compute_ray_plane_intersections(
         t * ray_v[~is_not_intersecting]  # Intersection points for unlimited planes
 
     return unflatten_batch_dims(intersection_points, plane_shape)
+
+
+def align_rectangles(rect1: torch.Tensor, rect2: torch.Tensor):
+    """
+    Aligns two rectangles using Procrustes analysis and returns the transformation matrix
+    to transform the first rectangle to the second rectangle.
+
+    Parameters
+    ----------
+    rect1 : torch.Tensor
+        The first rectangle. Shape: (B, P, 3)
+
+    rect2 : torch.Tensor
+        The second rectangle. Shape: (B, P, 3)
+
+    Returns
+    -------
+    torch.Tensor
+        The transformation matrix. Shape: (B, 4, 4)
+    """
+    rect1, shp = flatten_batch_dims(rect1, -3)
+    rect2, _ = flatten_batch_dims(rect2, -3)
+
+    B, P, _ = rect1.shape
+    if rect2.shape != (B, P, 3):
+        raise ValueError("The input rectangles must have the same shape.")
+
+    # Center the rectangles
+    center1 = rect1.mean(dim=-2)
+    center2 = rect2.mean(dim=-2)
+
+    rect1_centered = rect1 - center1.unsqueeze(-2).expand_as(rect1)
+    rect2_centered = rect2 - center2.unsqueeze(-2).expand_as(rect1)
+
+    # Calculate the optimal rotation using Procrustes analysis
+    H = torch.bmm(
+        rect2_centered[:, :3].transpose(-2, -1),
+        rect1_centered[:, :3]
+    )
+
+    U, S, Vh = torch.linalg.svd(H)
+    V = Vh.mH
+
+    R = torch.bmm(U, V.transpose(-2, -1))
+
+    # Calculate the translation
+    t = center2 - torch.bmm(R, center1.unsqueeze(-1))[..., 0]
+
+    T = torch.eye(4, dtype=rect1.dtype, device=rect1.device)[
+        None, ...].repeat(B, 1, 1)
+    T[..., :3, :3] = R  # Rotation matrix
+    T[..., :3, 3] = t  # Translation vector
+    T[..., 3, 3] = 1
+
+    # Sanity check
+    # tf = torch.bmm(T.unsqueeze(1).expand(-1, P, -1, -1).reshape(B*P, 4, 4), torch.cat([rect1.reshape(B*P, 3).unsqueeze(-1), torch.ones((B * P, 1, 1))], dim=-2))[:, :3, 0].reshape(B, P, 3)
+    # torch.allclose(rect2, tf, atol=1e-6)
+    return unflatten_batch_dims(T, shp)
+
+
+def plane_eval(p0: torch.Tensor, n: torch.Tensor, values: torch.Tensor) -> torch.Tensor:
+    """Evaluate the plane equation at the given points
+
+    Parameters
+    ----------
+    p0 : torch.Tensor
+        The point on the plane (3D vector) Shape: ([... B], 3)
+
+    n : torch.Tensor
+        The normal vector of the plane (3D vector) Shape: ([... B], 3)
+
+    values : torch.Tensor
+        The values to evaluate at the given (x, y) points (2D vector) Shape: ([... B], 2)
+
+    Returns
+    -------
+    torch.Tensor
+        The evaluated values at the given points (3D vector) Shape: ([... B], 3)
+    """
+    p0, _ = flatten_batch_dims(p0, -2)
+    n, _ = flatten_batch_dims(n, -2)
+    values, shp = flatten_batch_dims(values, -2)
+
+    Np0, C = p0.shape
+    Nn, C = n.shape
+    Nv, C = values.shape
+
+    if Np0 != Nv or Np0 != Nv:
+        if Np0 == 1:
+            p0 = p0.expand(Nv, -1)
+        else:
+            raise ValueError("p0, n and values must have the same batch size")
+        if Nn == 1:
+            n = n.expand(Nv, -1)
+        else:
+            raise ValueError("p0, n and values must have the same batch size")
+    z = (torch.bmm(n.unsqueeze(1), p0.unsqueeze(-1)).squeeze(-1) -
+         n[..., 0:1] * values[..., 0:1] - n[..., 1:2] * values[..., 1:2]) / n[..., 2:3]
+
+    zr = torch.cat([values[..., :2], z], dim=-1)
+    return unflatten_batch_dims(zr, shp)
