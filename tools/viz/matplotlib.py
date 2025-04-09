@@ -1439,7 +1439,8 @@ def plot_vectors(y: VEC_TYPE,
         fig = ax.figure
 
     if bar_width is None and mode == "bar":
-        bar_width = np.amin((x[1:] - x[:-1])) / (1.5 * y.shape[-1])
+        bar_width = (np.amin((x[1:] - x[:-1])) if len(x)
+                     > 1 else 1) / (1.5 * y.shape[-1])
 
     handles = []
 
@@ -1464,6 +1465,8 @@ def plot_vectors(y: VEC_TYPE,
 
     if xticks is not None:
         tpos, tlab = xticks
+        if xticks_horizontal_alignment is None:
+            xticks_horizontal_alignment = "center"
         ax.set_xticks(ticks=tpos, labels=tlab,
                       rotation=xticks_rotation, ha=xticks_horizontal_alignment)
 

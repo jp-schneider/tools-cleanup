@@ -611,22 +611,27 @@ def _vector_angle(v1: torch.Tensor, v2: torch.Tensor) -> torch.Tensor:
 
 
 @as_tensors()
-def vector_angle(v1: VEC_TYPE, v2: VEC_TYPE) -> torch.Tensor:
+def vector_angle(v1: VEC_TYPE, v2: VEC_TYPE, mode: Literal["acos", "tan2"] = "acos") -> torch.Tensor:
     """Computes the angle between vector v1 and v2.
 
     Parameters
     ----------
     v1 : VEC_TYPE
-        The first input vector
+        The first input vector, shape (..., 3)
     v2 : VEC_TYPE
-        The second input vector
+        The second input vector, shape (..., 3)
 
     Returns
     -------
     torch.Tensor
-        Angle between vector.
+        Angle between vector. shape (...,)
     """
-    return torch.acos((v1 * v2).sum(dim=-1) / (torch.norm(v1, dim=-1) * torch.norm(v2, dim=-1)))
+    if mode == "acos":
+        return torch.acos((v1 * v2).sum(dim=-1) / (torch.norm(v1, dim=-1) * torch.norm(v2, dim=-1)))
+    elif mode == "tan2":
+        return torch.atan2(torch.cross(v1, v2, dim=-1).norm(p="fro", dim=-1), (v1 * v2).sum(dim=-1))
+    else:
+        raise ValueError("mode must be either 'acos' or 'tan2'")
 
 
 @torch.jit.script
@@ -1179,6 +1184,68 @@ def align_rectangles(rect1: torch.Tensor, rect2: torch.Tensor):
     return unflatten_batch_dims(T, shp)
 
 
+def find_plane(points: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+    """
+    Find the best-fit plane for a set of points using least squares.
+
+
+
+    Effectively, this function computes the plane equation Ax + By + Cz + D = 0
+
+    Parameters
+    ----------
+    points : torch.Tensor
+        The input points. Shape: (B, P, 3)
+        P should be at least 3 to solve the plane equation.
+
+    Returns
+    -------
+    Tuple[torch.Tensor, torch.Tensor]
+        A tuple containing the centeroid of the found plane and its normal vector.
+
+
+    """
+    points, shp = flatten_batch_dims(points, -3)
+    BS, P, _ = points.shape
+
+    # Compute the centroid of the points
+    centroid = points.mean(dim=-2)
+
+    # Center the points around the centroid
+    centered_points = points - centroid.unsqueeze(-2).expand_as(points)
+
+    A = centered_points.clone()
+
+    has_values = (A == 0.).all(dim=-2)
+    valid = ~has_values.any(dim=-1)
+
+    use_dim = -1
+    n = torch.zeros(BS, 3, device=points.device, dtype=points.dtype)
+
+    if valid.any():
+        A[valid, :, use_dim] = 1.  # Set any coordinate to 1 to solve the plane equation
+        B = centered_points[valid, :, use_dim]
+
+        vec = torch.linalg.lstsq(A, B)
+        coef = vec.solution
+
+        a = coef[..., 0]
+        b = coef[..., 1]
+        d = coef[..., 2]
+
+        # Normal vector of the plane
+        n[valid] = torch.stack([a, b, -torch.ones_like(b)], dim=-1)
+    else:
+        # If of one dimension all points are zero, the plane is orthogonal to this dimension
+        z = torch.zeros(((~valid).sum(), 3),
+                        device=points.device, dtype=points.dtype)
+        z[has_values[~valid]] = 1.0
+        n[~valid] = z
+
+    n = n / n.norm(dim=-1, keepdim=True)  # Normalize the normal vector
+    return unflatten_batch_dims(centroid, shp), unflatten_batch_dims(n, shp)
+
+
 def plane_eval(p0: torch.Tensor, n: torch.Tensor, values: torch.Tensor) -> torch.Tensor:
     """Evaluate the plane equation at the given points
 
@@ -1201,6 +1268,10 @@ def plane_eval(p0: torch.Tensor, n: torch.Tensor, values: torch.Tensor) -> torch
     p0, _ = flatten_batch_dims(p0, -2)
     n, _ = flatten_batch_dims(n, -2)
     values, shp = flatten_batch_dims(values, -2)
+
+    if (n[..., -1] == 0.).any():
+        raise ValueError(
+            "The plane eval function is not yet implemented for YZ or XZ parallel planes having n[..., -1] == 0.")
 
     Np0, C = p0.shape
     Nn, C = n.shape

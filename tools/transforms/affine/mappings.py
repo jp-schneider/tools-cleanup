@@ -17,7 +17,8 @@ except AttributeError:
     # torch.hypot is not available in PyTorch 1.6.
     def hypot(x, y):
         return torch.sqrt(torch.square(x) + torch.square(y))
-    
+
+
 @torch.jit.script
 def rotvec_to_unitquat(rotvec: torch.Tensor) -> torch.Tensor:
     """
@@ -100,6 +101,36 @@ def unitquat_to_rotvec(quat: torch.Tensor, shortest_arc: bool = True):
     return unflatten_batch_dims(rotvec, batch_shape)
 
 
+def axis_angle_to_unitquat(axis: torch.Tensor, angle: torch.Tensor) -> torch.Tensor:
+    """
+
+    Given a rotation axis and angle, returns the corresponding unit quaternion.
+
+    Parameters
+    ----------
+    axis : torch.Tensor
+        3D rotation axis. Shape ([..., B], 3).
+    angle : torch.Tensor
+        Rotation angle. Shape ([..., B],).
+        Angle should be in radians.
+
+    Returns
+    -------
+    torch.Tensor
+        Unit quaternion. Shape ([..., B], 4).
+        Quaternion is in XYZW convention.
+    """
+    axis, shp = flatten_batch_dims(axis, -2)
+    angle, _ = flatten_batch_dims(angle, -1)
+
+    axis = axis / torch.norm(axis, dim=-1, keepdim=True)
+    sin_half_angle = torch.sin(angle / 2)
+    cos_half_angle = torch.cos(angle / 2)
+    xyz = axis * sin_half_angle[..., None].expand_as(axis)
+    res = torch.cat([xyz, cos_half_angle.unsqueeze(-1)], dim=-1)
+    return unflatten_batch_dims(res, shp)
+
+
 def rotvec_to_rotmat(rotvec: torch.Tensor, epsilon=1e-6) -> torch.Tensor:
     """
     Converts rotation vector to rotation matrix representation.
@@ -160,7 +191,7 @@ def rotmat_to_rotvec(R: torch.Tensor) -> torch.Tensor:
     ----------
     R : torch.Tensor
         batch of rotation matrices Shape ([..., B], 3, 3).
-    
+
     Returns
     ------
     torch.Tensor
