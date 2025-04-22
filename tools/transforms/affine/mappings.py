@@ -183,6 +183,42 @@ def rotvec_to_rotmat(rotvec: torch.Tensor, epsilon=1e-6) -> torch.Tensor:
 
 
 @torch.jit.script
+def normal_to_rotmat(n: torch.Tensor) -> torch.Tensor:
+    """
+    Converts a normal vector to a rotation matrix.
+
+    Assumes the base rotation is [0, 0, 1], e.g. if the normal is [0, 0, 1], the rotation matrix is the identity matrix.
+
+    Returns R such that R @ [0, 0, 1] = n.
+
+    Parameters
+    ----------
+    n : torch.Tensor
+        batch of normal vectors Shape ([..., B], 3).
+
+    Returns
+    ------
+    torch.Tensor
+        Batch of rotation matrices Shape ([..., B], 3, 3).
+
+    """
+    n, shp = flatten_batch_dims(n, -2)
+    n = n / torch.norm(n, dim=-1, keepdim=True)
+
+    # Find orthogonal basis
+    u3 = n
+    u1 = torch.cross(u3, torch.tensor(
+        [0.0, 0.0, 1.0], device=n.device, dtype=n.dtype).expand_as(u3), dim=-1)
+    u1 = u1 / torch.norm(u1, dim=-1, keepdim=True)
+
+    u2 = torch.cross(u3, u1, dim=-1)
+    u2 = u2 / torch.norm(u2, dim=-1, keepdim=True)
+
+    R = torch.stack([u1, u2, u3], dim=-2).permute(0, 2, 1)  # Inverse of R
+    return unflatten_batch_dims(R, shp)
+
+
+@torch.jit.script
 def rotmat_to_rotvec(R: torch.Tensor) -> torch.Tensor:
     """
     Converts rotation matrix to rotation vector representation.

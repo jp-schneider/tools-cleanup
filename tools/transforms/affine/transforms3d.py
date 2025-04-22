@@ -1047,7 +1047,7 @@ def compute_ray_plane_intersections_from_position_matrix(
         plane_position: torch.Tensor,
         ray_origins: torch.Tensor,
         ray_directions: torch.Tensor,
-        eps: float = 1e-6,
+        eps: float = 5e-6,
 ) -> torch.Tensor:
     plane_position, plane_shape = flatten_batch_dims(
         plane_position, end_dim=-3)
@@ -1078,7 +1078,7 @@ def compute_ray_plane_intersections(
         plane_normals: torch.Tensor,
         ray_origins: torch.Tensor,
         ray_directions: torch.Tensor,
-        eps: float = 1e-6,
+        eps: float = 5e-6,
 ) -> torch.Tensor:
     # Check if shapes are matching
 
@@ -1235,7 +1235,7 @@ def find_plane(points: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
 
         # Normal vector of the plane
         n[valid] = torch.stack([a, b, -torch.ones_like(b)], dim=-1)
-    else:
+    if (~valid).any():
         # If of one dimension all points are zero, the plane is orthogonal to this dimension
         z = torch.zeros(((~valid).sum(), 3),
                         device=points.device, dtype=points.dtype)
