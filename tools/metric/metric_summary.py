@@ -2,7 +2,7 @@ import math
 import os
 from pathlib import Path
 import random
-from typing import Any, Dict, Optional, Tuple, Union
+from typing import Any, Callable, Dict, Literal, Optional, Tuple, Union
 import pandas as pd
 from dataclasses import dataclass, field
 
@@ -11,11 +11,22 @@ from tools.util.reflection import class_name
 from .metric_entry import MetricEntry
 import numpy as np
 from tools.metric.metric_mode import MetricMode
+from tools.logger.logging import get_messaged, logger
 from tools.metric.metric_scope import MetricScope
 from tools.util.path_tools import replace_unallowed_chars
 from tools.serialization.files.data_frame_csv_file_handle import DataFrameCSVFileHandle
 import numpy as np
 from tools.util.format import snake_to_upper_camel
+try:
+    import matplotlib.pyplot as plt
+    from matplotlib.image import AxesImage
+    from matplotlib.axes import Axes
+except (ImportError, ModuleNotFoundError):
+    plt = None
+    Axes = object
+    AxesImage = object
+    if not get_messaged("matplotlib_import_error"):
+        logger.info("Matplotlib not installed. Metric plotting not supported.")
 
 try:
     import torch
@@ -227,3 +238,356 @@ class MetricSummary():
         """Called after decoding the metric."""
         if isinstance(self.values, dict):
             self.values = pd.DataFrame(self.values)
+
+    def plot(self,
+             size: float = 5,
+             label: str = None,
+             ax: Optional[Axes] = None,
+             color: Optional[str] = None,
+             xlabel: Optional[str] = None,
+             yscale: Optional[str] = None,
+             ylabel: Optional[str] = None,
+             aggregation: Optional[Callable[[
+                 pd.Series, pd.Series], Tuple[np.ndarray, np.ndarray]]] = None,
+             best_marker: bool = False,
+             best_marker_type: Literal['min', 'max'] = 'min',
+             random_marker_text_placement: bool = False,
+             marker_text_yformat: Optional[str] = None,
+             marker_text_xformat: Optional[str] = None,
+             last_marker: bool = False,
+             ) -> AxesImage:
+        """Plots the given metric to a figure.
+
+        Parameters
+        ----------
+        size : float, optional
+            The size of the figure, by default 5
+        label : str, optional
+            The label of the plot, e.g. for a description, by default None
+        ax : Optional[Axes], optional
+            An optional existing axis if the values should be plotted on an existing plot, by default None
+        color : Optional[str], optional
+            Color argument for the plot function.
+        xlabel : Optional[str], optional
+            The x label which should be set, if None, it will be the metric name. Pass the DO_NOT_SET object to avoid setting., by default None
+        yscale : Optional[str], optional
+            The scale of the y axis, None will not change the default behavoir, by default None
+        ylabel : Optional[str], optional
+            The y label which should be set, if None, it will be the metric name. Pass the DO_NOT_SET object to avoid setting., by default None
+        aggregation : Optional[Callable[[np.ndarray, np.ndarray], Tuple[np.ndarray, np.ndarray]]], optional
+            Optional aggregation or filter which gets called with the (x and y) usually global_step and value of the metric summary.
+            The return value should be a tuple containing x and y what should be plotted.Default None.
+        best_marker : bool, optional
+            If true, the best marker will be plotted, by default False
+        best_marker_type : Literal['min', 'max'], optional
+            The type of the best marker, by default 'min'
+        random_marker_text_placement : bool, optional
+            If true, the marker text will be placed randomly, by default False
+        marker_text_yformat : Optional[str], optional
+            The format of the y value in the marker text, by default None
+            None means it will be "{:.2f}" if not float(best_y).is_integer() else "{:0d}"
+        marker_text_xformat : Optional[str], optional
+            The format of the x value in the marker text, by default None
+            None means it will be "{:.2f}" if not float(best_x).is_integer() else "{:0d}"
+        last_marker : bool, optional
+            If true, the last marker will be plotted, by default False
+        Returns
+        -------
+        AxesImage
+            The axis image.
+        """
+        import re
+        from tools.viz.matplotlib import get_mpl_figure
+        fig = None
+        if ax is not None:
+            fig = plt.gcf()
+        else:
+            fig, ax = get_mpl_figure(1, 1, size=size)
+        if label is None:
+            label = self.tag
+        if xlabel is None:
+            xlabel = MetricScope.display_name(self.scope)
+        if ylabel is None:
+            ylabel = self.metric_display_name
+
+        run_number = None
+        match = re.fullmatch(LABEL_TEXT_PATTERN, label)
+        if match is not None:
+            run_number = match.group("number")
+        x = self.values['global_step']
+        y = self.values['value']
+        if aggregation is not None:
+            x, y = aggregation(x, y)
+        else:
+            # Check shape of x and y
+            if torch is not None:
+                if len(y) > 0 and isinstance(y.iloc[0], torch.Tensor):
+                    if len(y.iloc[0].shape) > 1:
+                        # Some dangling dimensions
+                        y = y.apply(lambda x: x.squeeze())
+                    if torch.prod(torch.tensor(y.iloc[0].shape)) > 1:
+                        # Multi dim tensor which needs to be plotted.
+                        steps_per_entry = y.apply(lambda x: len(
+                            x)).max()  # Get longest value series
+                        xx, yy = np.meshgrid(
+                            np.arange(steps_per_entry), x.to_numpy())
+                        new_x = xx.flatten() + (yy.flatten() * steps_per_entry)
+                        x = new_x
+                        y = torch.stack([v for v in y]).flatten()
+
+        args = dict()
+        xyoffset = None
+        if best_marker:
+            marker_args = dict()
+            y_id = None
+            if best_marker_type == 'min':
+                y_id = y.argmin()
+            elif best_marker_type == 'max':
+                y_id = y.argmax()
+            else:
+                raise ValueError(
+                    f"Unknown best marker type {best_marker_type}")
+            best_x = x[y_id]
+            best_y = y[y_id]
+            if 'markersize' not in marker_args:
+                marker_args['markersize'] = 12
+            if 'fillstyle' not in marker_args:
+                marker_args['fillstyle'] = 'full'
+            if 'marker' not in marker_args:
+                marker_args['marker'] = '.'
+            if color is not None:
+                marker_args['color'] = color
+            ax.plot([best_x], [best_y], **marker_args)
+            if marker_text_yformat is None:
+                marker_text_yformat = "{:.2f}" if not float(
+                    best_y).is_integer() else "{:0d}"
+            if marker_text_xformat is None:
+                marker_text_xformat = "{:.2f}" if not float(
+                    best_x).is_integer() else "{:0d}"
+            text = f"{marker_text_yformat.format(best_y)} ({marker_text_xformat.format(best_x)})"
+            if xyoffset is None:
+                xyoffset = random_circle_point(
+                    angle=45 if not random_marker_text_placement else None)
+            if run_number is not None:
+                text = run_number + ". " + text
+            ax.annotate(text, xy=(best_x, best_y), xytext=xyoffset,
+                        textcoords="offset points",
+                        color=color,
+                        bbox=dict(facecolor='white', edgecolor=color, pad=2.0),
+                        arrowprops=dict(
+                            color=color if color else 'black',
+                            shrink=0.05,
+                            width=0.01,
+                            headwidth=0.00
+            )
+            )
+        if last_marker:
+            marker_args = dict()
+            last_x = x.iloc[len(x) - 1]
+            last_y = y.iloc[len(y) - 1]
+            if 'markersize' not in marker_args:
+                marker_args['markersize'] = 8
+            if 'fillstyle' not in marker_args:
+                marker_args['fillstyle'] = 'full'
+            if 'marker' not in marker_args:
+                marker_args['marker'] = 'X'
+            if color is not None:
+                marker_args['color'] = color
+            ax.plot([last_x], [last_y], **marker_args)
+            if marker_text_yformat is None:
+                marker_text_yformat = "{:.2f}" if not float(
+                    last_y).is_integer() else "{:0d}"
+            if marker_text_xformat is None:
+                marker_text_xformat = "{:.2f}" if not float(
+                    last_x).is_integer() else "{:0d}"
+            text = f"{marker_text_yformat.format(last_y)} ({marker_text_xformat.format(last_x)})"
+            if run_number is not None:
+                text = run_number + ". " + text
+            if xyoffset is None:
+                xyoffset = random_circle_point(
+                    angle=45 if not random_marker_text_placement else None)
+            ax.annotate(text, xy=(last_x, last_y), xytext=xyoffset,
+                        textcoords="offset points",
+                        color=color,
+                        bbox=dict(facecolor='white', edgecolor=color, pad=2.0),
+                        arrowprops=dict(
+                            color=color if color else 'black',
+                            shrink=0.05,
+                            width=0.01,
+                            headwidth=0.00
+            )
+            )
+        if color is not None:
+            args["color"] = color
+        if len(x) > 10:
+            ax.plot(x, y, label=label, **args)
+        else:
+            ax.scatter(x, y, label=label, **args)
+        if yscale:
+            ax.set_yscale(yscale)
+        if ylabel and not isinstance(ylabel, DoNotSet):
+            ax.set_ylabel(ylabel)
+        if xlabel and not isinstance(xlabel, DoNotSet):
+            ax.set_xlabel(xlabel)
+        return fig
+
+    def plot_bar(self,
+                 model_name: str,
+                 width: float = 0.8,
+                 size: float = 5,
+                 label: str = None,
+                 ax: Optional[Axes] = None,
+                 color: Optional[str] = None,
+                 xlabel: Optional[str] = None,
+                 yscale: Optional[str] = None,
+                 ylabel: Optional[str] = None,
+                 aggregation: Optional[Callable[[
+                     pd.Series, pd.Series], Tuple[np.ndarray, np.ndarray]]] = None,
+                 best_bar: bool = True,
+                 best_bar_type: Literal['min', 'max'] = 'min',
+                 xtext_format: Optional[str] = None,
+                 ytext_format: Optional[str] = None,
+                 last_bar: bool = False,
+                 ) -> AxesImage:
+        """Plots the given metric to a figure.
+
+        Parameters
+        ----------
+        size : float, optional
+            The size of the figure, by default 5
+        label : str, optional
+            The label of the plot, e.g. for a description, by default None
+        ax : Optional[Axes], optional
+            An optional existing axis if the values should be plotted on an existing plot, by default None
+        color : Optional[str], optional
+            Color argument for the plot function.
+        xlabel : Optional[str], optional
+            The x label which should be set, if None, it will be the metric name. Pass the DO_NOT_SET object to avoid setting., by default None
+        yscale : Optional[str], optional
+            The scale of the y axis, None will not change the default behavoir, by default None
+        ylabel : Optional[str], optional
+            The y label which should be set, if None, it will be the metric name. Pass the DO_NOT_SET object to avoid setting., by default None
+        aggregation : Optional[Callable[[np.ndarray, np.ndarray], Tuple[np.ndarray, np.ndarray]]], optional
+            Optional aggregation or filter which gets called with the (x and y) usually global_step and value of the metric summary.
+            The return value should be a tuple containing x and y what should be plotted.Default None.
+        best_bar : bool, optional
+            If true, the best marker will be plotted, by default False
+        best_bar_type : Literal['min', 'max'], optional
+            The type of the best marker, by default 'min'
+        xtext_format : Optional[str], optional
+            The format of the x value in the axis text, by default None
+            None means it will be "{:.2f}" if not float(best_x).is_integer() else "{:0d}"
+        ytext_format : Optional[str], optional
+            The format of the y value in the axis text, by default None
+            None means it will be "{:.2f}" if not float(best_y).is_integer() else "{:0d}"
+        last_bar : bool, optional
+            If true, the last marker will be plotted, by default False
+        Returns
+        -------
+        AxesImage
+            The axis image.
+        """
+        FORMAT_CHANGE_PATTERN = r"\{\:(?P<fmt>[A-z0-9]*(\.)?[0-9]*[A-z]+)\}"
+        from tools.viz.matplotlib import get_mpl_figure
+        import re
+
+        fig = None
+        if ax is not None:
+            fig = plt.gcf()
+        else:
+            fig, ax = get_mpl_figure(1, 1, size=size)
+
+        if label is None:
+            label = self.tag
+        if xlabel is None:
+            xlabel = MetricScope.display_name(self.scope)
+        if ylabel is None:
+            ylabel = self.metric_display_name
+
+        run_number = None
+        match = re.fullmatch(LABEL_TEXT_PATTERN, label)
+        if match is not None:
+            run_number = match.group("number")
+        x = self.values['global_step']
+        y = self.values['value']
+        if aggregation is not None:
+            x, y = aggregation(x, y)
+        else:
+            # Check shape of x and y
+            if torch is not None:
+                if len(y) > 0 and isinstance(y.iloc[0], torch.Tensor):
+                    if len(y.iloc[0].shape) > 1:
+                        # Some dangling dimensions
+                        y = y.apply(lambda x: x.squeeze())
+                    if torch.prod(torch.tensor(y.iloc[0].shape)) > 1:
+                        # Multi dim tensor which needs to be plotted.
+                        steps_per_entry = y.apply(lambda x: len(
+                            x)).max()  # Get longest value series
+                        xx, yy = np.meshgrid(
+                            np.arange(steps_per_entry), x.to_numpy())
+                        new_x = xx.flatten() + (yy.flatten() * steps_per_entry)
+                        x = new_x
+                        y = torch.stack([v for v in y]).flatten()
+
+        args = dict()
+        if color is not None:
+            args["color"] = color
+        if best_bar:
+            marker_args = dict()
+            y_id = None
+            if best_bar_type == 'min':
+                y_id = y.argmin()
+            elif best_bar_type == 'max':
+                y_id = y.argmax()
+            else:
+                raise ValueError(
+                    f"Unknown best marker type {best_bar_type}")
+            best_x = x[y_id]
+            best_y = y[y_id]
+            if xtext_format is None:
+                xtext_format = "{:.2g}" if not float(
+                    best_x).is_integer() else "{:0d}"
+            if ytext_format is None:
+                ytext_format = "{:.2g}" if not float(
+                    best_y).is_integer() else "{:0d}"
+            # Converting pattern to old fromatter
+            _yfmt = ytext_format
+            m = re.fullmatch(FORMAT_CHANGE_PATTERN, _yfmt)
+            if m is not None:
+                _yfmt = "%" + m.group("fmt")
+            else:
+                _yfmt = "%" + "g"
+            name = model_name + f" ({xtext_format.format(best_x)})*"
+            bar_container = ax.bar(
+                name, best_y, width=width, label=label + (" (Best)" if last_bar else ""), **args)
+            ax.bar_label(bar_container, fmt=_yfmt)
+        if last_bar:
+            marker_args = dict()
+            last_x = x.iloc[len(x) - 1]
+            last_y = y.iloc[len(y) - 1]
+            if xtext_format is None:
+                xtext_format = "{:.2g}" if not float(
+                    last_x).is_integer() else "{:0d}"
+            if ytext_format is None:
+                ytext_format = "{:.2g}" if not float(
+                    last_y).is_integer() else "{:0d}"
+            # Converting pattern to old fromatter
+            _yfmt = ytext_format
+            m = re.fullmatch(FORMAT_CHANGE_PATTERN, _yfmt)
+            if m is not None:
+                _yfmt = "%" + m.group("fmt")
+            else:
+                _yfmt = "%" + "g"
+            name = model_name + f" ({xtext_format.format(last_x)})"
+            bar_container = ax.bar(
+                name, last_y, width=width, label=label + (" (Last)" if best_bar else ""), **args)
+            ax.bar_label(bar_container, fmt=_yfmt)
+        if color is not None:
+            args["color"] = color
+        if yscale:
+            ax.set_yscale(yscale)
+        if ylabel and not isinstance(ylabel, DoNotSet):
+            ax.set_ylabel(ylabel)
+        if xlabel and not isinstance(xlabel, DoNotSet):
+            ax.set_xlabel(xlabel)
+        return fig

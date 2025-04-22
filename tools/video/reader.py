@@ -1,10 +1,8 @@
-from typing import Generator, Optional, Tuple, Union
+from typing import Generator, Optional, Tuple
 import cv2
 import numpy as np
-from tools.util.typing import DEFAULT, _DEFAULT, VEC_TYPE
 import os
-from tools.transforms.to_numpy_image import ToNumpyImage
-from tools.util.sized_generator import SizedGenerator, sized_generator
+from tools.util.sized_generator import sized_generator
 
 
 class Reader():
