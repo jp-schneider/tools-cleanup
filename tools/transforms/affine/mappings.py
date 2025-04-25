@@ -59,7 +59,7 @@ def rotvec_to_unitquat(rotvec: torch.Tensor) -> torch.Tensor:
 @torch.jit.script
 def unitquat_to_rotvec(quat: torch.Tensor, shortest_arc: bool = True):
     """
-    Converts unit quaternion into rotation vector representation.
+    Converts unit quaternion into rotation vector representation (Rodrigues).
 
     Based on the representation of a rotation of angle :math:`{\\theta}` and unit axis :math:`(x,y,z)`
     by the unit quaternions :math:`\\pm [\\sin({\\theta} / 2) (x i + y j + z k) + \\cos({\\theta} / 2)]`.
@@ -205,23 +205,56 @@ def normal_to_rotmat(n: torch.Tensor) -> torch.Tensor:
     n, shp = flatten_batch_dims(n, -2)
     n = n / torch.norm(n, dim=-1, keepdim=True)
 
+    R = torch.eye(3, device=n.device, dtype=n.dtype).unsqueeze(
+        0).repeat(n.shape[0], 1, 1)
+    ideal = torch.tensor([0.0, 0.0, 1.0], device=n.device, dtype=n.dtype)
+
+    # Check if the normal is the ideal case
+    not_ideal = ~(n == ideal).all(dim=-1)
     # Find orthogonal basis
-    u3 = n
-    u1 = torch.cross(u3, torch.tensor(
-        [0.0, 0.0, 1.0], device=n.device, dtype=n.dtype).expand_as(u3), dim=-1)
+
+    u3 = n[not_ideal]
+    u1 = torch.cross(u3, ideal.expand_as(u3), dim=-1)
     u1 = u1 / torch.norm(u1, dim=-1, keepdim=True)
 
     u2 = torch.cross(u3, u1, dim=-1)
     u2 = u2 / torch.norm(u2, dim=-1, keepdim=True)
 
-    R = torch.stack([u1, u2, u3], dim=-2).permute(0, 2, 1)  # Inverse of R
+    R[not_ideal] = torch.stack(
+        [u1, u2, u3], dim=-2).permute(0, 2, 1)  # Inverse of R
     return unflatten_batch_dims(R, shp)
+
+
+@torch.jit.script
+def rotmat_to_normal(R: torch.Tensor) -> torch.Tensor:
+    """
+    Converts rotation matrix to normal vector representation.
+
+    Assumes the base rotation is [0, 0, 1], e.g. if the normal is [0, 0, 1], the rotation matrix is the identity matrix.
+
+    Returns n such that R @ n = [0, 0, 1].
+
+    Parameters
+    ----------
+    R : torch.Tensor
+        batch of rotation matrices Shape ([..., B], 3, 3).
+
+    Returns
+    ------
+    torch.Tensor
+        Batch of normal vectors Shape ([..., B], 3).
+    """
+    R, shp = flatten_batch_dims(R, -3)
+    n = R[:, :, 2]
+    return unflatten_batch_dims(n, shp)
 
 
 @torch.jit.script
 def rotmat_to_rotvec(R: torch.Tensor) -> torch.Tensor:
     """
     Converts rotation matrix to rotation vector representation.
+
+    In Opencv referred as Rodrigues formula.
 
     Parameters
     ----------

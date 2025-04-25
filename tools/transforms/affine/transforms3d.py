@@ -1,5 +1,5 @@
 import torch
-from typing import List, Literal, Optional, Tuple
+from typing import Dict, List, Literal, Optional, Tuple
 from tools.util.torch import as_tensors, tensorify
 import numpy as np
 
@@ -1244,6 +1244,95 @@ def find_plane(points: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
 
     n = n / n.norm(dim=-1, keepdim=True)  # Normalize the normal vector
     return unflatten_batch_dims(centroid, shp), unflatten_batch_dims(n, shp)
+
+
+@torch.jit.script
+def compute_line_intersections(
+        p1: torch.tensor,
+        u1: torch.tensor,
+        p2: torch.tensor,
+        u2: torch.tensor,
+        parallel_eps: float = 1e-6,
+        is_close_eps: float = 1e-6) -> Tuple[torch.tensor, Dict[str, torch.tensor]]:
+    """
+    Calculates the intersection point of two lines in 3D space.
+
+    The lines are defined by two points and their direction vectors.
+
+    Parameters
+    ----------
+    p1 : torch.Tensor
+        The first point on the first line. Shape: ([..., B], 3)
+    u1 : torch.Tensor
+        The direction vector of the first line. Shape: ([..., B], 3)
+    p2 : torch.Tensor
+        The first point on the second line. Shape: ([..., B], 3)
+    u2 : torch.Tensor
+        The direction vector of the second line. Shape: ([..., B], 3)
+
+    eps : float, optional
+        The tolerance for checking if the lines are parallel. Default is 1e-6.
+        and if the lines are not close to each other.
+
+    Returns
+    -------
+    torch.Tensor
+        The intersection point of the two lines. Shape: ([..., B], 3)
+        Can be NaN if the lines are parallel or the solution is not close enough.
+    """
+    u1, shp = flatten_batch_dims(u1, -2)
+    u2, _ = flatten_batch_dims(u2, -2)
+    p1, _ = flatten_batch_dims(p1, -2)
+    p2, _ = flatten_batch_dims(p2, -2)
+
+    intersection_points = torch.zeros_like(p1)
+    intersection_points.fill_(float('nan'))
+    r1 = torch.empty_like(p1[..., 0])
+    r1.fill_(float('nan'))
+    r2 = torch.empty_like(p1[..., 0])
+    r2.fill_(float('nan'))
+
+    # Check if the direction vectors are linearly dependent (parallel lines)
+    non_parallel = ~torch.isclose(torch.cross(u1, u2, dim=-1), torch.zeros(
+        3, device=u1.device, dtype=u1.dtype), atol=parallel_eps).all(dim=-1)
+
+    if non_parallel.any():
+        u1 = u1[non_parallel]
+        u2 = u2[non_parallel]
+        p1 = p1[non_parallel]
+        p2 = p2[non_parallel]
+
+        # Set up the system of equations: p1 + t*u1 = p2 + s*u2
+        # Rearranged: t*u1 - s*u2 = p2 - p1
+        a = torch.stack([u1, -u2], dim=-1)  # Shape: (B, 3, 2)
+        b = p2 - p1
+
+        # Solve the overdetermined linear system using least squares
+        params, residuals, rank, s = torch.linalg.lstsq(a, b, rcond=None)
+        r1_, r2_ = params[..., 0], params[..., 1]
+
+        # Calculate the intersection point
+        intersection_points[non_parallel] = p1 + \
+            r1_.unsqueeze(-1).expand_as(u1) * u1
+        r1[non_parallel] = r1_
+        r2[non_parallel] = r2_
+
+        # Verify if the point also lies on the second line
+        intersection_point_check = p2 + r2_.unsqueeze(-1).expand_as(u1) * u2
+        not_close = ~torch.isclose(
+            intersection_points, intersection_point_check, atol=is_close_eps).all(dim=-1)
+
+        if not_close.any():
+            not_close_idx = non_parallel.argwhere().squeeze(-1)[not_close]
+            intersection_points[not_close_idx] = float(
+                'nan')  # Set to NaN if not close
+            r1[not_close_idx] = float('nan')
+            r2[not_close_idx] = float('nan')
+
+    ctx = dict()
+    ctx["r1"] = unflatten_batch_dims(r1, shp)
+    ctx["r2"] = unflatten_batch_dims(r2, shp)
+    return unflatten_batch_dims(intersection_points, shp), ctx
 
 
 def plane_eval(p0: torch.Tensor, n: torch.Tensor, values: torch.Tensor) -> torch.Tensor:
