@@ -614,6 +614,10 @@ def _vector_angle(v1: torch.Tensor, v2: torch.Tensor) -> torch.Tensor:
 def vector_angle(v1: VEC_TYPE, v2: VEC_TYPE, mode: Literal["acos", "tan2"] = "acos") -> torch.Tensor:
     """Computes the angle between vector v1 and v2.
 
+    The vector angle is defined as the angle between the vectors in the plane they span.
+
+    Use tan2 for a more numerically stable version of acos (but slower).
+
     Parameters
     ----------
     v1 : VEC_TYPE
@@ -1248,12 +1252,12 @@ def find_plane(points: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
 
 @torch.jit.script
 def compute_line_intersections(
-        p1: torch.tensor,
-        u1: torch.tensor,
-        p2: torch.tensor,
-        u2: torch.tensor,
+        p1: torch.Tensor,
+        u1: torch.Tensor,
+        p2: torch.Tensor,
+        u2: torch.Tensor,
         parallel_eps: float = 1e-6,
-        is_close_eps: float = 1e-6) -> Tuple[torch.tensor, Dict[str, torch.tensor]]:
+        is_close_eps: float = 1e-6) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
     """
     Calculates the intersection point of two lines in 3D space.
 
