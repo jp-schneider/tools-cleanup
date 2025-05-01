@@ -251,7 +251,7 @@ def torch_to_numpy_dtype(dtype: torch.dtype) -> np.dtype:
         If the dtype is not supported.
     """
     torch_to_numpy_dtype_dict = {
-        torch.bool: np.bool,
+        torch.bool: bool,
         torch.uint8: np.uint8,
         torch.int8: np.int8,
         torch.int16: np.int16,
@@ -1542,3 +1542,34 @@ def buffered(gen: Generator,
     if len(_current_data) > 0:
         for item in process_items(_current_data, _current_data_gen_index, _current_buffer, _current_item_shape):
             yield item
+
+
+
+def parse_dtype(_dtype_or_str: Union[str, torch.dtype, np.dtype]) -> torch.dtype:
+    """Parses a string or torch.dtype to a torch.dtype.
+
+    Parameters
+    ----------
+    _dtype_or_str : Union[str, torch.dtype]
+        The dtype or string to parse.
+
+    Returns
+    -------
+    torch.dtype
+        The parsed dtype.
+    """
+    if isinstance(_dtype_or_str, np.dtype):
+        return numpy_to_torch_dtype(_dtype_or_str)
+    if isinstance(_dtype_or_str, str):
+        if _dtype_or_str.startswith("torch."):
+            _dtype_or_str = _dtype_or_str.replace("torch.", "")
+        dt = getattr(torch, _dtype_or_str)
+        if dt is None:
+            raise ValueError(f"Invalid dtype string: {_dtype_or_str}")
+        if not isinstance(dt, torch.dtype):
+            raise ValueError(f"Invalid dtype string: {_dtype_or_str}, must be a valid torch dtype.")    
+        return dt
+    elif isinstance(_dtype_or_str, torch.dtype):
+        return _dtype_or_str
+    else:
+        raise ValueError(f"Invalid dtype: {_dtype_or_str}")

@@ -3,11 +3,12 @@ import inspect
 import logging
 from argparse import ArgumentParser
 from dataclasses import MISSING, Field
+import pathlib
 from typing import Any, Dict, List, Optional, Type, get_args
 from tools.util.typing import is_list_type
 from simple_parsing.docstring import get_attribute_docstring
 from typing_inspect import is_literal_type, is_optional_type, is_tuple_type, is_classvar, is_union_type
-
+import os
 from tools.error import UnsupportedTypeError, IgnoreTypeError
 from enum import Enum
 from tools.logger.logging import logger
@@ -16,6 +17,9 @@ from tools.serialization.json_convertible import JsonConvertible
 WARNING_ON_UNSUPPORTED_TYPE = True
 """If true, a warning will be printed if a type is not supported."""
 
+import sys
+vinfo = sys.version_info
+IS_ABOVE_3_9 = (vinfo.major >= 3 and vinfo.minor > 8) or vinfo.major > 3
 
 def set_warning_on_unsupported_type(warning: bool) -> None:
     """Sets the warning on unsupported type.
@@ -57,7 +61,7 @@ class ArgparserMixin:
     dataclass type and applies its data."""
 
     @classmethod
-    def _map_type_to_parser_arg(cls, field: Field, _type: Optional[Type] = None) -> Dict[str, Any]:
+    def _map_type_to_parser_arg(cls, field: Field, _type: Optional[Type] = None, is_optional: bool = False) -> Dict[str, Any]:
         """Mapping field types to argparse arguments.
         Parameters
         ----------
@@ -65,6 +69,10 @@ class ArgparserMixin:
             The field which should be mapped.
         _type : Optional[Type]
             Alterating field type on recursive calls, default None.
+
+        is_optional : bool
+            If the type is optional, this is used to set the required flag to False.
+            Dont need to be handled here, just for information.
 
         Returns
         -------
@@ -79,10 +87,16 @@ class ArgparserMixin:
             _type = field.type
         if isinstance(_type, Type) and issubclass(_type, bool):
             # Check default and switch accordingly
-            if not field.default:
-                return dict(action="store_true")
+            if not IS_ABOVE_3_9 or not is_optional:
+                if not field.default:
+                    return dict(action="store_true")
+                else:
+                    return dict(action="store_false", name_prefix="no_")
             else:
-                return dict(action="store_false")
+                return dict(action=argparse.BooleanOptionalAction)
+        elif isinstance(_type, Type) and issubclass(_type, os.PathLike):
+            # If type is a PathLike, we assume its a string.
+            return dict(type=str)
         elif isinstance(_type, Type) and issubclass(_type, (str, int, float)):
             return dict(type=_type)
         elif is_literal_type(_type):
@@ -146,7 +160,7 @@ class ArgparserMixin:
         elif is_optional_type(_type):
             # Unpack optional type.
             _new_type = get_args(_type)[0]
-            args = cls._map_type_to_parser_arg(field, _new_type)
+            args = cls._map_type_to_parser_arg(field, _new_type, is_optional=True)
             # Because its optional, make it non required
             args["required"] = False
             return args
@@ -185,6 +199,23 @@ class ArgparserMixin:
             # Unpack optional type.
             _new_type = get_args(_type)[0]
             return cls._get_parser_arg_value(field, value=value, _type=_new_type)
+        elif is_union_type(_type):
+            # Check if contains None
+            _new_types = get_args(_type)
+            any_matched = False
+            args = dict()
+            for _new_type in _new_types:
+                try:
+                    val = cls._get_parser_arg_value(field, value, _new_type)
+                    any_matched = True
+                    break
+                except (IgnoreTypeError, UnsupportedTypeError):
+                    continue
+            if any_matched:
+                return val
+            else:
+                raise UnsupportedTypeError(
+                    f"Dont know how to handle type: {_type} of field: {field.name}.")
         elif isinstance(_type, Type) and issubclass(_type, Enum):
             return value
         else:
@@ -261,9 +292,12 @@ class ArgparserMixin:
             if field.default != MISSING:
                 args["default"] = field.default
             # docstring
+            name_prefix = args.pop("name_prefix", "")
+            if name_prefix:
+                name_prefix = name_prefix.replace("_", sep)
             args["help"] = str(get_attribute_docstring(
                 cls, field_name=field.name).docstring_below)
-            parser.add_argument("--" + name, **args)
+            parser.add_argument("--" + name_prefix + name, **args)
 
         return parser
 
@@ -289,6 +323,24 @@ class ArgparserMixin:
                 ret[field.name] = cls._get_parser_arg_value(field, value)
         return cls(**ret)
 
+    @classmethod
+    def get_field_name_with_prefix_for_argparser(cls, field: Field) -> str:
+        """Returns for a given field with an eventually prefix"""
+        name = field.name
+        if field.type is None:
+            return name
+        is_optional = False
+        _type = field.type
+        if is_optional_type(_type):
+            is_optional = True
+            _type = get_args(field.type)[0]
+        if isinstance(_type, Type) and issubclass(_type, bool):
+            # Check default and switch accordingly
+            if not IS_ABOVE_3_9 or not is_optional:
+                if field.default:
+                    return "no_" + name
+        return name
+    
     def apply_parsed_args(self, parsed_args: Any) -> None:
         """Applies parsed_args, which is the result
         of the argparser.parse_args() method, to an existing object.
@@ -302,8 +354,9 @@ class ArgparserMixin:
         # Look for matching fieldnames
         ret = dict()
         for field in fields:
-            if hasattr(parsed_args, field.name):
-                value = getattr(parsed_args, field.name)
+            name = self.get_field_name_with_prefix_for_argparser(field)
+            if hasattr(parsed_args, name):
+                value = getattr(parsed_args, name)
                 if ((field.default != MISSING and (value is not None and value != field.default)) or
                         (field.default_factory != MISSING and (
                             value is not None and value != field.default_factory()))
@@ -370,6 +423,7 @@ class ArgparserMixin:
 
         if add_config_path:
             parser.add_argument("--config-path", type=str,
+                                help="Path to an initial config file. Other arguments supplied may overwrite the values in the config file.",
                                 default=None, required=False)
 
         args = parser.parse_args()
