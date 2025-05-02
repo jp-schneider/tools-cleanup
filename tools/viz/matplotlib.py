@@ -1,4 +1,3 @@
-
 # Class for functions
 # File for useful functions when using matplotlib
 import io
