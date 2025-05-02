@@ -5,6 +5,7 @@ from tools.transforms.fittable_transform import FittableTransform
 from tools.transforms.invertable_transform import InvertableTransform
 from tools.transforms.to_tensor import tensorify
 from tools.util.typing import _DEFAULT, DEFAULT
+from tools.logger.logging import logger
 
 
 class MeanStd(InvertableTransform, FittableTransform, torch.nn.Module):
@@ -20,9 +21,17 @@ class MeanStd(InvertableTransform, FittableTransform, torch.nn.Module):
         if mean == DEFAULT:
             self._mean_default = True
             mean = torch.zeros(1)
+
         if std == DEFAULT:
             self._std_default = True
             std = torch.ones(1)
+        else:
+            std = tensorify(std)
+            if ~torch.isfinite(std).any():
+                # Set std to 1 for all non-finite values
+                std[~torch.isfinite(std)] = 1.0
+                logger.warning(
+                    "Non-finite values in std, setting them to 1.0. Was std computed on a single value?")
         self.register_buffer("mean", tensorify(mean))
         self.register_buffer("std", tensorify(std))
         self.register_buffer("old_mean", torch.zeros(1))

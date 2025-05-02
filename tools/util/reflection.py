@@ -320,38 +320,48 @@ def _get_attribute(obj: Any, path: str, default: Any = NOTSET) -> Any:
     if path.isnumeric():
         # Check if path is a number, if so check if obj is a Sequnece
         if not isinstance(obj, Sequence):
-            raise ValueError(f"Object {obj} is not a sequence, but path {path} is a number.")
+            raise ValueError(
+                f"Object {obj} is not a sequence, but path {path} is a number.")
         index = int(path)
         if index >= len(obj):
             return NOTSET
         return obj[index]
     return getattr(obj, path, default)
 
-def _set_attribute(obj: Any, path: str, value: Any):
+
+def _set_attribute(obj: Any, path: str, value: Any) -> Any:
     if isinstance(obj, dict):
         # Check if path is a key in the dictionary
         if value == NOTSET:
-            obj.pop(path, None)
-            return
+            oval = obj.pop(path, None)
+            return oval
         else:
+            old_value = obj.get(path, NOTSET)
             obj[path] = value
-            return
+            return old_value
     if path.isnumeric():
         # Check if path is a number, if so check if obj is a Sequnece
         if not isinstance(obj, Sequence):
-            raise ValueError(f"Object {obj} is not a sequence, but path {path} is a number.")
+            raise ValueError(
+                f"Object {obj} is not a sequence, but path {path} is a number.")
         index = int(path)
+        old_value = NOTSET
         if index >= len(obj) and value != NOTSET:
-            raise ValueError(f"Index {index} is out of bounds for object {obj}.")
+            raise ValueError(
+                f"Index {index} is out of bounds for object {obj}.")
         if value == NOTSET:
             if index < len(obj):
                 # Remove the value from the sequence
-                obj.pop(index)
-            return
+                old_value = obj.pop(index)
+            return old_value
+        else:
+            old_value = obj[index] if index < len(obj) else NOTSET
         obj[index] = value
-        return
+        return old_value
+    old_value = getattr(obj, path, NOTSET)
     setattr(obj, path, value)
-    return
+    return old_value
+
 
 def _get_nested_value(obj: Any, path: str, default: Any = NOTSET) -> Any:
     if obj is None and len(path) > 0:
@@ -363,7 +373,7 @@ def _get_nested_value(obj: Any, path: str, default: Any = NOTSET) -> Any:
         return _get_attribute(obj, path, default)
 
 
-def _set_nested_value(obj: Any, path: str, value: Any):
+def _set_nested_value(obj: Any, path: str, value: Any) -> Any:
     if value == PATHNONE:
         return
     if '.' in path:
@@ -373,13 +383,15 @@ def _set_nested_value(obj: Any, path: str, value: Any):
             raise ValueError(f"Object {obj} does not have attribute {path}.")
         return _set_nested_value(current_obj, rest, value)
     else:
-        _set_attribute(obj, path, value)
+        return _set_attribute(obj, path, value)
 
 
-def set_nested_value(obj: Any, path: str, value: Any):
+def set_nested_value(obj: Any, path: str, value: Any) -> Any:
     """Set a nested value in an object by a path / chain of attributes to the value.
 
-    Only supports setting attributes, not items in lists or dictionaries.
+    Can also be used to delete a value by setting it to NOTSET.
+    Supports also lists, and aribitrary sequences which can be indexed by a number.
+    E.g. "a.b.c.0.d.e".
 
     Parameters
     ----------
@@ -390,14 +402,20 @@ def set_nested_value(obj: Any, path: str, value: Any):
     value : Any
         The value to set.
         If the value is NOTSET, the attribute is deleted.
+
+    Returns
+    -------
+    Any
+        The old value at the path or NOTSET if the path did not exist.
     """
-    _set_nested_value(obj, path, value)
+    return _set_nested_value(obj, path, value)
 
 
 def get_nested_value(obj: Any, path: str, default: Any = NOTSET) -> Any:
     """Get a nested value in an object by a path / chain of attributes to the value.
 
-    Only supports getting attributes, not items in lists or dictionaries.
+    Can be used to get values from dictionaries, lists, and aribitrary sequences which can be indexed by a number.
+    E.g. "a.b.c.0.d.e".
 
     Parameters
     ----------

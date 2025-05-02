@@ -1,4 +1,3 @@
-
 # Class for functions
 # File for useful functions when using matplotlib
 import io
@@ -1347,6 +1346,9 @@ def plot_vectors(y: VEC_TYPE,
                  xlabel: Optional[str] = None,
                  ylabel: Optional[str] = None,
                  tick_right: bool = False,
+                 xticks: Optional[Union[List[str], List[float]]] = None,
+                 xticks_rotation: Optional[float] = None,
+                 xticks_horizontal_alignment: Optional[str] = None,
                  ) -> Figure:
     """Gets a matplotlib line figure with a plot of vectors.
 
@@ -1393,6 +1395,12 @@ def plot_vectors(y: VEC_TYPE,
     tick_right : bool, optional
         If the ticks should be on the right side, by default False
 
+    xticks : Optional[Tuple[List[float], List[str]]], optional
+        X ticks for the plot, by default None
+        Specifies the
+        1. Positions of the ticks
+        2. Labels of the ticks
+
     Returns
     -------
     Figure
@@ -1430,7 +1438,8 @@ def plot_vectors(y: VEC_TYPE,
         fig = ax.figure
 
     if bar_width is None and mode == "bar":
-        bar_width = np.amin((x[1:] - x[:-1])) / (1.5 * y.shape[-1])
+        bar_width = (np.amin((x[1:] - x[:-1])) if len(x)
+                     > 1 else 1) / (1.5 * y.shape[-1])
 
     handles = []
 
@@ -1442,11 +1451,23 @@ def plot_vectors(y: VEC_TYPE,
         elif mode == "bar":
             position = x + i * bar_width
             # Center the bars
-            position = position - bar_width * y.shape[-1] / 2
-            handle = ax.bar(position, y[:, i], width=bar_width, label=label[i])
+            position = position - (bar_width * y.shape[-1]) / 2
+            handle = ax.bar(
+                position, y[:, i], width=bar_width, label=label[i], align="edge")
         else:
             raise ValueError("Mode should be either plot or scatter.")
         handles.append(handle)
+
+    if mode == "bar":
+        from matplotlib.ticker import (MultipleLocator, AutoMinorLocator)
+        ax.xaxis.set_minor_locator(MultipleLocator(1))
+
+    if xticks is not None:
+        tpos, tlab = xticks
+        if xticks_horizontal_alignment is None:
+            xticks_horizontal_alignment = "center"
+        ax.set_xticks(ticks=tpos, labels=tlab,
+                      rotation=xticks_rotation, ha=xticks_horizontal_alignment)
 
     if xlim is not None:
         ax.set_xlim(*tuple(xlim))

@@ -25,6 +25,7 @@ from traceback import FrameSummary, extract_stack
 from tools.transforms.to_tensor import tensorify
 from tools.transforms.to_tensor_image import tensorify_image
 import gc
+from torch.nn import ModuleList
 
 
 def set_jit_enabled(enabled: bool):
@@ -251,7 +252,7 @@ def torch_to_numpy_dtype(dtype: torch.dtype) -> np.dtype:
         If the dtype is not supported.
     """
     torch_to_numpy_dtype_dict = {
-        torch.bool: np.bool,
+        torch.bool: bool,
         torch.uint8: np.uint8,
         torch.int8: np.int8,
         torch.int16: np.int16,
@@ -1542,3 +1543,66 @@ def buffered(gen: Generator,
     if len(_current_data) > 0:
         for item in process_items(_current_data, _current_data_gen_index, _current_buffer, _current_item_shape):
             yield item
+
+
+def parse_dtype(_dtype_or_str: Union[str, torch.dtype, np.dtype]) -> torch.dtype:
+    """Parses a string or torch.dtype to a torch.dtype.
+
+    Parameters
+    ----------
+    _dtype_or_str : Union[str, torch.dtype]
+        The dtype or string to parse.
+
+    Returns
+    -------
+    torch.dtype
+        The parsed dtype.
+    """
+    if isinstance(_dtype_or_str, np.dtype):
+        return numpy_to_torch_dtype(_dtype_or_str)
+    if isinstance(_dtype_or_str, str):
+        if _dtype_or_str.startswith("torch."):
+            _dtype_or_str = _dtype_or_str.replace("torch.", "")
+        dt = getattr(torch, _dtype_or_str)
+        if dt is None:
+            raise ValueError(f"Invalid dtype string: {_dtype_or_str}")
+        if not isinstance(dt, torch.dtype):
+            raise ValueError(
+                f"Invalid dtype string: {_dtype_or_str}, must be a valid torch dtype.")
+        return dt
+    elif isinstance(_dtype_or_str, torch.dtype):
+        return _dtype_or_str
+    else:
+        raise ValueError(f"Invalid dtype: {_dtype_or_str}")
+
+
+def sort_module_list(module_list: ModuleList, order: List[torch.nn.Module]) -> ModuleList:
+    """Sorts a ModuleList according to the given order.
+
+    Performs the order in-place, so the original ModuleList will be modified.
+
+    May raise a ValueError if the order is not valid, eg. some elements are missing.
+
+    Parameters
+    ----------
+    module_list : ModuleList
+        The ModuleList to sort.
+    order : List[torch.nn.Module]
+        The order to sort the ModuleList by.
+
+    Returns
+    -------
+    ModuleList
+        The sorted ModuleList.
+    """
+    current_order = [order.index(m) for m in module_list]
+    sorted_order = sorted(current_order)
+    if current_order == sorted_order:
+        return module_list
+    needed_order_d = {order.index(m): m for m in module_list}
+    for i in range(len(order)):
+        item = needed_order_d.get(i)
+        current_index = list(module_list).index(item)
+        v = module_list.pop(current_index)
+        module_list.insert(i, v)
+    return module_list

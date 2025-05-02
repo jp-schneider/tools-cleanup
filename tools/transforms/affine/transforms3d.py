@@ -1,5 +1,5 @@
 import torch
-from typing import List, Literal, Optional, Tuple
+from typing import Dict, List, Literal, Optional, Tuple
 from tools.util.torch import as_tensors, tensorify
 import numpy as np
 
@@ -611,22 +611,31 @@ def _vector_angle(v1: torch.Tensor, v2: torch.Tensor) -> torch.Tensor:
 
 
 @as_tensors()
-def vector_angle(v1: VEC_TYPE, v2: VEC_TYPE) -> torch.Tensor:
+def vector_angle(v1: VEC_TYPE, v2: VEC_TYPE, mode: Literal["acos", "tan2"] = "acos") -> torch.Tensor:
     """Computes the angle between vector v1 and v2.
+
+    The vector angle is defined as the angle between the vectors in the plane they span.
+
+    Use tan2 for a more numerically stable version of acos (but slower).
 
     Parameters
     ----------
     v1 : VEC_TYPE
-        The first input vector
+        The first input vector, shape (..., 3)
     v2 : VEC_TYPE
-        The second input vector
+        The second input vector, shape (..., 3)
 
     Returns
     -------
     torch.Tensor
-        Angle between vector.
+        Angle between vector. shape (...,)
     """
-    return torch.acos((v1 * v2).sum(dim=-1) / (torch.norm(v1, dim=-1) * torch.norm(v2, dim=-1)))
+    if mode == "acos":
+        return torch.acos((v1 * v2).sum(dim=-1) / (torch.norm(v1, dim=-1) * torch.norm(v2, dim=-1)))
+    elif mode == "tan2":
+        return torch.atan2(torch.cross(v1, v2, dim=-1).norm(p="fro", dim=-1), (v1 * v2).sum(dim=-1))
+    else:
+        raise ValueError("mode must be either 'acos' or 'tan2'")
 
 
 @torch.jit.script
@@ -1042,7 +1051,7 @@ def compute_ray_plane_intersections_from_position_matrix(
         plane_position: torch.Tensor,
         ray_origins: torch.Tensor,
         ray_directions: torch.Tensor,
-        eps: float = 1e-6,
+        eps: float = 5e-6,
 ) -> torch.Tensor:
     plane_position, plane_shape = flatten_batch_dims(
         plane_position, end_dim=-3)
@@ -1073,7 +1082,7 @@ def compute_ray_plane_intersections(
         plane_normals: torch.Tensor,
         ray_origins: torch.Tensor,
         ray_directions: torch.Tensor,
-        eps: float = 1e-6,
+        eps: float = 5e-6,
 ) -> torch.Tensor:
     # Check if shapes are matching
 
@@ -1119,3 +1128,259 @@ def compute_ray_plane_intersections(
         t * ray_v[~is_not_intersecting]  # Intersection points for unlimited planes
 
     return unflatten_batch_dims(intersection_points, plane_shape)
+
+
+def align_rectangles(rect1: torch.Tensor, rect2: torch.Tensor):
+    """
+    Aligns two rectangles using Procrustes analysis and returns the transformation matrix
+    to transform the first rectangle to the second rectangle.
+
+    Parameters
+    ----------
+    rect1 : torch.Tensor
+        The first rectangle. Shape: (B, P, 3)
+
+    rect2 : torch.Tensor
+        The second rectangle. Shape: (B, P, 3)
+
+    Returns
+    -------
+    torch.Tensor
+        The transformation matrix. Shape: (B, 4, 4)
+    """
+    rect1, shp = flatten_batch_dims(rect1, -3)
+    rect2, _ = flatten_batch_dims(rect2, -3)
+
+    B, P, _ = rect1.shape
+    if rect2.shape != (B, P, 3):
+        raise ValueError("The input rectangles must have the same shape.")
+
+    # Center the rectangles
+    center1 = rect1.mean(dim=-2)
+    center2 = rect2.mean(dim=-2)
+
+    rect1_centered = rect1 - center1.unsqueeze(-2).expand_as(rect1)
+    rect2_centered = rect2 - center2.unsqueeze(-2).expand_as(rect1)
+
+    # Calculate the optimal rotation using Procrustes analysis
+    H = torch.bmm(
+        rect2_centered[:, :3].transpose(-2, -1),
+        rect1_centered[:, :3]
+    )
+
+    U, S, Vh = torch.linalg.svd(H)
+    V = Vh.mH
+
+    R = torch.bmm(U, V.transpose(-2, -1))
+
+    # Calculate the translation
+    t = center2 - torch.bmm(R, center1.unsqueeze(-1))[..., 0]
+
+    T = torch.eye(4, dtype=rect1.dtype, device=rect1.device)[
+        None, ...].repeat(B, 1, 1)
+    T[..., :3, :3] = R  # Rotation matrix
+    T[..., :3, 3] = t  # Translation vector
+    T[..., 3, 3] = 1
+
+    # Sanity check
+    # tf = torch.bmm(T.unsqueeze(1).expand(-1, P, -1, -1).reshape(B*P, 4, 4), torch.cat([rect1.reshape(B*P, 3).unsqueeze(-1), torch.ones((B * P, 1, 1))], dim=-2))[:, :3, 0].reshape(B, P, 3)
+    # torch.allclose(rect2, tf, atol=1e-6)
+    return unflatten_batch_dims(T, shp)
+
+
+def find_plane(points: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+    """
+    Find the best-fit plane for a set of points using least squares.
+
+
+
+    Effectively, this function computes the plane equation Ax + By + Cz + D = 0
+
+    Parameters
+    ----------
+    points : torch.Tensor
+        The input points. Shape: (B, P, 3)
+        P should be at least 3 to solve the plane equation.
+
+    Returns
+    -------
+    Tuple[torch.Tensor, torch.Tensor]
+        A tuple containing the centeroid of the found plane and its normal vector.
+
+
+    """
+    points, shp = flatten_batch_dims(points, -3)
+    BS, P, _ = points.shape
+
+    # Compute the centroid of the points
+    centroid = points.mean(dim=-2)
+
+    # Center the points around the centroid
+    centered_points = points - centroid.unsqueeze(-2).expand_as(points)
+
+    A = centered_points.clone()
+
+    has_values = (A == 0.).all(dim=-2)
+    valid = ~has_values.any(dim=-1)
+
+    use_dim = -1
+    n = torch.zeros(BS, 3, device=points.device, dtype=points.dtype)
+
+    if valid.any():
+        A[valid, :, use_dim] = 1.  # Set any coordinate to 1 to solve the plane equation
+        B = centered_points[valid, :, use_dim]
+
+        vec = torch.linalg.lstsq(A, B)
+        coef = vec.solution
+
+        a = coef[..., 0]
+        b = coef[..., 1]
+        d = coef[..., 2]
+
+        # Normal vector of the plane
+        n[valid] = torch.stack([a, b, -torch.ones_like(b)], dim=-1)
+    if (~valid).any():
+        # If of one dimension all points are zero, the plane is orthogonal to this dimension
+        z = torch.zeros(((~valid).sum(), 3),
+                        device=points.device, dtype=points.dtype)
+        z[has_values[~valid]] = 1.0
+        n[~valid] = z
+
+    n = n / n.norm(dim=-1, keepdim=True)  # Normalize the normal vector
+    return unflatten_batch_dims(centroid, shp), unflatten_batch_dims(n, shp)
+
+
+@torch.jit.script
+def compute_line_intersections(
+        p1: torch.Tensor,
+        u1: torch.Tensor,
+        p2: torch.Tensor,
+        u2: torch.Tensor,
+        parallel_eps: float = 1e-6,
+        is_close_eps: float = 1e-6) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
+    """
+    Calculates the intersection point of two lines in 3D space.
+
+    The lines are defined by two points and their direction vectors.
+
+    Parameters
+    ----------
+    p1 : torch.Tensor
+        The first point on the first line. Shape: ([..., B], 3)
+    u1 : torch.Tensor
+        The direction vector of the first line. Shape: ([..., B], 3)
+    p2 : torch.Tensor
+        The first point on the second line. Shape: ([..., B], 3)
+    u2 : torch.Tensor
+        The direction vector of the second line. Shape: ([..., B], 3)
+
+    eps : float, optional
+        The tolerance for checking if the lines are parallel. Default is 1e-6.
+        and if the lines are not close to each other.
+
+    Returns
+    -------
+    torch.Tensor
+        The intersection point of the two lines. Shape: ([..., B], 3)
+        Can be NaN if the lines are parallel or the solution is not close enough.
+    """
+    u1, shp = flatten_batch_dims(u1, -2)
+    u2, _ = flatten_batch_dims(u2, -2)
+    p1, _ = flatten_batch_dims(p1, -2)
+    p2, _ = flatten_batch_dims(p2, -2)
+
+    intersection_points = torch.zeros_like(p1)
+    intersection_points.fill_(float('nan'))
+    r1 = torch.empty_like(p1[..., 0])
+    r1.fill_(float('nan'))
+    r2 = torch.empty_like(p1[..., 0])
+    r2.fill_(float('nan'))
+
+    # Check if the direction vectors are linearly dependent (parallel lines)
+    non_parallel = ~torch.isclose(torch.cross(u1, u2, dim=-1), torch.zeros(
+        3, device=u1.device, dtype=u1.dtype), atol=parallel_eps).all(dim=-1)
+
+    if non_parallel.any():
+        u1 = u1[non_parallel]
+        u2 = u2[non_parallel]
+        p1 = p1[non_parallel]
+        p2 = p2[non_parallel]
+
+        # Set up the system of equations: p1 + t*u1 = p2 + s*u2
+        # Rearranged: t*u1 - s*u2 = p2 - p1
+        a = torch.stack([u1, -u2], dim=-1)  # Shape: (B, 3, 2)
+        b = p2 - p1
+
+        # Solve the overdetermined linear system using least squares
+        params, residuals, rank, s = torch.linalg.lstsq(a, b, rcond=None)
+        r1_, r2_ = params[..., 0], params[..., 1]
+
+        # Calculate the intersection point
+        intersection_points[non_parallel] = p1 + \
+            r1_.unsqueeze(-1).expand_as(u1) * u1
+        r1[non_parallel] = r1_
+        r2[non_parallel] = r2_
+
+        # Verify if the point also lies on the second line
+        intersection_point_check = p2 + r2_.unsqueeze(-1).expand_as(u1) * u2
+        not_close = ~torch.isclose(
+            intersection_points, intersection_point_check, atol=is_close_eps).all(dim=-1)
+
+        if not_close.any():
+            not_close_idx = non_parallel.argwhere().squeeze(-1)[not_close]
+            intersection_points[not_close_idx] = float(
+                'nan')  # Set to NaN if not close
+            r1[not_close_idx] = float('nan')
+            r2[not_close_idx] = float('nan')
+
+    ctx = dict()
+    ctx["r1"] = unflatten_batch_dims(r1, shp)
+    ctx["r2"] = unflatten_batch_dims(r2, shp)
+    return unflatten_batch_dims(intersection_points, shp), ctx
+
+
+def plane_eval(p0: torch.Tensor, n: torch.Tensor, values: torch.Tensor) -> torch.Tensor:
+    """Evaluate the plane equation at the given points
+
+    Parameters
+    ----------
+    p0 : torch.Tensor
+        The point on the plane (3D vector) Shape: ([... B], 3)
+
+    n : torch.Tensor
+        The normal vector of the plane (3D vector) Shape: ([... B], 3)
+
+    values : torch.Tensor
+        The values to evaluate at the given (x, y) points (2D vector) Shape: ([... B], 2)
+
+    Returns
+    -------
+    torch.Tensor
+        The evaluated values at the given points (3D vector) Shape: ([... B], 3)
+    """
+    p0, _ = flatten_batch_dims(p0, -2)
+    n, _ = flatten_batch_dims(n, -2)
+    values, shp = flatten_batch_dims(values, -2)
+
+    if (n[..., -1] == 0.).any():
+        raise ValueError(
+            "The plane eval function is not yet implemented for YZ or XZ parallel planes having n[..., -1] == 0.")
+
+    Np0, C = p0.shape
+    Nn, C = n.shape
+    Nv, C = values.shape
+
+    if Np0 != Nv or Np0 != Nv:
+        if Np0 == 1:
+            p0 = p0.expand(Nv, -1)
+        else:
+            raise ValueError("p0, n and values must have the same batch size")
+        if Nn == 1:
+            n = n.expand(Nv, -1)
+        else:
+            raise ValueError("p0, n and values must have the same batch size")
+    z = (torch.bmm(n.unsqueeze(1), p0.unsqueeze(-1)).squeeze(-1) -
+         n[..., 0:1] * values[..., 0:1] - n[..., 1:2] * values[..., 1:2]) / n[..., 2:3]
+
+    zr = torch.cat([values[..., :2], z], dim=-1)
+    return unflatten_batch_dims(zr, shp)

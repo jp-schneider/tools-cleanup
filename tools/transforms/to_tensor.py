@@ -4,6 +4,10 @@ from tools.util.typing import NUMERICAL_TYPE, VEC_TYPE
 import numpy as np
 import torch
 
+try:
+    from PIL import Image
+except ImportError:
+    Image = None  # PIL is optional, handle it gracefully
 
 class ToTensor(Transform):
     """Transforms a arbitrary value or array to a pytorch tensor."""
@@ -12,6 +16,8 @@ class ToTensor(Transform):
                   dtype: Optional[torch.dtype] = None,
                   device: Optional[torch.device] = None,
                   requires_grad: bool = False) -> torch.Tensor:
+        if Image is not None and isinstance(x, Image.Image):
+            x = np.array(x)
         if isinstance(x, torch.Tensor):
             if (dtype and x.dtype != dtype) or (device and x.device != device):
                 x = x.to(dtype=dtype, device=device)

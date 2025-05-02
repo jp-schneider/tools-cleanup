@@ -34,7 +34,7 @@ class BoxNode3D(DiscreteModuleSceneNode3D, VisualNode3D):
                              device=self._translation.device)
         if size.dim() != 1 or size.shape[0] != 3:
             raise ValueError("Size must be a 3D vector.")
-        self.size = size
+        self.register_buffer("size", size)
 
     def get_local_corners(self, **kwargs) -> torch.Tensor:
         """Returns the corners of the box in local coordinates.

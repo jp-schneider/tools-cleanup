@@ -3,7 +3,6 @@ from tools.transforms.transform import Transform
 from tools.util.typing import NUMERICAL_TYPE, VEC_TYPE
 import numpy as np
 
-
 class ToNumpy(Transform):
     """Transforms a arbitrary value or tensor to a numpy array."""
 

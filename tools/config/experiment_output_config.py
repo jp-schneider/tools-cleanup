@@ -20,7 +20,7 @@ class ExperimentOutputConfig(OutputConfig):
     name: str = field(default="Example")
     """Name of the experiment."""
 
-    output_path: Union[Path, str] = field(
+    output_path: Union[str, Path] = field(
         default="runs/{year}-{month:02d}-{day:02d}/{experiment_datetime_string}_{name}")
     """Output directory for the final output."""
 

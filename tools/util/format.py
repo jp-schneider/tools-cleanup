@@ -804,6 +804,8 @@ def format_dataframe_string(df: pd.DataFrame) -> str:
 def consecutive_indices_string(x: VEC_TYPE, slice_sep: str = "-", item_sep: str = ",") -> str:
     """Formats a 1D tensor of (consecutive) indices into a string representation.
 
+    Simplifies the representation of consecutive indices, or repeating orders or numbers by grouping them together.
+
     Indices of similar step size are grouped together. The output is a string
     where each item is a string of the form "StartSlice[-EndSlice-StepSize]".
     StartSlice is the starting index of the group, EndSlice is the ending index, both are inclusive.

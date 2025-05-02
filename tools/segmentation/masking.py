@@ -1,8 +1,11 @@
 from matplotlib.colors import to_rgba
 from typing import Any, Dict, List, Optional, Literal, Tuple, Union
+
+import torch
 from tools.util.format import parse_enum
 from tools.util.progress_factory import ProgressFactory
 from tools.util.reflection import class_name
+from tools.util.torch import as_tensors
 from tools.util.typing import VEC_TYPE
 import numpy as np
 from tools.util.numpy import numpyify, numpyify_image
@@ -22,9 +25,10 @@ from tools.util.typing import _DEFAULT, DEFAULT
 import pandas as pd
 from tools.util.path_tools import read_directory_recursive
 
+
 def split_overlap_channel_masks(
         masks: VEC_TYPE
-        ) -> Tuple[List[np.ndarray], List[List[int]]]:
+) -> Tuple[List[np.ndarray], List[List[int]]]:
     """Splits a list of channel masks into multiple masks, where each mask has no overlap with the other masks.
 
     Parameters
@@ -226,13 +230,13 @@ def value_mask_to_channel_masks(
             invalid_values.update(ignore_value)
     vals = np.unique(mask)
     valid_values = [x for x in vals if x not in invalid_values]
-    
+
     if len(valid_values) == 0:
         return np.zeros(mask.shape + (0,), dtype=bool), np.array([])
-    
+
     _valid_classes = np.stack(valid_values)
     channel_mask = np.zeros(mask.shape + (len(_valid_classes),), dtype=bool)
-    
+
     for i, c in enumerate(_valid_classes):
         channel_mask[..., i] = (mask == c)
     return channel_mask, _valid_classes
@@ -281,9 +285,9 @@ def load_mask(
             if size is None:
                 size = compute_new_size(mask_pil.size, max_size)[::-1]
             mask_pil = mask_pil.resize(
-                (size[1], size[0]), 
+                (size[1], size[0]),
                 resample=Resampling.NEAREST
-                )
+            )
         # Load metadata
         metadata = load_image_exif(mask_pil, safe_load=True)
         out_dtype = metadata.get('dtype', None)
@@ -411,7 +415,7 @@ def save_mask(mask: VEC_TYPE,
             raise ValueError("Mask must be in range 0 - 255")
         else:
             mask = mask.astype(np.uint8)
-        
+
     if mask.dtype == np.uint8:
         unique = np.unique(mask)
         if len(unique) == 2 and max(unique) == 1 and min(unique) == 0 and spread:
@@ -424,7 +428,8 @@ def save_mask(mask: VEC_TYPE,
     if spread and mask.dtype == np.uint8:
         unique = np.unique(mask)
         if len(unique) > 1:
-            maps = np.arange(0, 256, np.floor(255 // (unique.shape[0] - 1)), dtype=np.uint8)
+            maps = np.arange(0, 256, np.floor(
+                255 // (unique.shape[0] - 1)), dtype=np.uint8)
         else:
             maps = np.array([0], dtype=np.uint8)
         metadata['spread'] = {x[0].item(): x[1].item()
@@ -448,7 +453,8 @@ def save_mask(mask: VEC_TYPE,
         it = enumerate(filenames)
         pbar = None
         if progress_bar:
-            pbar = pf.bar(total=mask.shape[0], desc="Saving masks", is_reusable=True, tag="SAVING_MASKS")
+            pbar = pf.bar(
+                total=mask.shape[0], desc="Saving masks", is_reusable=True, tag="SAVING_MASKS")
         for i, f in it:
             img = Image.fromarray(mask[i].squeeze())
             if pillow_mask_mode is not None:
@@ -606,7 +612,7 @@ def inpaint_mask_image(
         dist_transform_fore = cv2.distanceTransform(mask, cv2.DIST_L2, 3)
         dist_transform_back = cv2.distanceTransform(1-mask, cv2.DIST_L2, 3)
 
-        cv.drawContours(mask, contours, -1, (255),1)
+        cv.drawContours(mask, contours, -1, (255), 1)
 
         contour_radius += 2
         contour_mask = np.abs(
@@ -662,6 +668,47 @@ def inpaint_mask(image: np.ndarray,
     return image
 
 
+@as_tensors()
+def is_coordinate_in_mask(coord: torch.Tensor, mask: torch.Tensor) -> torch.Tensor:
+    """
+    Check if a coordinate is in a mask.
+
+    Parameters
+    ----------
+    coord : torch.Tensor
+        Coordinates to check.
+        Shape: (N, C) C is the number of dimensions within the mask in the same order.
+
+    mask : torch.Tensor
+        Mask to check against.
+        Shape: (C1, C2, ..., CN)
+
+    Returns
+    -------
+    torch.Tensor
+        Boolean tensor indicating if the coordinate is in the mask.
+        Shape (N,)
+    """
+    ret = torch.ones(coord.shape[0], dtype=torch.bool, device=coord.device)
+    if coord.numel() == 0:
+        # If no coordinates are present, return empty tensor.
+        return ret
+    mask_shape = mask.shape
+    # Check if bound overflows
+    for i in range(len(mask_shape)):
+        ret = ret & ~(coord[:, i] < 0)
+        ret = ret & ~(coord[:, i] >= mask_shape[i])
+
+    chk = list()
+    for i in range(len(mask_shape)):
+        chk.append(coord[ret, i])
+
+    in_bounds = ret.clone()
+    inmask_res = ret[in_bounds] & mask[tuple(chk)]
+    ret[in_bounds] = inmask_res
+    return ret
+
+
 def save_channel_masks(
         masks: np.ndarray,
         mask_directory: str,
@@ -693,13 +740,13 @@ def save_channel_masks(
     index_offset : int, optional
         Offset to add to the index of the mask in the batch, by default 0
         Can be used if masks are saved with a format string and the index should start at a different value.
-    
+
     batch_indices : Optional[List[Any]], optional
         If the indices of the batch should be different than the index in the batch itself, batch_indices can be used.
         Its length should match the number of masks in the batch. Instead of an index number, the value at the batch_indices will be used.
         Mutally exclusive with index_offset.
         Default is None.
-    
+
     additional_filename_variables : Optional[Dict[str, Any]], optional
         Additional variables to use in the filename format string, by default None
         These variables will be used in the filename format string.
@@ -714,12 +761,12 @@ def save_channel_masks(
     else:
         Tuple[Dict[int, List[str]], Dict[int, np.ndarray]]
             1. Dictionary of indexed overlapping aware value masks.
-                Key is the overlapping index 
+                Key is the overlapping index
                 Value is a list of paths to the masks which belong to the same object in various time steps if the values are the same.
             2. Dictionary of indexed overlapping aware object ids.
                 Key is the overlapping index
                 Value is a numpy array of object ids as supplied in the oids parameter, or a 1-based index if oids was not supplied.
-        
+
     """
     if oids is None:
         oids = np.arange(1, masks.shape[-1] + 1)
@@ -728,7 +775,8 @@ def save_channel_masks(
 
     # Check if oids are unique
     if len(np.unique(oids)) != len(oids):
-        raise ValueError("Object ids must be unique. Duplicate ids found: " + str({int(k):v for k,v in zip(*np.unique(oids, return_counts=True)) if v > 1}))
+        raise ValueError("Object ids must be unique. Duplicate ids found: " + str(
+            {int(k): v for k, v in zip(*np.unique(oids, return_counts=True)) if v > 1}))
 
     if additional_filename_variables is None:
         additional_filename_variables = dict()
@@ -754,7 +802,8 @@ def save_channel_masks(
         value_mask = channel_masks_to_value_mask(
             m_stack, m_stack_oids, handle_overlap='raise')[..., None]
         p = save_mask(value_mask, path, spread=spread,
-                      additional_filename_variables=dict(ov_index=i, **additional_filename_variables), 
+                      additional_filename_variables=dict(
+                          ov_index=i, **additional_filename_variables),
                       index_offset=index_offset,
                       batch_indices=batch_indices
                       )
@@ -765,7 +814,7 @@ def save_channel_masks(
             saved_paths.extend(p)
 
     if return_in_ov_format:
-        return ov_dict, {i:np.array(x, dtype=int) for i,x in enumerate(overlap_free_oids)}
+        return ov_dict, {i: np.array(x, dtype=int) for i, x in enumerate(overlap_free_oids)}
     else:
         return saved_paths
 
@@ -882,14 +931,16 @@ def load_channel_masks(
                     nan_entries[ov_index] = []
                 nan_entries[ov_index].append(i)
             else:
-                overlapping_masks[ov_index].append(load_mask(p, size=size, max_size=max_size))
+                overlapping_masks[ov_index].append(
+                    load_mask(p, size=size, max_size=max_size))
             if progress_bar:
                 bar.update(1)
     # Stack masks
     for k in overlapping_masks:
         if len(nan_entries.get(k, [])) > 0:
             # Find first non-nan entry
-            first_non_nan = next(iter([x for x in overlapping_masks[k] if x is not None]))
+            first_non_nan = next(
+                iter([x for x in overlapping_masks[k] if x is not None]))
             shape = first_non_nan.shape
             dtype = first_non_nan.dtype
             for i in nan_entries[k]:
@@ -1021,7 +1072,7 @@ def inpaint_mask_image(
     return painted_image
 
 
-def inpaint_masks(image: np.ndarray, 
+def inpaint_masks(image: np.ndarray,
                   masks: np.ndarray,
                   colors: Optional[np.ndarray] = None,
                   contour_colors: Optional[np.ndarray] = None,
@@ -1215,11 +1266,12 @@ def fuse_timed_stack(masks: np.ndarray, fuse_indices: List[List[int]], ignore_in
         ret[t] = fused_mask
     return ret
 
+
 def index_channel_mask_hierarchy(
         path: str,
         pattern: str = r"(?P<oid>\d+)/(?P<timestamp>\d+).png",
         parser: Optional[Dict[str, Any]] = DEFAULT,
-        ) -> pd.DataFrame:
+) -> pd.DataFrame:
     """Indexes a directory of channel masks with a hierarchy.
 
     By default, the pattern is set to "(?P<oid>\\d+)/(?P<timestamp>\\d+).png" which will index the masks by the object id and the timestamp.
@@ -1254,10 +1306,10 @@ def index_channel_mask_hierarchy(
         DataFrame with the indexed masks.
         Columns are "oid", "timestamp", "path" and any additional keys in the parser.
     """
-        
+
     if parser == DEFAULT:
         parser = dict(oid=int, timestamp=int)
-    
+
     if "?P<oid>" not in pattern:
         raise ValueError("The pattern must contain the oid group.")
     if "oid" not in parser:
@@ -1267,9 +1319,11 @@ def index_channel_mask_hierarchy(
         raise ValueError("The pattern must contain the timestamp group.")
     if "timestamp" not in parser:
         parser['timestamp'] = int
-    
-    found_masks = read_directory_recursive(os.path.join(path, pattern), parser=parser)    
-    df = pd.DataFrame(found_masks).sort_values(["timestamp", "oid"]).reset_index(drop=True)
+
+    found_masks = read_directory_recursive(
+        os.path.join(path, pattern), parser=parser)
+    df = pd.DataFrame(found_masks).sort_values(
+        ["timestamp", "oid"]).reset_index(drop=True)
     return df
 
 
@@ -1277,7 +1331,7 @@ def determine_overlapping_groups_from_index(
         df: pd.DataFrame,
         progress_bar: bool = False,
         progress_factory: Optional[ProgressFactory] = None
-        ) -> Dict[int, List[int]]:
+) -> Dict[int, List[int]]:
     """Determines overlapping groups from an indexed DataFrame.
 
     Parameters
@@ -1301,8 +1355,8 @@ def determine_overlapping_groups_from_index(
         if progress_factory is None:
             progress_factory = ProgressFactory()
         bar = progress_factory.bar(total=num_timestamps, desc="Determining overlapping groups",
-                                    tag="DETERMINING_OVERLAPPING_GROUPS",
-                                    is_reusable=True)
+                                   tag="DETERMINING_OVERLAPPING_GROUPS",
+                                   is_reusable=True)
     for t, timedf in df.groupby("timestamp"):
         for group_index, group in dict(groups).items():
             if len(group) == 1:
@@ -1325,6 +1379,7 @@ def determine_overlapping_groups_from_index(
             bar.update(1)
     return groups
 
+
 def save_index_to_overlapping_groups_masks(
         df: pd.DataFrame,
         groups: Dict[int, List[int]],
@@ -1333,7 +1388,7 @@ def save_index_to_overlapping_groups_masks(
         spread: bool = False,
         progress_bar: bool = False,
         progress_factory: Optional[ProgressFactory] = None
-        ) -> Dict[int, List[str]]:
+) -> Dict[int, List[str]]:
     """Saves the indexed masks to overlapping groups.
 
     Parameters
@@ -1386,9 +1441,11 @@ def save_index_to_overlapping_groups_masks(
                 color_oids = [oid_mapping.get(oid, oid) for oid in oids]
 
                 masks = np.stack([load_mask(p) for p in paths], axis=-1)
-                value_mask = channel_masks_to_value_mask(masks, color_oids, handle_overlap='raise')
+                value_mask = channel_masks_to_value_mask(
+                    masks, color_oids, handle_overlap='raise')
 
-                path = save_mask(value_mask, os.path.join(save_directory, f"img_{time_format.format(t)}_ov_{ov_format.format(ov_index)}.png"), spread=spread)
+                path = save_mask(value_mask, os.path.join(
+                    save_directory, f"img_{time_format.format(t)}_ov_{ov_format.format(ov_index)}.png"), spread=spread)
                 save_paths[ov_index].append(path)
 
                 if progress_bar:

@@ -21,6 +21,7 @@ from tools.util.format import parse_type, parse_format_string
 import gc
 import copy
 
+
 class MultiRunner(TrainableRunner):
     """A runner which can run multiple child runners. Typically used to find the best hyperparameters."""
 
@@ -80,8 +81,8 @@ class MultiRunner(TrainableRunner):
     def build(self, build_children: bool = True, **kwargs) -> None:
         pass
 
-    def save_child_configs(self, 
-                           directory: str, 
+    def save_child_configs(self,
+                           directory: str,
                            prefix: Optional[str] = None,
                            filename_format: Optional[str] = None,
                            purge_datetime: bool = False,
@@ -125,7 +126,8 @@ class MultiRunner(TrainableRunner):
         paths = []
 
         for i, config in enumerate(self.child_configs):
-            base_name = parse_format_string(filename_format, [config], index_offset=i)[0]
+            base_name = parse_format_string(
+                filename_format, [config], index_offset=i)[0]
             base_name = replace_file_unallowed_chars(base_name)
             path = os.path.join(directory, base_name)
 
@@ -280,11 +282,31 @@ class MultiRunner(TrainableRunner):
         jobs = self.create_jobs()
         return list(zip(self.child_runners, [f'python {x} {" ".join(y)}' for x, y in jobs]))
 
-    def train(self, *args, **kwargs):
+    def train(self,
+              *args,
+              start: int = 0,
+              end: Optional[int] = None,
+              **kwargs):
         runner = self
         config = self.config
         status = dict()
-        for i, child_runner in enumerate(list(runner.child_runners)):
+
+        if end is not None:
+            if end > 0:
+                if end < start:
+                    raise ValueError("End must be greater or equal to start.")
+                if end > len(runner.child_runners):
+                    raise ValueError(
+                        "End must be smaller than the number of child runners.")
+            else:
+                end = len(runner.child_runners) - end
+                if end < start:
+                    raise ValueError("End must be greater or equal to start.")
+        else:
+            end = len(runner.child_runners)
+
+        for i in range(start, end):
+            child_runner = runner.child_runners[i]
             try:
                 cfg = child_runner.config
                 cfg.prepare()
@@ -307,13 +329,13 @@ class MultiRunner(TrainableRunner):
 
                     logger.info(
                         f"Training done with child runner #{i}")
-                    
+
                     child_runner.finalize()
                     logger.info(
                         f"Finalized child runner #{i}")
-                    
+
                     status[i] = "success"
-            
+
             except Exception as err:
                 logger.exception(
                     f"Raised {type(err).__name__} in training child runner #{i}")

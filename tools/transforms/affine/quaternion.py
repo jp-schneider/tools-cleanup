@@ -54,6 +54,54 @@ def quat_normalize(quat: torch.Tensor) -> torch.Tensor:
 
 
 @torch.jit.script
+def quat_norm(quat: torch.Tensor) -> torch.Tensor:
+    """
+    Returns the norm of a batch of quaternions.
+
+    Parameters
+    ----------
+    quat : torch.Tensor
+        Quaternion to compute the norm of. Shape should be (..., 4). XYZW convention.
+
+    Returns
+    -------
+    torch.Tensor
+        Norm of the input quaternions. Shape is (...,).
+    """
+    return torch.norm(quat, dim=-1)
+
+
+@torch.jit.script
+def quat_square_root(quat: torch.Tensor) -> torch.Tensor:
+    """
+    Returns the square root of a quaternion.
+
+    Parameters
+    ----------
+    quat : torch.Tensor
+        Input batch of quaternions. Shape should be (..., 4). XYZW convention.
+
+    Returns
+    -------
+    torch.Tensor
+        Square root of the input quaternions. Shape is (..., 4).
+        The return value is the positive square root, e.g -1 * out is also a valid square root.
+
+        Further reading:
+        https://en.wikipedia.org/wiki/Quaternion#Square_roots_of_arbitrary_quaternions
+    """
+    quat, shape = flatten_batch_dims(quat, -2)
+    norm = quat_norm(quat).unsqueeze(-1)
+    r = quat[:, -1:]
+    xyz = quat[:, :-1]
+    scalar_part = torch.sqrt(0.5 * (norm + r))
+    vector_part = (xyz / torch.sqrt((xyz * xyz).sum(dim=-1)
+                                    ).unsqueeze(-1)) * torch.sqrt(0.5 * (norm - r))
+    rq = torch.cat([vector_part, scalar_part], dim=-1)
+    return unflatten_batch_dims(rq, shape)
+
+
+@torch.jit.script
 def quat_abs(quat: torch.Tensor) -> torch.Tensor:
     """
     Returns the absolute value of a batch of quaternions.
@@ -166,10 +214,17 @@ def quat_product(p: torch.Tensor, q: torch.Tensor) -> torch.Tensor:
     """
     Returns the product of two quaternions.
 
-    Args:
-        p, q (...x4 tensor, XYZW convention): batch of quaternions.
-    Returns:
-        batch of quaternions (...x4 tensor, XYZW convention).
+    Parameters
+    ----------
+    p : torch.Tensor
+        The first input batch of quaternions. Shape should be (..., 4). XYZW convention.
+
+    q : torch.Tensor
+        The second input batch of quaternions. Shape should be (..., 4). XYZW convention.
+    Returns
+    -------
+    torch.Tensor
+        batch of quaternions resulting from the product. Shape is (..., 4).
     """
     # Adapted from SciPy:
     # https://github.com/scipy/scipy/blob/adc4f4f7bab120ccfab9383aba272954a0a12fb0/scipy/spatial/transform/rotation.py#L153
@@ -255,12 +310,16 @@ def quat_average(quats: torch.Tensor) -> torch.Tensor:
     """
     Averages multiple unit quaternions using weighted averaging.
 
-    Parameters:
-    quats: torch.Tensor ([..., B], N, 4) - Batch of unit quaternions.
+    Parameters
+    ---------
 
-    Returns:
-    torch.Tensor ([..., B], 4) - Averaged unit quaternion.
+    quats: torch.Tensor
+        Batch of unit quaternions. ([..., B], N, 4)
 
+    Returns
+    --------
+    torch.Tensor
+        Averaged unit quaternion. ([..., B], 4)
     """
     quats, shape = flatten_batch_dims(quats, -3)
 
@@ -274,6 +333,50 @@ def quat_average(quats: torch.Tensor) -> torch.Tensor:
     average = quat_composition(weighted_quats, normalize=True)
 
     return unflatten_batch_dims(average, shape)
+
+
+@torch.jit.script
+def quat_mean(quats: torch.Tensor) -> torch.Tensor:
+    """
+    Averages multiple unit quaternions using weighted averaging.
+
+    Parameters
+    ---------
+
+    quats: torch.Tensor
+        Batch of unit quaternions. ([..., B], N, 4)
+
+    Returns
+    --------
+    torch.Tensor
+        Averaged unit quaternion. ([..., B], 4)
+    """
+    return quat_average(quats)
+
+
+@torch.jit.script
+def quat_std(quats: torch.Tensor) -> torch.Tensor:
+    """
+    Computes the uncorrected sample standard deviation of a batch of quaternions.
+
+    Parameters
+    ---------
+
+    quats: torch.Tensor
+        Batch of unit quaternions. ([..., B], N, 4)
+
+    Returns
+    --------
+    torch.Tensor
+        Uncorrected sample standard deviation of the quaternions. ([..., B], 4)
+    """
+    quats, shape = flatten_batch_dims(quats, -3)
+    mean = quat_average(quats)
+    diff = quat_subtraction(quats, mean.unsqueeze(1).expand_as(quats))
+    prod = quat_product(diff, diff)
+    avg = quat_average(prod)
+    std = quat_square_root(avg)
+    return unflatten_batch_dims(std, shape)
 
 
 @torch.jit.script

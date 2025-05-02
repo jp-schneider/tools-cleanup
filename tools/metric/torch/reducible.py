@@ -44,12 +44,13 @@ class Reducible(Metric):
         super().__init__(**kwargs)
         if not decoding:
             reduction = raise_on_none(reduction)
-            if reduction not in REDUCTIONS:
+            if reduction not in REDUCTIONS and reduction != "none":
                 raise ValueError(
                     f"Value {reduction} for reduction is invalid. Supported values are: {','.join(REDUCTIONS.keys())}")
         if reduction == "none":
             self.reduce_fnc = None
-        self.reduce_fnc = REDUCTIONS[reduction]
+        else:
+            self.reduce_fnc = REDUCTIONS[reduction]
         self.dim = dim
         self.reduction_name = REDUCTIONS_NAMES[reduction]
         self.alter_naming = alter_naming
