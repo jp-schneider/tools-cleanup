@@ -457,6 +457,7 @@ def numerated_folder_name(path: str, max_check: int = 1000) -> str:
 
 def replace_unallowed_chars(path: str,
                             allow_dot: bool = True,
+                            allow_space: bool = True,
                             replace_with: str = "_") -> str:
     """Replaces unallowed characters in a path with a given character.
 
@@ -479,6 +480,8 @@ def replace_unallowed_chars(path: str,
     unallowed = ["<", ">", ":", "\"", "/", "\\", "|", "?", "*"]
     if not allow_dot:
         unallowed.append(".")
+    if not allow_space:
+        unallowed.append(" ")
     for char in unallowed:
         path = path.replace(char, replace_with)
     return path
