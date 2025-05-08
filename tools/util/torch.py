@@ -26,6 +26,7 @@ from tools.transforms.to_tensor import tensorify
 from tools.transforms.to_tensor_image import tensorify_image
 import gc
 from torch.nn import ModuleList
+from tools.util.sized_generator import sized_generator, SizedGenerator
 
 
 def set_jit_enabled(enabled: bool):
@@ -300,9 +301,10 @@ def batched_generator_exec(
         default_batch_size: int = 1,
         default_multiprocessing: bool = False,
         default_num_workers: int = 4,
-        default_explicit_garbage_collection: bool = False
-) -> Callable[[Callable[..., Any]], Callable[..., Generator]]:
-    """Decorator for executing a function in batches.
+        default_explicit_garbage_collection: bool = False,
+) -> Callable[[Callable[..., Any]], Callable[..., SizedGenerator]]:
+    """
+    Decorator for executing a function in batches.
     The wrapped function will be executed in batches based on the batched_params.
 
     Example:
@@ -465,6 +467,8 @@ def batched_generator_exec(
                 _batched_params, args=args, kwargs=mod_kwargs, function_params=function_params, batch_size=batch_size)
 
             if not use_multiprocessing:
+                # Yield size
+                yield len(batched_kwargs)
                 for batch_idx, batch_kwargs in enumerate(batched_kwargs):
                     yield function(**batch_kwargs)
                     if explicit_gc:
@@ -476,14 +480,16 @@ def batched_generator_exec(
                 listed_args = [list((bkw[k] for bkw in batched_kwargs))
                                for k in function_params if k in batched_kwargs[0]]
 
+                # Yield size
+                yield len(batched_kwargs)
                 with ProcessPool(num_workers) as p:
                     results = p.imap(function, *listed_args)
                     for r in results:
                         yield r
                         if explicit_gc:
                             garbage_collect()
-
-        return wrapper
+        wrap_gen = sized_generator()(wrapper)
+        return wrap_gen
     return decorator
 
 

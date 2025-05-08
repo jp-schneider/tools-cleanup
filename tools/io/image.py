@@ -1,10 +1,10 @@
 from pathlib import Path
-from typing import Any, Dict, Generator, List, Optional, Literal, Tuple, Union
+from typing import Any, Callable, Dict, Generator, List, Optional, Literal, Tuple, Union
 
 import torch
 from tools.util.format import parse_enum
 from tools.util.reflection import class_name
-from tools.util.torch import tensorify_image
+from tools.util.torch import tensorify_image, as_tensors
 from tools.util.typing import DEFAULT, VEC_TYPE
 import numpy as np
 from tools.transforms.to_numpy import numpyify
@@ -824,8 +824,7 @@ def check_text_overlap(occupied_area: np.ndarray,
     overlap_area = 0
 
     text_mask = np.zeros_like(occupied_area, dtype=bool)
-    text_mask[int(row):int(row + text_height), int(col)
-                  :int(col + text_width)] = True
+    text_mask[int(row):int(row + text_height), int(col)              :int(col + text_width)] = True
     overlap_with_occupied = np.sum(occupied_area[text_mask])
     overlap_area += overlap_with_occupied
 
@@ -1152,6 +1151,66 @@ def alpha_background_grid(
     return img
 
 
+def texture_grid(
+    resolution: Tuple[int, int],
+    color_fnc: Callable[[np.ndarray], np.ndarray] = DEFAULT,
+    square_size: int = 10,
+) -> np.ndarray:
+    """
+    Creates a pattern depending on the square size and resolution.
+
+    Parameters
+    ----------
+    resolution : Tuple[int, int]
+        Resolution of the grid in pixels.
+        Shape is (H, W) where H is the height and W is the width.
+
+    color_fnc : Callable[[np.ndarray], np.ndarray], optional
+        Function to generate the color of the grid. The default is DEFAULT.
+        The function should take a 2D array of shape (N, 2) and return a 2D array of shape (N, 4) with RGBA values in np.uint8.
+
+    square_size : int, optional
+        Size of the squares in the grid. The default is 10.
+    Returns
+    -------
+    np.ndarray
+        The grid pattern in shape H x W x C.
+    """
+    from tools.viz.matplotlib import parse_color_rgba
+    if color_fnc is DEFAULT:
+        def color_fnc(x: np.ndarray) -> np.ndarray:
+            import matplotlib.pyplot as plt
+            max_row = np.max(x[:, 0])
+            max_col = np.max(x[:, 1])
+            row_cmap = plt.get_cmap("rainbow")
+            col_cmap = plt.get_cmap("Greys")
+            row_vals = (x[:, 0] / max_row) * row_cmap.N
+            cols_vals = (x[:, 1] / max_col) * col_cmap.N
+
+            row_cols = row_cmap(row_vals.round().astype(int))
+            col_cols = col_cmap(cols_vals.round().astype(int))
+
+            colors = 0.5 * (row_cols + col_cols)
+            colors *= 255
+            colors = colors.astype(np.uint8)
+            return colors
+
+    img = np.zeros((resolution[0], resolution[1], 4), dtype=np.uint8)
+    x = np.arange(resolution[1])
+    y = np.arange(resolution[0])
+
+    coords = np.stack(np.meshgrid(x, y), axis=-1).reshape(-1, 2)
+
+    # XOR to get the checkerboard pattern
+    second_color_mask = ((np.floor(coords / square_size) %
+                         2) == 1).sum(axis=-1) == 1
+
+    img.reshape(-1,
+                4)[second_color_mask] = color_fnc(coords[second_color_mask])
+    return img
+
+
+@as_tensors()
 @torch.jit.script
 def n_layers_alpha_compositing(
         images: torch.Tensor, zbuffer: torch.Tensor) -> torch.Tensor:

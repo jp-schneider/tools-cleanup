@@ -1,8 +1,9 @@
 # Class for functions
 # File for useful functions when using matplotlib
+import inspect
 import io
 import re
-from typing import Any, Callable, Dict, Iterable, List, Literal, Optional, Union, Tuple
+from typing import Any, Callable, Dict, Iterable, List, Literal, Optional, Sequence, Union, Tuple
 
 from matplotlib.animation import FuncAnimation
 from matplotlib.colors import ListedColormap
@@ -161,6 +162,8 @@ def saveable(
 
     # type: ignore
     def decorator(function: Callable[[Any], Union[Figure, FuncAnimation]]) -> Callable[[Any], Union[Figure, FuncAnimation]]:
+        func_params = dict(inspect.signature(function).parameters)
+
         @wraps(function)
         def wrapper(*args, **kwargs):
             nonlocal default_output_dir, is_animation
@@ -170,6 +173,10 @@ def saveable(
             ext = kwargs.pop("ext", default_ext)
             transparent = kwargs.pop("transparent", default_transparent)
             dpi = kwargs.pop("dpi", default_dpi)
+            if "dpi" in func_params:
+                # Dont consume the dpi if it is a param of the function
+                kwargs["dpi"] = dpi
+
             override = kwargs.pop("override", default_override)
             tight_layout = kwargs.pop("tight_layout", default_tight_layout)
             open = kwargs.pop("open", False)
@@ -474,7 +481,7 @@ def get_mpl_figure(
         tight: bool = False,
         subplot_kw: Optional[Dict[str, Any]] = None,
         ax_mode: Literal["1d", "2d"] = "1d",
-        frame_on: bool = False
+        frame_on: bool = False,
 ) -> Tuple[Figure, Union[Axes, List[Axes]]]:  # type: ignore
     """Create a eventually tight matplotlib figure with axes.
 
@@ -503,8 +510,8 @@ def get_mpl_figure(
     """
     ratio_x = 1
     ratio_y = compute_ratio(ratio_or_img)
-    dpi = 300
     axes = []
+
     if tight:
         fig = plt.figure()
         fig.set_size_inches(
@@ -813,6 +820,10 @@ def plot_as_image(data: VEC_TYPE,
                   inpaint_title: Union[bool, _DEFAULT] = DEFAULT,
                   inpaint_title_kwargs: Optional[Dict[str, Any]] = None,
                   numbering: bool = True,
+                  native_size: bool = False,
+                  dpi: int = 300,
+                  inset_args: Optional[Union[Dict[str, Any],
+                                             Sequence[Dict[str, Any]]]] = None,
                   ) -> AxesImage:
     """Plots a 2D (complex) image with matplotib. Supports numpy arrays and torch tensors.
 
@@ -860,6 +871,34 @@ def plot_as_image(data: VEC_TYPE,
         If DEFAULT, the title will be inpainted if the title is not empty and tight is True.
     inpaint_title_kwargs : Optional[Dict[str, Any]], optional
         Additional kwargs for the inpaint_title function, by default None
+    numbering : bool, optional
+        If the images should be numbered, by default True
+    native_size : bool, optional
+        If the image should be plotted in native size, this will ignore the size parameter and instead use the size of the image and the dpi setting to
+        reproduce a figure in the original size of the image.
+        If the images is saved with the corresponding dpi setting, the image will be saved in the original size.
+    dpi : int, optional
+        The dpi of the figure, by default 300
+        Will be used to calculate the size of the figure in inches when native_size is True.
+
+    inset_args : Optional[Union[Dict[str, Any], Sequence[Dict[str, Any]]]], optional
+        If provided, the function will create an inset axis with the given args.
+        If sequence of dicts is provided, the function will create multiple inset axes.
+        Supported args are:
+        - start_xy: Tuple[float, float]
+            Start coordinates of the inset axis. Needs to be specified and in axis coordinates (x, y)
+        - end_xy: Tuple[float, float]
+            End coordinates of the inset axis. Needs to be specified and in axis coordinates (x, y)
+        - loc: str, optional
+            Location of the inset axis, by default "upper right"
+        - zoom: float, optional
+            Zoom factor of the inset axis, by default 1.0
+        - connect_corners: Tuple[int, int], optional
+            Corners of the respective boxes which should be connected to create the zoom effect, by default 2,4
+        - edgecolor: str, optional
+            Edgecolor of the inset axis, by default "black"
+        - linewidth: int, optional
+            Linewidth of the inset axis and its connecting lines, by default 1
 
     Returns
     -------
@@ -998,6 +1037,10 @@ def plot_as_image(data: VEC_TYPE,
             use_mathjax = use_mathjax.swapaxes(0, 1)
 
     if axes is None:
+        if native_size:
+            shp = np.array(images[0][0].shape[:2])
+            cssize = shp / dpi
+            size = cssize.max()
         fig, axes = get_mpl_figure(
             rows=rows, cols=cols, size=size, tight=tight, frame_on=frame_on, ratio_or_img=images[0][0], ax_mode="2d")
     else:
@@ -1098,6 +1141,57 @@ def plot_as_image(data: VEC_TYPE,
 
             ax.imshow(_image, vmin=vmin, vmax=vmax, cmap=_cmap,
                       interpolation=interpolation, **imshow_kw)
+
+            if inset_args is not None:
+                from mpl_toolkits.axes_grid1.inset_locator import zoomed_inset_axes
+                from mpl_toolkits.axes_grid1.inset_locator import mark_inset
+                from matplotlib.colors import to_rgba
+                insa = [inset_args] if isinstance(
+                    inset_args, dict) else list(inset_args)
+                for inset_args in insa:
+                    zoom = inset_args.get("zoom", 2)
+                    loc = inset_args.get("loc", 'upper right')
+                    connect_corners: Tuple[int, int] = inset_args.get(
+                        "connect_corners", (2, 4))
+                    edgecolor = to_rgba(inset_args.get("edgecolor", 'black'))
+                    linewidth = inset_args.get("linewidth", 1)
+                    start_xy = inset_args.get("start_xy", None)
+                    end_xy = inset_args.get("end_xy", None)
+
+                    inset_ax = zoomed_inset_axes(ax, zoom=zoom, loc=loc)
+                    inset_ax.imshow(_image, vmin=vmin, vmax=vmax, cmap=_cmap,
+                                    interpolation=interpolation, **imshow_kw)
+                    inset_ax.set_xlim(start_xy[0], end_xy[0])
+                    inset_ax.set_ylim(end_xy[1], start_xy[1])
+                    inset_ax.get_xaxis().set_ticks([])
+                    inset_ax.get_yaxis().set_ticks([])
+
+                    inset_ax.spines['bottom'].set_color(edgecolor)
+                    inset_ax.spines['bottom'].set_linewidth(linewidth)
+                    inset_ax.spines['top'].set_color(edgecolor)
+                    inset_ax.spines['top'].set_linewidth(linewidth)
+                    inset_ax.spines['right'].set_color(edgecolor)
+                    inset_ax.spines['right'].set_linewidth(linewidth)
+                    inset_ax.spines['left'].set_color(edgecolor)
+                    inset_ax.spines['left'].set_linewidth(linewidth)
+
+                    def flip(corner):
+                        if corner == 2:
+                            return 3
+                        elif corner == 3:
+                            return 2
+                        elif corner == 4:
+                            return 1
+                        elif corner == 1:
+                            return 4
+                    _patch, pp1, pp2 = mark_inset(
+                        ax, inset_ax, loc1=connect_corners[0], loc2=connect_corners[1], fc="none", ec=edgecolor, linewidth=linewidth)
+                    # Hacky workaround to get the correct corners
+                    pp1.loc1, pp1.loc2 = connect_corners[0], flip(
+                        connect_corners[0])
+                    # Hacky workaround to get the correct corners
+                    pp2.loc1, pp2.loc2 = connect_corners[1], flip(
+                        connect_corners[1])
 
             if inpaint_title == True or (inpaint_title == DEFAULT and tight):
                 _inp_raw = np.zeros(
@@ -1770,6 +1864,8 @@ def plot_mask(image: VEC_TYPE,
               legend: bool = DEFAULT,
               overlap_area: Optional[List[np.ndarray]] = None,
               transparent_image: bool = False,
+              native_size: bool = False,
+              dpi: int = 300,
               **kwargs) -> Figure:  # type: ignore
     import matplotlib.patches as mpatches
     from tools.transforms import ToNumpyImage
@@ -1822,6 +1918,10 @@ def plot_mask(image: VEC_TYPE,
             labels = [labels[i] for i in order]
 
     if ax is None:
+        if native_size:
+            shp = np.array(image.shape[:2])
+            cssize = shp / dpi
+            size = cssize.max()
         fig, ax = get_mpl_figure(
             1, 1, size=size, ratio_or_img=image, tight=tight)
     else:
