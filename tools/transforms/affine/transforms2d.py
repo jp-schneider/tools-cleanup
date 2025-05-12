@@ -33,7 +33,7 @@ def assure_affine_vector(_input: VEC_TYPE,
     Parameters
     ----------
     _input : Union[torch.Tensor, np.ndarray]
-        Vector of length 2 or 3.
+        Vector of length (..., 2) or (..., 3).
     dtype : Optional[torch.dtype], optional
         The dtype of the tensor, by default None
     device : Optional[torch.device], optional
@@ -53,18 +53,17 @@ def assure_affine_vector(_input: VEC_TYPE,
     """
     _input = tensorify(_input, dtype=dtype, device=device,
                        requires_grad=requires_grad)
-    if len(_input.shape) != 1:
-        raise ValueError(f"assure_affine_vector works only on 1 d tensors!")
-    if _input.shape[0] > 3 or _input.shape[0] < 2:
+    _input, shp = flatten_batch_dims(_input, -2)
+    if _input.shape[-1] > 3 or _input.shape[-1] < 2:
         raise ValueError(
             f"assure_affine_vector works only for tensors of length 2 or 3.")
-    if _input.shape[0] == 3:
-        return _input  # Assuming it contains already affine property
+    if _input.shape[-1] == 3:
+        # Assuming it contains already affine property
+        return unflatten_batch_dims(_input, shp)
     else:
         # Length of 2
-        return torch.cat([_input, torch.tensor([1], device=_input.device,
-                                               dtype=_input.dtype,
-                                               requires_grad=_input.requires_grad)])
+        catted = torch.cat([_input, torch.ones_like(_input[..., :1])], dim=-1)
+        return unflatten_batch_dims(catted, shp)
 
 
 def assure_affine_matrix(_input: VEC_TYPE,
@@ -208,6 +207,22 @@ def unit_vector(_input: torch.Tensor) -> torch.Tensor:
     return _input / torch.norm(_input)
 
 
+def orthogonal_vector(_input: torch.Tensor) -> torch.Tensor:
+    """Calculates a orthogonal vector out of the input.
+
+    Parameters
+    ----------
+    _input : torch.Tensor
+        The input.
+
+    Returns
+    -------
+    torch.Tensor
+        The orthogonal vector.
+    """
+    return torch.stack([-_input[..., 1], _input[..., 0]], dim=-1)
+
+
 def component_rotation_matrix(angle: Optional[NUMERICAL_TYPE] = None,
                               mode: Literal["deg", "rad"] = 'rad',
                               dtype: torch.dtype = None,
@@ -238,7 +253,7 @@ def component_rotation_matrix(angle: Optional[NUMERICAL_TYPE] = None,
         angle = torch.deg2rad(angle)
 
     rot = torch.eye(3, dtype=dtype,
-                       device=device, requires_grad=requires_grad)
+                    device=device, requires_grad=requires_grad)
     if angle != 0.:
         rot[0, 0] = torch.cos(angle)
         rot[0, 1] = -torch.sin(angle)
@@ -272,7 +287,7 @@ def component_transformation_matrix(x: Optional[NUMERICAL_TYPE] = None,
         Transformation matrix.
     """
     mat = torch.eye(3, dtype=dtype,
-                       device=device, requires_grad=requires_grad)
+                    device=device, requires_grad=requires_grad)
     mat[0, 2] = x if x is not None else 0.
     mat[1, 2] = y if y is not None else 0.
     return mat
@@ -303,7 +318,7 @@ def component_scale_matrix(x: Optional[NUMERICAL_TYPE] = None,
         Transformation matrix.
     """
     mat = torch.eye(3, dtype=dtype,
-                       device=device, requires_grad=requires_grad)
+                    device=device, requires_grad=requires_grad)
     mat[0, 0] = x if x is not None else 0.
     mat[1, 1] = y if y is not None else 0.
     return mat
@@ -334,7 +349,7 @@ def transformation_matrix(vector: VEC_TYPE,
     vector = tensorify(vector, dtype=dtype, device=device,
                        requires_grad=requires_grad)
     mat = torch.eye(3, dtype=dtype,
-                       device=device, requires_grad=requires_grad)
+                    device=device, requires_grad=requires_grad)
     mat[0:2, 2] = vector[0:2]
     return mat
 
@@ -364,7 +379,7 @@ def scale_matrix(vector: VEC_TYPE,
     vector = tensorify(vector, dtype=dtype, device=device,
                        requires_grad=requires_grad)
     mat = torch.eye(3, dtype=dtype,
-                       device=device, requires_grad=requires_grad)
+                    device=device, requires_grad=requires_grad)
     mat[0, 0] = vector[0]
     mat[1, 1] = vector[1]
     return mat

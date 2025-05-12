@@ -151,7 +151,7 @@ def load_image(
 
     size : Optional[Tuple[int, int]], optional
         If a specific size should be used instead of max size, by default None
-        Is exclusive with max_size.
+        Is exclusive with max_size. (H, W)
 
     Returns
     -------
@@ -824,7 +824,8 @@ def check_text_overlap(occupied_area: np.ndarray,
     overlap_area = 0
 
     text_mask = np.zeros_like(occupied_area, dtype=bool)
-    text_mask[int(row):int(row + text_height), int(col)              :int(col + text_width)] = True
+    text_mask[int(row):int(row + text_height), int(col)
+                  :int(col + text_width)] = True
     overlap_with_occupied = np.sum(occupied_area[text_mask])
     overlap_area += overlap_with_occupied
 
@@ -1327,3 +1328,89 @@ def n_layers_alpha_compositing_numpy(
     out_image[:, :3] = fused_color  # (3, H, W)
     out_image[:, 3] = sorted_per_layer_alphas.sum(axis=0)
     return out_image.reshape(flattened_shape + (4,))
+
+
+def smoothing_function(x: torch.Tensor,
+                       slope: float,
+                       domain: Tuple[float, float],
+                       shift: float = 0.0,
+                       ) -> torch.Tensor:
+    from tools.util.torch import tensorify
+    from tools.transforms.min_max import MinMax
+    val = torch.tensor(1.5)
+    mm = MinMax(new_min=-val, new_max=val)
+    mm.min = tensorify(domain[0], dtype=torch.float32)
+    mm.max = tensorify(domain[1], dtype=torch.float32)
+    mm.fitted = True
+    tanh = torch.tanh(((mm(x) + shift) * slope))
+    omin = torch.tanh(((-val + shift) * slope))
+    omax = torch.tanh(((val + shift) * slope))
+    return (tanh - omin) / (omax - omin) * (domain[1] - domain[0]) + domain[0]
+
+
+def linear_segmented_smoothing(
+    x: torch.Tensor,
+    thresholds: Tuple[float, float],
+    domain: Tuple[float, float],
+    slope: float = 1.0,
+    shift: float = 0.0,
+) -> torch.Tensor:
+    """Linear + tanh segmented smoothing function.
+
+    This function is used to smooth the transition between two thresholds, using primarly a tanh function.
+
+    Parameters
+    ----------
+    x : torch.Tensor
+        Input values to be smoothed.
+    thresholds : Tuple[float, float]
+        The thresholds for the nonlinear area.
+    domain : Tuple[float, float]
+        The domain of the nonlinear area.
+    slope : float, optional
+        Slope of the tanh, by default 1.0
+    shift : float, optional
+        shift of the tanh, by default 0.0
+
+    Returns
+    -------
+    torch.Tensor
+        Smoothed ouput values.
+    """
+    from functools import partial
+    from tools.util.torch import tensorify, grad_at
+    y = torch.zeros_like(x, dtype=torch.float32)
+
+    domain = tensorify(domain, dtype=torch.float32)
+    thresholds = tensorify(thresholds, dtype=torch.float32)
+
+    in_domain = (domain[0] <= x) & (x < domain[1])
+
+    threshold_lower, threshold_upper = thresholds
+    partial_smoothing_function = partial(
+        smoothing_function, slope=slope, domain=domain, shift=shift)
+
+    # Nonlinear area
+    mask_nonlinear = (x > threshold_lower) & (x < threshold_upper) & in_domain
+    y[mask_nonlinear] = partial_smoothing_function(x[mask_nonlinear])
+
+    # Linearer Bereich für x <= threshold_lower
+    val_lower = partial_smoothing_function(torch.tensor([threshold_lower]))
+    val_upper = partial_smoothing_function(torch.tensor([threshold_upper]))
+
+    mask_linear_lower = (x <= threshold_lower) & in_domain
+    slope_lower = grad_at(partial_smoothing_function, threshold_lower).detach()
+
+    y[mask_linear_lower] = slope_lower * \
+        (x[mask_linear_lower] - (threshold_lower)) + val_lower
+
+    # Lin area x >= threshold_upper
+    mask_linear_upper = (x >= threshold_upper) & in_domain
+    slope_upper = grad_at(partial_smoothing_function, threshold_upper).detach()
+
+    y[mask_linear_upper] = slope_upper * \
+        (x[mask_linear_upper] - threshold_upper) + val_upper
+
+    # Set x if outside domain
+    y[~in_domain] = x[~in_domain]
+    return torch.clamp(y, 0, 1).detach()

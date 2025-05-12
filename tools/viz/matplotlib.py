@@ -824,6 +824,7 @@ def plot_as_image(data: VEC_TYPE,
                   dpi: int = 300,
                   inset_args: Optional[Union[Dict[str, Any],
                                              Sequence[Dict[str, Any]]]] = None,
+                  axis_enabled: Union[bool, _DEFAULT] = DEFAULT,
                   ) -> AxesImage:
     """Plots a 2D (complex) image with matplotib. Supports numpy arrays and torch tensors.
 
@@ -899,6 +900,10 @@ def plot_as_image(data: VEC_TYPE,
             Edgecolor of the inset axis, by default "black"
         - linewidth: int, optional
             Linewidth of the inset axis and its connecting lines, by default 1
+    axis_enabled : Union[bool, _DEFAULT], optional
+        If the axis should be enabled, by default DEFAULT
+        If DEFAULT, the axis will be enabled as long tight is false.
+        If False, the axis will be disabled.
 
     Returns
     -------
@@ -1059,10 +1064,14 @@ def plot_as_image(data: VEC_TYPE,
     for row in range(rows):
         for col in range(cols):
             ax = axes[row, col]
+
             _imgs = images[row]
             if col >= len(_imgs):
                 ax.set_axis_off()
                 continue
+
+            if axis_enabled != DEFAULT and not axis_enabled:
+                ax.set_axis_off()
 
             _image = images[row][col]
             _title = img_title[row][col]

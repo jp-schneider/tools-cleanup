@@ -1,4 +1,4 @@
-from typing import Generator
+from typing import Generator, Sequence
 import decimal
 from functools import wraps
 import inspect
@@ -128,6 +128,8 @@ def as_tensors(keep_output: bool = False) -> Callable[[Callable[..., Any]], Call
                 nonlocal is_numpy
                 if isinstance(v, np.ndarray):
                     is_numpy = True
+                    return tensorify(v)
+                if isinstance(v, list) or isinstance(v, tuple):
                     return tensorify(v)
                 return v
             args = [process(arg) for arg in args]
@@ -678,6 +680,43 @@ def complex_sign_angle(v: torch.Tensor) -> torch.Tensor:
     """
     if "complex" not in str(v.dtype):
         raise ValueError("Input must be a complex tensor.")
+
+
+def grad_at(
+    fnc: Callable[[torch.Tensor], torch.Tensor],
+    x: VEC_TYPE,
+    create_graph: bool = True,
+    retain_graph: bool = False,
+) -> torch.Tensor:
+    """
+    Calculates the first order gradient of a function at a given point.
+    Quick helper function to calculate arbitrary gradients of pytorch functions.
+
+    Parameters
+    ----------
+    fnc : Callable[[torch.Tensor], torch.Tensor]
+        Function to calculate the gradient of.
+
+    x : torch.Tensor
+        Point to calculate the gradient at.
+
+    create_graph : bool, optional
+        If the graph should be created, by default True
+
+    retain_graph : bool, optional
+        If the graph should be retained, by default False
+
+    Returns
+    -------
+    torch.Tensor
+        The gradient of the function at the given point.
+    """
+    x = tensorify(x)
+    with torch.set_grad_enabled(True):
+        x = x.requires_grad_(True)
+        grd = torch.autograd.grad(
+            fnc(x).sum(), x, create_graph=create_graph, retain_graph=retain_graph)[0]
+        return grd
 
 
 class TensorUtil():
