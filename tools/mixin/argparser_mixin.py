@@ -1,3 +1,4 @@
+import sys
 import argparse
 import inspect
 import logging
@@ -17,9 +18,9 @@ from tools.serialization.json_convertible import JsonConvertible
 WARNING_ON_UNSUPPORTED_TYPE = True
 """If true, a warning will be printed if a type is not supported."""
 
-import sys
 vinfo = sys.version_info
 IS_ABOVE_3_9 = (vinfo.major >= 3 and vinfo.minor > 8) or vinfo.major > 3
+
 
 def set_warning_on_unsupported_type(warning: bool) -> None:
     """Sets the warning on unsupported type.
@@ -160,7 +161,8 @@ class ArgparserMixin:
         elif is_optional_type(_type):
             # Unpack optional type.
             _new_type = get_args(_type)[0]
-            args = cls._map_type_to_parser_arg(field, _new_type, is_optional=True)
+            args = cls._map_type_to_parser_arg(
+                field, _new_type, is_optional=True)
             # Because its optional, make it non required
             args["required"] = False
             return args
@@ -250,7 +252,7 @@ class ArgparserMixin:
         ]
 
     @classmethod
-    def  get_parser(cls, parser: Optional[ArgumentParser] = None, sep: str = "-") -> ArgumentParser:
+    def get_parser(cls, parser: Optional[ArgumentParser] = None, sep: str = "-") -> ArgumentParser:
         """Creates / fills an Argumentparser with the fields of the current class.
         Inheriting class must be a dataclass to get annotations and fields.
         By default only puplic field are used (=field with a leading underscore "_" are ignored.)
@@ -318,8 +320,9 @@ class ArgparserMixin:
         # Look for matching fieldnames
         ret = dict()
         for field in fields:
-            if hasattr(parsed_args, field.name):
-                value = getattr(parsed_args, field.name)
+            name = cls.get_field_name_with_prefix_for_argparser(field)
+            if hasattr(parsed_args, name):
+                value = getattr(parsed_args, name)
                 ret[field.name] = cls._get_parser_arg_value(field, value)
         return cls(**ret)
 
@@ -340,7 +343,7 @@ class ArgparserMixin:
                 if field.default:
                     return "no_" + name
         return name
-    
+
     def apply_parsed_args(self, parsed_args: Any) -> None:
         """Applies parsed_args, which is the result
         of the argparser.parse_args() method, to an existing object.

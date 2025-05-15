@@ -397,7 +397,8 @@ def compute_max_resolution(image_shape: Tuple[int, int], max_size: int) -> Tuple
 def resize_image(
         image: VEC_TYPE,
         max_size: Optional[int] = None,
-        size: Optional[Tuple[int, int]] = None
+        size: Optional[Tuple[int, int]] = None,
+        factor: Optional[float] = None,
 ) -> np.ndarray:
     """Resizes the image to the given max size.
     Maintains aspect ratio.
@@ -411,7 +412,9 @@ def resize_image(
     size : Optional[Tuple[int, int]], optional
         If a specific size should be used instead of max size, by default None
         Is exclusive with max_size. Has format (H, W)
-
+    factor : Optional[float], optional
+        If a specific factor should be used instead of max size, by default None
+        The image will be resized to the factor times the original size.
     Returns
     -------
     np.ndarray
@@ -428,11 +431,12 @@ def resize_image(
         B = 1
     else:
         raise ValueError("Image should have shape B x H x W x C or H x W x C")
-    if max_size is None and size is None:
-        raise ValueError("Either max_size or size should be provided.")
-    if max_size is not None and size is not None:
+    if max_size is None and size is None and factor is None:
         raise ValueError(
-            "Either max_size or size should be provided, not both.")
+            "Either max_size, size, or factor should be provided.")
+    if max_size is not None and size is not None and factor is None:
+        raise ValueError(
+            "Either max_size, size or factor should be provided.")
     if max_size is not None:
         new_size = compute_new_size((H, W), max_size)
         transforms = Compose(
@@ -441,10 +445,17 @@ def resize_image(
                                 if (H > max_size or W > max_size) else []) +
             ([ToNumpyImage(output_dtype=dtype)] if not is_tensor else [])
         )
-    else:
+    elif size is not None:
         transforms = Compose(
             ([ToTensor()] if not is_tensor else [])
             + [Resize(size)]
+            + ([ToNumpyImage(output_dtype=dtype)] if not is_tensor else [])
+        )
+    elif factor is not None:
+        new_size = (int(round(H * factor)), int(round(W * factor)))
+        transforms = Compose(
+            ([ToTensor()] if not is_tensor else [])
+            + [Resize(new_size)]
             + ([ToNumpyImage(output_dtype=dtype)] if not is_tensor else [])
         )
     if len(transforms.transforms) == 0:
@@ -824,8 +835,7 @@ def check_text_overlap(occupied_area: np.ndarray,
     overlap_area = 0
 
     text_mask = np.zeros_like(occupied_area, dtype=bool)
-    text_mask[int(row):int(row + text_height), int(col)
-                  :int(col + text_width)] = True
+    text_mask[int(row):int(row + text_height), int(col)              :int(col + text_width)] = True
     overlap_with_occupied = np.sum(occupied_area[text_mask])
     overlap_area += overlap_with_occupied
 
