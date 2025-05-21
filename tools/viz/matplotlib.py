@@ -825,6 +825,8 @@ def plot_as_image(data: VEC_TYPE,
                   inset_args: Optional[Union[Dict[str, Any],
                                              Sequence[Dict[str, Any]]]] = None,
                   axis_enabled: Union[bool, _DEFAULT] = DEFAULT,
+                  gamma_correction: bool = False,
+                  gamma: Union[_DEFAULT, float] = DEFAULT,
                   ) -> AxesImage:
     """Plots a 2D (complex) image with matplotib. Supports numpy arrays and torch tensors.
 
@@ -905,6 +907,13 @@ def plot_as_image(data: VEC_TYPE,
         If DEFAULT, the axis will be enabled as long tight is false.
         If False, the axis will be disabled.
 
+    gamma_correction : bool, optional
+        If the image should be gamma corrected, by default False
+        If True, the image will be gamma corrected with the given gamma value.
+    gamma : Union[_DEFAULT, float], optional
+        Gamma value for the gamma correction, by default DEFAULT
+        If DEFAULT, the gamma value will be estimated based on the observed image intensity.
+        Set custom gamma value to use a specific gamma correction.
     Returns
     -------
     AxesImage
@@ -1115,6 +1124,13 @@ def plot_as_image(data: VEC_TYPE,
                     for j, value in enumerate(np.unique(_image)):
                         color_mapping[j] = value
                         _image = np.where(_image == value, j, _image)
+
+            if gamma_correction:
+                from tools.io.image import gamma_correction
+                from tools.transforms.to_numpy_image import ToNumpyImage
+                numpy_image = ToNumpyImage(np.uint8)
+                _image = numpy_image(_image)
+                _image, _ = gamma_correction(_image, gamma=gamma)
 
             if isinstance(_cmap, ListedColormap):
                 vmax = len(_cmap.colors) - 1
@@ -1875,6 +1891,8 @@ def plot_mask(image: VEC_TYPE,
               transparent_image: bool = False,
               native_size: bool = False,
               dpi: int = 300,
+              correct_gamma: bool = False,
+              gamma: Union[_DEFAULT, float] = DEFAULT,
               **kwargs) -> Figure:  # type: ignore
     import matplotlib.patches as mpatches
     from tools.transforms import ToNumpyImage
@@ -1937,6 +1955,12 @@ def plot_mask(image: VEC_TYPE,
         fig = ax.figure
 
     if image is not None and not transparent_image:
+
+        if correct_gamma:
+            from tools.io.image import gamma_correction
+            np_img = ToNumpyImage(np.uint8)
+            image, _ = gamma_correction(image, gamma=gamma)
+
         ax.imshow(image, cmap=image_cmap)
 
     cmap = plt.get_cmap("alpha_binary")

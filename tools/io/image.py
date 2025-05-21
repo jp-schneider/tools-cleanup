@@ -5,7 +5,7 @@ import torch
 from tools.util.format import parse_enum
 from tools.util.reflection import class_name
 from tools.util.torch import tensorify_image, as_tensors
-from tools.util.typing import DEFAULT, VEC_TYPE
+from tools.util.typing import _DEFAULT, DEFAULT, VEC_TYPE
 import numpy as np
 from tools.transforms.to_numpy import numpyify
 from tools.transforms.to_numpy_image import ToNumpyImage, numpyify_image
@@ -799,6 +799,60 @@ def rgba_to_rgb(img: VEC_TYPE, base_color: VEC_TYPE) -> VEC_TYPE:
     return img
 
 
+def gamma_correction(image: VEC_TYPE, gamma: Union[_DEFAULT, float] = DEFAULT) -> Tuple[np.ndarray, np.ndarray]:
+    """
+    Applies gamma correction to the given image.
+    The gamma value is calculated based on the mean brightness of the image, or can be specified manually.
+
+    Parameters
+    ----------
+    image : np.ndarray
+        The image to apply gamma correction to.
+        Should be in the shape H x W x C if numpy or C x H x W if tensor.
+
+    gamma : Union[_DEFAULT, float], optional
+        Gamma value or DEFAULT, by default DEFAULT
+        If DEFAULT, the gamma value will be calculated based on the mean brightness of the image.
+
+    Returns
+    -------
+    Tuple[np.ndarray, np.ndarray]
+        1. The gamma corrected image. Will be in the shape H x W x C and dtype uint8.
+        2. The gamma value used for correction.
+    """
+    import cv2
+    import math
+    from tools.transforms.to_numpy_image import ToNumpyImage
+
+    numpyify = ToNumpyImage(output_dtype=np.uint8)
+    image = numpyify(image)
+    is_rgba = image.shape[-1] == 4
+    rgba_image = None
+
+    if is_rgba:
+        # Convert to RGB
+        rgba_image = image.copy()
+        image = image[..., :3]
+    # convert img to HSV
+    hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+    hue, sat, val = cv2.split(hsv)
+
+    if gamma == DEFAULT:
+        mid = 0.5
+        mean = np.mean(val)
+        gamma = math.log(mid*255)/math.log(mean)
+
+    val_corrected = np.power(val, gamma).clip(0, 255).astype(np.uint8)
+
+    hsv_corrected = cv2.merge([hue, sat, val_corrected])
+    gamma_corrected = cv2.cvtColor(hsv_corrected, cv2.COLOR_HSV2BGR)
+
+    if is_rgba:
+        rgba_image[..., :3] = gamma_corrected
+        gamma_corrected = rgba_image
+    return gamma_corrected, gamma
+
+
 def check_text_overlap(occupied_area: np.ndarray,
                        position: Tuple[int, int],
                        text_width: int,
@@ -835,7 +889,7 @@ def check_text_overlap(occupied_area: np.ndarray,
     overlap_area = 0
 
     text_mask = np.zeros_like(occupied_area, dtype=bool)
-    text_mask[int(row):int(row + text_height), int(col)              :int(col + text_width)] = True
+    text_mask[int(row):int(row + text_height), int(col):int(col + text_width)] = True
     overlap_with_occupied = np.sum(occupied_area[text_mask])
     overlap_area += overlap_with_occupied
 

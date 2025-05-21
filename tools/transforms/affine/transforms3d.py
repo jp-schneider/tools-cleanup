@@ -26,7 +26,7 @@ def assure_affine_vector(_input: VEC_TYPE,
                          dtype: Optional[torch.dtype] = None,
                          device: Optional[torch.device] = None,
                          requires_grad: bool = False) -> torch.Tensor:
-    """Assuring the _input vector instance is an affine vector.
+    """Assuring the _input vector instance is an homogeneous vector. (Need to renamne)
     Converting it into tensor if nessesary.
     Adds 1 to the vector if its size is 3.
 
@@ -44,7 +44,7 @@ def assure_affine_vector(_input: VEC_TYPE,
     Returns
     -------
     torch.Tensor
-        The affine tensor.
+        The homogeneous vector.
 
     Raises
     ------
@@ -77,7 +77,7 @@ def assure_affine_matrix(_input: VEC_TYPE,
                          dtype: Optional[torch.dtype] = None,
                          device: Optional[torch.device] = None,
                          requires_grad: bool = False) -> torch.Tensor:
-    """Assuring the _input matrix instance is an affine matrix.
+    """Assuring the _input matrix instance is an homogeneous matrix.(need rename)
     Converting it into tensor if nessesary.
     Adds 1 to the vector if its size is 3.
 
@@ -95,7 +95,7 @@ def assure_affine_matrix(_input: VEC_TYPE,
     Returns
     -------
     torch.Tensor
-        The affine tensor.
+        The homogenous tensor.
 
     Raises
     ------

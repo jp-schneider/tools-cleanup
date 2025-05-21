@@ -1651,3 +1651,50 @@ def sort_module_list(module_list: ModuleList, order: List[torch.nn.Module]) -> M
         v = module_list.pop(current_index)
         module_list.insert(i, v)
     return module_list
+
+
+def on_load_checkpoint(
+    module: torch.nn.Module,
+    state_dict: Dict[str, Any],
+    allow_loading_unmatching_parameter_sizes: bool = False,
+    load_missing_parameters_as_defaults: bool = False,
+):
+    if allow_loading_unmatching_parameter_sizes or load_missing_parameters_as_defaults:
+        current_state_dict = module.state_dict(keep_vars=True)
+        loaded_state_dict = state_dict
+        loaded_keys = set(loaded_state_dict.keys())
+        current_keys = set(current_state_dict.keys())
+        missing_keys = loaded_keys - current_keys
+
+        shape_changes = []
+        missing_parameters = []
+        for k in current_state_dict:
+            if k in loaded_state_dict:
+                current_shape = current_state_dict[k].shape
+                loaded_shape = loaded_state_dict[k].shape
+                if allow_loading_unmatching_parameter_sizes:
+                    if current_shape != loaded_shape:
+                        # Set the current parameter with an empty tensor like the loaded one
+                        p = current_state_dict[k]
+                        p.data = torch.empty_like(
+                            loaded_state_dict[k], device=p.device, dtype=p.dtype)
+                        shape_changes.append(
+                            "{}: {} -> {}".format(k, list(current_shape), list(loaded_shape)))
+            else:
+                if load_missing_parameters_as_defaults:
+                    loaded_state_dict[k] = current_state_dict[k].detach(
+                    ).clone()
+                    missing_parameters.append("{}: {}".format(
+                        k, list(current_state_dict[k].shape)))
+        if allow_loading_unmatching_parameter_sizes:
+            if len(shape_changes) > 0:
+                logger.info("Loaded model has different parameter sizes than current model. The following parameters have been changed: \n{}".format(
+                    ",\n".join(shape_changes)))
+        if load_missing_parameters_as_defaults:
+            if len(missing_parameters) > 0:
+                logger.info("Loaded model is missing parameters. The following parameters have been added: \n{}".format(
+                    ",\n".join(missing_parameters)))
+
+        if len(missing_keys) > 0:
+            logger.warning(
+                "Loaded model is missing keys: {}".format(missing_keys))
