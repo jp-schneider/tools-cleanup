@@ -1264,6 +1264,32 @@ def plot_as_image(data: VEC_TYPE,
     return fig
 
 
+def append_colorbar_to_axes(handle: Any, ax: Axes, tick_format: Optional[str] = None):
+    """
+    Appends a colorbar to a given axes for the given handle.
+
+    Parameters
+    ----------
+    handle : Any
+        Handle to the data to create a colorbar for.
+
+    ax : Axes
+        The axes to append the colorbar to.
+    """
+    from mpl_toolkits.axes_grid1 import make_axes_locatable
+    divider = make_axes_locatable(ax)
+    cax = divider.append_axes('right', size='5%', pad=0.05)
+    if tick_format is not None:
+        tick_format = ('{:' + tick_format + '}')
+
+        def _tick_format(x, pos):
+            return tick_format.format(x)
+    else:
+        _tick_format = None
+    ax.figure.colorbar(handle, cax=cax, format=_tick_format,
+                       orientation='vertical')
+
+
 def assemble_coords_to_image(
         coords: VEC_TYPE,
         data: VEC_TYPE,

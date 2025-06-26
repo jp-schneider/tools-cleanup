@@ -163,7 +163,9 @@ class ExperimentLogger():
             tag=tag,
             value=value,
             step=entry.global_step,
-            time=output_args.time)
+            time=output_args.time,
+            batch=output_args.tracker.global_steps, epoch=output_args.tracker.global_epochs
+        )
 
     def log_metric(self, metric_column: str) -> Callable:
         """Getting a logger function for the given metric name.
@@ -193,10 +195,11 @@ class ExperimentLogger():
                         f'Column {metric_column} non in metrics! Can not log to tensorboard.')
                     notified = True
                 return
-            self.log_metric_entry(entry, time=output_args.time)
+            self.log_metric_entry(entry, time=output_args.time,
+                                  batch=output_args.tracker.global_steps, epoch=output_args.tracker.global_epochs)
         return _log_metric
 
-    def log_metric_entry(self, entry: MetricEntry, time: Optional[float] = None):
+    def log_metric_entry(self, entry: MetricEntry, time: Optional[float] = None, **kwargs):
         """Logs a metric entry to tensorboard.
 
         Parameters
@@ -210,7 +213,8 @@ class ExperimentLogger():
             time = pytime.time()
         tag = self.to_tag(entry.tag)
         value = entry.value
-        self.log_value(value=value, tag=tag, step=entry.global_step, time=time)
+        self.log_value(value=value, tag=tag,
+                       step=entry.global_step, time=time, **kwargs)
 
     def log_value(self, value: Union[VEC_TYPE, int, float, complex], tag: str, step: int, time: Optional[float] = None, **kwargs):
         """Logs a numeric value to tensorboard.
@@ -232,9 +236,11 @@ class ExperimentLogger():
             Optional logging time, by default None
         """
         if isinstance(value, (torch.Tensor, np.ndarray)):
-            self._log_vec_type(value=value, tag=tag, step=step, time=time)
+            self._log_vec_type(value=value, tag=tag,
+                               step=step, time=time, **kwargs)
         else:
-            self._log_scalar(value=value, tag=tag, step=step, time=time)
+            self._log_scalar(value=value, tag=tag,
+                             step=step, time=time, **kwargs)
 
     @abstractmethod
     def log(self,
@@ -255,7 +261,7 @@ class ExperimentLogger():
         """
         pass
 
-    def _log_scalar(self, value, tag: str, step: int, time: float):
+    def _log_scalar(self, value, tag: str, step: int, time: float, **kwargs):
         """Log method for simple scalars."""
         if isinstance(value, complex):
             self.add_scalar(
@@ -268,16 +274,17 @@ class ExperimentLogger():
             tag,
             value,
             step=step,
-            walltime=time)
+            walltime=time, **kwargs)
 
-    def _log_vec_type(self, value: torch.Tensor, tag: str, step: int, time: float):
+    def _log_vec_type(self, value: torch.Tensor, tag: str, step: int, time: float, **kwargs):
         """Multi dimensional log for numpy arrays or tensors"""
         if len(value.shape) > 0:
             # Remove 1 dims
             value = value.squeeze()
         if len(value.shape) == 0:
             # Proceed as scalar
-            self._log_scalar(value=value, tag=tag, step=step, time=time)
+            self._log_scalar(value=value, tag=tag,
+                             step=step, time=time, **kwargs)
         else:
             # Multi dimensional tensor should be logged.
             # Dimensions will be flattend and getting individual steps
@@ -285,7 +292,8 @@ class ExperimentLogger():
             for i, v in enumerate(flattened):
                 # Assuming that previous steps had also same size,
                 fl_step = max((step - 1), 0) * len(flattened) + i
-                self._log_scalar(value=v, tag=tag, step=fl_step, time=time)
+                self._log_scalar(value=v, tag=tag,
+                                 step=fl_step, time=time, **kwargs)
 
     def log_optimizer(self, ctx: Dict[str, Any], output_args: TorchModelStepEventArgs):
         if output_args.mode == LearningMode.TRAINING:
@@ -295,16 +303,18 @@ class ExperimentLogger():
                     k,
                     value,
                     step=output_args.tracker.global_epochs,
-                    walltime=output_args.time)
+                    walltime=output_args.time,
+                    epoch=output_args.tracker.global_epochs,
+                )
 
-    def _log_optimizer(self, optimizer, step: int, time: float):
+    def _log_optimizer(self, optimizer, step: int, time: float, **kwargs):
         params = self._get_optimizer_parameters(optimizer)
         for k, value in params.items():
             self.add_scalar(
                 k,
                 value,
                 step=step,
-                walltime=time)
+                walltime=time, **kwargs)
 
     @abstractmethod
     def add_scalar(self, tag: str, value: Union[int, float, complex], step: int, **kwargs):

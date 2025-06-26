@@ -30,9 +30,10 @@ class MinMax(InvertableTransform, FittableTransform, torch.nn.Module):
     def __init__(self,
                  new_min: torch.Tensor = -1,
                  new_max: torch.Tensor = 1,
-                 dim: Optional[Union[int, Tuple[int]]] = None
+                 dim: Optional[Union[int, Tuple[int]]] = None,
+                 **kwargs
                  ):
-        super().__init__()
+        super().__init__(**kwargs)
         self.register_buffer("min", torch.zeros(1))
         self.register_buffer("max", torch.ones(1))
         self.register_buffer("new_min", tensorify(new_min))

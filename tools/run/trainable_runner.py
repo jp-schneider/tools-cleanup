@@ -3,7 +3,6 @@ from abc import abstractmethod
 from tools.run.config_runner import ConfigRunner
 
 
-
 class TrainableRunner(ConfigRunner):
     """Trainable Runner which can also train."""
 
@@ -15,5 +14,3 @@ class TrainableRunner(ConfigRunner):
         """Loading a trainable runner by a given state.
         """
         pass
-
-    

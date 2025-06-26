@@ -103,8 +103,14 @@ class WandbLogger(ExperimentLogger):
     ) -> 'ExperimentLogger':
 
         setup_args = cls.get_init_args_from_experiment_config(config)
-        if "reinit" not in setup_args:
-            setup_args["reinit"] = True
+        if "reinit" in setup_args:
+            if isinstance(setup_args["reinit"], bool):
+                logger.warning(
+                    "Reinit argument is set to a boolean value. This is deprecated and will be removed in the future. Please use 'reinit' as a string with 'finish_previous' or 'return_previous', referring https://docs.wandb.ai/ref/python/init/.")
+                if setup_args["reinit"]:
+                    setup_args["reinit"] = "finish_previous"
+                else:
+                    setup_args["reinit"] = "return_previous"
 
         l = WandbLogger.create(
             **setup_args)

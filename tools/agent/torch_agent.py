@@ -3,7 +3,7 @@ from datetime import datetime
 import inspect
 import io
 import os.path
-from typing import Any, Callable, Dict, List, Literal, Optional, Tuple, Type, Union
+from typing import Any, Callable, Dict, Iterable, List, Literal, Optional, Tuple, Type, Union
 
 import numpy as np
 from tools.agent.torch_agent_checkpoint import TorchAgentCheckpoint
@@ -87,7 +87,7 @@ class TorchAgent(Agent):
         self._optimizer_state_dict: Optional[Dict[str,
                                                   Any]] = optimizer_state_dict
         self.optimizer_parameter_func: Optional[Callable[[
-            torch.nn.Module], Dict[str, Any]]] = None
+            torch.nn.Module], Iterable[Dict[str, Any]]]] = None
         """Callable function which gets invoked to get the parameters for the optimizer. Can be used to declare param groups etc."""
 
         self.optimizer_created = Event[TorchOptimizerCreatedEventArgs](
@@ -1116,7 +1116,7 @@ class TorchAgent(Agent):
             created_at=ckp.created_at,
         )
         args.update(ckp.additional_agent_args)
-        agent = ObjectFactory.create_from_kwargs(cls, args)
+        agent = ObjectFactory.create_from_kwargs(cls, **args)
         return agent
 
     @classmethod

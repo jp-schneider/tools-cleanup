@@ -10,6 +10,7 @@ from inspect import Parameter
 from tools.util.reflection import class_name
 from tools.serialization.object_reference import ObjectReference
 from tools.util.typing import _NOTSET, NOTSET
+import pandas as pd
 
 
 def _init_object(_type: Type, data: Dict[str, Any], memo: Dict[str, Any]) -> Tuple[Any, Dict[str, Any]]:

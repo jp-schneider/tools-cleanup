@@ -801,7 +801,7 @@ def format_dataframe_string(df: pd.DataFrame) -> str:
     return '\t' + df.to_string().replace('\n', '\n\t')
 
 
-def consecutive_indices_string(x: VEC_TYPE, slice_sep: str = "-", item_sep: str = ",") -> str:
+def consecutive_indices_string(x: VEC_TYPE, slice_sep: str = "-", item_sep: str = ",", item_format: Optional[str] = None) -> str:
     """Formats a 1D tensor of (consecutive) indices into a string representation.
 
     Simplifies the representation of consecutive indices, or repeating orders or numbers by grouping them together.
@@ -810,10 +810,20 @@ def consecutive_indices_string(x: VEC_TYPE, slice_sep: str = "-", item_sep: str 
     where each item is a string of the form "StartSlice[-EndSlice-StepSize]".
     StartSlice is the starting index of the group, EndSlice is the ending index, both are inclusive.
     If the group size is smaller than 3, there will be no grouping and the indices will be printed as single items.
+    If only one element is present, it will be simply printed as a single item.
 
     Example:
     x = [0, 1, 2, 3, 5, 7, 9, 11, 15, 16, 19]
     consecutive_indices_string(x) -> "0-3-1,5-11-2,15,16,19"
+
+    x = [0]
+    consecutive_indices_string(x) -> "0"
+
+    x = [0, 1]
+    consecutive_indices_string(x) -> "0,1,1"
+
+    x = []
+    consecutive_indices_string(x) -> ""
 
     Parameters
     ----------
@@ -823,7 +833,10 @@ def consecutive_indices_string(x: VEC_TYPE, slice_sep: str = "-", item_sep: str 
         Seperator for slices, by default "-"
     item_sep : str, optional
         Seperator for items, by default ","
-
+    item_format : Optional[str], optional
+        Format string for each item, by default None
+        If None, the default format is "{:d}".
+        Formatting applied to the StartSlice, EndSlice and StepSize.
     Returns
     -------
     str
@@ -831,23 +844,30 @@ def consecutive_indices_string(x: VEC_TYPE, slice_sep: str = "-", item_sep: str 
     """
     from tools.transforms.to_numpy import numpyify
     x = numpyify(x)
+    if item_format is None:
+        item_format = "{:d}"
     if "int" not in str(x.dtype):
         raise ValueError("Input must be an integer array.")
     if len(x.shape) > 1:
         raise ValueError("Input must be a 1D array.")
-    if len(x) < 2:
-        return f"{x[0]},{x[0]},1"
+    if len(x) == 2:
+        return f"{item_format.format(x[0])},{item_format.format(x[0])},{item_format.format(1)}"
+    if len(x) == 1:
+        return f"{item_format.format(x[0])}"
+    if len(x) == 0:
+        return ""
     grad = x[1:] - x[:-1]
     rets = []
 
     def _append(l, start, end, step):
         if start == end:
-            l.append(f"{start}")
+            l.append(f"{item_format.format(start)}")
         elif (end - start) == step:
-            l.append(f"{start}")
-            l.append(f"{end}")
+            l.append(f"{item_format.format(start)}")
+            l.append(f"{item_format.format(end)}")
         else:
-            l.append(f"{start}{slice_sep}{end}{slice_sep}{step}")
+            l.append(
+                f"{item_format.format(start)}{slice_sep}{item_format.format(end)}{slice_sep}{item_format.format(step)}")
 
     istart = 0
     cstart = x[0]

@@ -12,6 +12,7 @@ from .base_agent_checkpoint import BaseAgentCheckpoint
 from tools.mixin import FastReprMixin
 from tools.util.format import parse_type
 
+
 @dataclass(repr=False)
 class TorchAgentCheckpoint(BaseAgentCheckpoint, FastReprMixin):
 
@@ -26,7 +27,7 @@ class TorchAgentCheckpoint(BaseAgentCheckpoint, FastReprMixin):
 
     optimizer_args: Dict[str, Any] = field(default=None)
     """Optimizer keyword arguments for recreating."""
-    
+
     agent_type: str = field(default="tools.agent.torch_agent.TorchAgent")
     """Agent Type for recreating."""
 
@@ -58,7 +59,7 @@ class TorchAgentCheckpoint(BaseAgentCheckpoint, FastReprMixin):
         """
         args = dict()
         if not torch.cuda.is_available():
-            args['map_location']=torch.device('cpu')
+            args['map_location'] = torch.device('cpu')
         dic = torch.load(f, **args)
         dic.pop('__id__', None)
         return cls(**dic)
@@ -72,6 +73,7 @@ class TorchAgentCheckpoint(BaseAgentCheckpoint, FastReprMixin):
 
     def to_agent(self) -> Agent:
         from tools.agent.torch_agent import TorchAgent
-        obj_type = parse_type(self.agent_type, parent_type=TorchAgent, handle_invalid="set_default", default=TorchAgent)
+        obj_type = parse_type(self.agent_type, parent_type=TorchAgent,
+                              handle_invalid="set_default", default_value=TorchAgent)
         agent = obj_type.from_acc(self)
         return agent

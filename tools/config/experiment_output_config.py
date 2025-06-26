@@ -96,7 +96,7 @@ class ExperimentOutputConfig(OutputConfig):
     experiment_logger_kwargs: Dict[str, Any] = field(default_factory=dict)
     """Keyword arguments for the experiment logger constructor. Unused for tensorboard."""
 
-    project: str = field(default="psf")
+    project: str = field(default="sample_project")
     """Project name for the experiment. Used for wandb."""
 
     def get_experiment_logger_logging_config(self) -> Dict[str, Any]:

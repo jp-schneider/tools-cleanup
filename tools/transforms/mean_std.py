@@ -14,8 +14,10 @@ class MeanStd(InvertableTransform, FittableTransform, torch.nn.Module):
     def __init__(self,
                  mean: Union[torch.Tensor, _DEFAULT] = torch.zeros(1),
                  std: Union[torch.Tensor, _DEFAULT] = torch.ones(1),
-                 dim: Any = None):
-        super().__init__()
+                 dim: Any = None,
+                 **kwargs
+                 ):
+        super().__init__(**kwargs)
         self._mean_default = False
         self._std_default = False
         if mean == DEFAULT:

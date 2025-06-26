@@ -315,6 +315,7 @@ class MultiRunner(TrainableRunner):
                     if "torch" in sys.modules:
                         import torch
                         torch.cuda.empty_cache()
+                    plt.close('all')
 
                     logger.info(f"Building child runner #{i}...")
                     child_runner.build()
@@ -333,9 +334,7 @@ class MultiRunner(TrainableRunner):
                     child_runner.finalize()
                     logger.info(
                         f"Finalized child runner #{i}")
-
                     status[i] = "success"
-
             except Exception as err:
                 logger.exception(
                     f"Raised {type(err).__name__} in training child runner #{i}")

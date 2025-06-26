@@ -1,9 +1,12 @@
 from traceback import FrameSummary
 from tools.config.output_config import OutputConfig
+from tools.config.experiment_output_config import ExperimentOutputConfig
 from typing import Optional
 import os
 from tools.logger.logging import logger
 from tools.util.format import get_frame_summary
+
+
 EXCEPTION_ERROR_CODES = {
     KeyboardInterrupt: 130,
     SyntaxError: 2,
@@ -78,9 +81,18 @@ class ScriptExecution:
                 filename = os.path.basename(self.scope.filename).split(".")[0]
                 logger.exception(
                     f"Raised {type(exc_val).__name__} in {filename}, exiting...")
-                logger.info(f"Exception occured, Context Terminated with Exit Code: {exit_code}")
+                logger.info(
+                    f"Exception occured, Context Terminated with Exit Code: {exit_code}")
         else:
             # No error occurred
-            logger.info(f"Script Context executed successfully. Exit Code: {exit_code}")
+            logger.info(
+                f"Script Context executed successfully. Exit Code: {exit_code}")
         write_exit(self.config, exit_code, exc_val)
+        try:
+            if isinstance(self.config, ExperimentOutputConfig):
+                if self.config.experiment_logger == "wandb":
+                    import wandb
+                    wandb.finish(exit_code=exit_code)
+        except Exception as e:
+            logger.warning(f"Failed to finish wandb run: {e}")
         return False
