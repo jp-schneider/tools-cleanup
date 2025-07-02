@@ -5,7 +5,8 @@ from typing import Optional
 import os
 from tools.logger.logging import logger
 from tools.util.format import get_frame_summary
-
+import pandas as pd
+from tools.util.path_tools import read_directory
 
 EXCEPTION_ERROR_CODES = {
     KeyboardInterrupt: 130,
@@ -51,6 +52,25 @@ def write_exit(config: OutputConfig, exit_code: int, err: Optional[Exception] = 
             f.write(content)
     except Exception as err:
         return
+
+
+def load_exit_codes(directory: str) -> pd.DataFrame:
+    """Loads the path to all exit code files in a given directory.
+
+    Parameters
+    ----------
+    directory : str
+        Directory to search for exit code files.
+
+    Returns
+    -------
+    pd.DataFrame
+        DataFrame containing the exit codes and their corresponding file paths.
+        Columns are 'code' and 'path'.
+    """
+    pattern = r"exit_(?P<code>[0-9]+).txt"
+    files = read_directory(directory, pattern=pattern, parser=dict(code=int))
+    return pd.DataFrame(files)
 
 
 class ScriptExecution:

@@ -8,6 +8,7 @@ import os
 import re
 from tools.util.format import parse_format_string
 from tools.util.path_tools import format_os_independent, relpath, replace_file_unallowed_chars, replace_unallowed_chars
+from tools.logger.logging import logger
 
 
 class MultiConfigRunner(MultiRunner):
@@ -131,7 +132,7 @@ class MultiConfigRunner(MultiRunner):
                     output_folder = self.child_configs[i].output_folder
                 else:
                     # name_experiment = f"#{num_fmt.format(i)}_{_name}"
-                    #path = os.path.join(
+                    # path = os.path.join(
                     #    self.child_configs[i].runs_path, name_experiment + "_" + created_at)
                     path = parse_format_string(
                         self.config.preset_output_folder_format_string,
@@ -141,8 +142,14 @@ class MultiConfigRunner(MultiRunner):
                         index_offset=i
                     )[0]
                     directory = os.path.dirname(path)
-                    base_name = replace_unallowed_chars(os.path.basename(path), allow_dot=False)
-                    output_folder = format_os_independent(os.path.join(directory, base_name))
+                    base_name = replace_unallowed_chars(
+                        os.path.basename(path), allow_dot=False)
+                    output_folder = format_os_independent(
+                        os.path.join(directory, base_name))
+            if self.config.skip_successfull_executed:
+                # Check if the output folder already exists and skip if it contains a success file
+                if self._check_successful_executed(_name, output_folder):
+                    continue
 
             item = self._generate_single_job(
                 runner_script_path=runner_script_path,

@@ -120,7 +120,7 @@ class MultiRunner(TrainableRunner):
             num_digits = len(str(len(self.child_configs)))
             num_fmt = f"{{index:0{num_digits}d}}"
             filename_format = (f"{prefix}_" if prefix is not None else "") + \
-                f"config_{num_fmt}.yaml"
+                f"{{name}}_{num_fmt}.yaml"
 
         # Save configs
         paths = []
@@ -139,6 +139,17 @@ class MultiRunner(TrainableRunner):
                 path, no_uuid=True, override=True, use_raw_context_paths=use_raw_context_paths)
             paths.append(path)
         return paths
+
+    def _check_successful_executed(self, name: str, output_folder: Optional[str] = None, log: bool = True) -> bool:
+        if output_folder is not None and os.path.exists(output_folder):
+            from tools.context.script_execution import load_exit_codes
+            exit_codes = load_exit_codes(output_folder)
+            if len(exit_codes) > 0 and 0 in exit_codes['code'].values:
+                if log:
+                    logger.info(
+                        f"Skipping job for config {name} as it has already been executed successfully.")
+                return True
+        return False
 
     def create_job_file(self) -> str:
         """Creates a job file for slurm cluster.
@@ -237,6 +248,12 @@ class MultiRunner(TrainableRunner):
                         os.path.basename(path), allow_dot=False)
                     output_folder = format_os_independent(
                         os.path.join(directory, base_name))
+            if self.config.skip_successfull_executed:
+                # Check if the output folder already exists and skip if it contains a success file
+                of = output_folder if output_folder is not None else self.child_configs[
+                    i].output_folder
+                if self._check_successful_executed(experiment_name, output_folder=of):
+                    continue
 
             item = self._generate_single_job(
                 runner_script_path=runner_script_path,
@@ -310,13 +327,23 @@ class MultiRunner(TrainableRunner):
             try:
                 cfg = child_runner.config
                 cfg.prepare()
+                # Check if the child runner is already executed successfully
+                if config.skip_successfull_executed:
+                    if self._check_successful_executed(
+                            cfg.get_name(),
+                            output_folder=cfg.output_folder,
+                            log=False):
+                        status[i] = "skipped"
+                        logger.info(
+                            f"Skipping child runner #{i} as it has already been executed successfully.")
+                        continue
+
                 with ScriptExecution(cfg), plt.ioff():
                     gc.collect()
                     if "torch" in sys.modules:
                         import torch
                         torch.cuda.empty_cache()
                     plt.close('all')
-
                     logger.info(f"Building child runner #{i}...")
                     child_runner.build()
                     # Save config and log it

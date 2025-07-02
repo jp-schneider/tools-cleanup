@@ -470,6 +470,8 @@ def parse_format_string(format_string: str,
                         additional_variables: Optional[Dict[str, Any]] = None,
                         default_formatters: Optional[Dict[Type, Callable[[
                             Any], str]]] = DEFAULT,
+                        default_key_formatters: Optional[Dict[str, Callable[[
+                            Any], str]]] = None,
                         index_offset: int = 0,
                         found_variables: Optional[List[List[FormatVariable]]] = None) -> List[str]:
     """Formats content of a list of objects with a format string for each object.
@@ -497,6 +499,20 @@ def parse_format_string(format_string: str,
     allow_invocation : bool, optional
         If a variable is a function, it can be invoked when set to True, by default False
         Only supports functions without arguments.
+
+    additional_variables : Optional[Dict[str, Any]], optional
+        Additional variables which can be used in the format string, by default None
+        These are used for all objects in the list.
+
+    default_formatters : Optional[Dict[Type, Callable[[Any], str]]], optional
+        Default formatters for the variables, by default DEFAULT
+        Defines values for the types which are not specified in the format string. E.g. for int, float, bool, timedelta, Series, dict, list, tuple and None.
+        If set to DEFAULT, the default formatters will be used, which are defined in _get_default_formatters().
+        Only applied if no format is specified in the format string and no default key formatters are specified.
+
+    default_key_formatters : Optional[Dict[str, Callable[[Any], str]]], optional
+        Default formatters for specific keys, e.g. variable names if not specified, by default None
+        Takes precedence over the default_formatters but is only applied if no format is specified in the format string.
 
     index_offset : int, optional
         Offset for the index, by default 0
@@ -534,6 +550,8 @@ def parse_format_string(format_string: str,
         default_formatters = _get_default_formatters()
     else:
         pass
+    if default_key_formatters is None:
+        default_key_formatters = dict()
 
     results = []
     for i, obj in enumerate(obj_list):
@@ -576,8 +594,13 @@ def parse_format_string(format_string: str,
             if value is not None and callable(value) and allow_invocation:
                 value = value()
 
+            use_format = format
+            if use_format is None and key in default_key_formatters:
+                # Use the default key formatter if no format is specified
+                use_format = default_key_formatters[key]
+
             _formatted_value = _format_value(
-                value, format=format, default_formatters=default_formatters)
+                value, format=use_format, default_formatters=default_formatters)
             if format is None:
                 format = ""
             if loc is None:
@@ -587,7 +610,7 @@ def parse_format_string(format_string: str,
             name = name.replace(
                 "{" + loc + key + format + "}", _formatted_value)
             replacements.append(FormatVariable(
-                localizer=loc, variable=key, formatter=format, value=value))
+                localizer=loc, variable=key, formatter=use_format if use_format is not None else "", value=value))
         results.append(name)
         if found_variables is not None:
             found_variables.append(replacements)

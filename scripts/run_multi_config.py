@@ -1,16 +1,15 @@
 #!/usr/bin/env python3
 # Sample job file for an omni job. Can be used as a standalone file or within a job list.
+from tools.run.multi_config_runner import MultiConfigRunner
+from tools.run.grid_search_runner import GridSearchRunner
+from tools.config.grid_search_config import GridSearchConfig
+from tools.config.multi_config_config import MultiConfigConfig
+from tools.logger.logging import basic_config
 import argparse
 import asyncio
 import logging  # noqa
 import os
-
-from tools.logger.logging import basic_config
-
-from tools.config.multi_config_config import MultiConfigConfig
-from tools.config.grid_search_config import GridSearchConfig
-from tools.run.grid_search_runner import GridSearchRunner
-from tools.run.multi_config_runner import MultiConfigRunner
+os.environ["OPENCV_IO_ENABLE_OPENEXR"] = "1"
 
 
 def current_filename() -> str:

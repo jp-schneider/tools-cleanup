@@ -1494,6 +1494,8 @@ def plot_vectors(y: VEC_TYPE,
                  xticks: Optional[Union[List[str], List[float]]] = None,
                  xticks_rotation: Optional[float] = None,
                  xticks_horizontal_alignment: Optional[str] = None,
+                 title: Optional[str] = None,
+                 legend: bool = True,
                  ) -> Figure:
     """Gets a matplotlib line figure with a plot of vectors.
 
@@ -1625,7 +1627,10 @@ def plot_vectors(y: VEC_TYPE,
     if tick_right:
         ax.yaxis.tick_right()
         ax.yaxis.set_label_position("right")
-    preserve_legend(ax, handles, create_if_not_exists=True)
+    if title is not None:
+        ax.set_title(title)
+    if legend:
+        preserve_legend(ax, handles, create_if_not_exists=True)
     return fig
 
 

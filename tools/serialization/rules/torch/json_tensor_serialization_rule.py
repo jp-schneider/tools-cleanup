@@ -65,13 +65,14 @@ class TensorValueWrapper(JsonConvertible):
             buf.seek(0)
             return torch.load(buf, weights_only=True)
 
-    def to_python(self) -> torch.Tensor:
+    def to_python(self, no_tensor_data_warning: bool = True) -> torch.Tensor:
         if self.has_data:
             return TensorValueWrapper.from_serialized_string(self.data)
         else:
             json_str = self.to_json()
-            logging.warning(
-                f"Tensor was saved without data, can not recover! Result will be without data. Wrapper value was: {os.linesep + json_str}")
+            if no_tensor_data_warning:
+                logging.warning(
+                    f"Tensor was saved without data, can not recover! Result will be without data. Wrapper value was: {os.linesep + json_str}")
             shp = self.shape.replace("(", "").replace(")", "")
             shp = tuple([int(x) for x in shp.split(",") if len(x) > 0])
             dtype = dynamic_import(
@@ -102,4 +103,4 @@ class JsonTensorSerializationRule(JsonSerializationRule):
         return TensorValueWrapper(value=value, **kwargs).to_json_dict(handle_unmatched=handle_unmatched, **kwargs)
 
     def backward(self, value: TensorValueWrapper, **kwargs) -> torch.Tensor:
-        return value.to_python()
+        return value.to_python(no_tensor_data_warning=kwargs.get("no_tensor_data_warning", True))

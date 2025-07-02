@@ -9,13 +9,44 @@ try:
 except ImportError:
     Image = None  # PIL is optional, handle it gracefully
 
+
 class ToTensor(Transform):
     """Transforms a arbitrary value or array to a pytorch tensor."""
 
-    def transform(self, x: Union[NUMERICAL_TYPE, VEC_TYPE],
+    def __init__(self, dtype: Optional[torch.dtype] = None, device: Optional[torch.device] = None) -> None:
+        super().__init__()
+        if dtype is not None:
+            if isinstance(dtype, str):
+                if dtype.startswith("torch."):
+                    dtype = torch.dtype(dtype[6:])
+                else:
+                    dtype = torch.dtype(dtype)
+            elif not isinstance(dtype, torch.dtype):
+                raise TypeError(
+                    f"dtype must be a torch.dtype or valid string, got type {type(dtype)} value {dtype}")
+        self.dtype = dtype
+        """Dtype of the tensor to create. If None, it will not change the dtype of the input tensor / estimate it from the input."""
+        if device is not None:
+            if isinstance(device, str):
+                if device.startswith("torch."):
+                    device = torch.device(device[6:])
+                else:
+                    device = torch.device(device)
+            elif not isinstance(device, torch.device):
+                raise TypeError(
+                    f"device must be a torch.device or valid string, got type {type(device)} value {device}")
+        self.device = device
+        """Device of the tensor to create. If None, it will not change the device of the input tensor keeps it on cpu if a new tensor is created or keeps it as is."""
+
+    def transform(self,
+                  x: Union[NUMERICAL_TYPE, VEC_TYPE],
                   dtype: Optional[torch.dtype] = None,
                   device: Optional[torch.device] = None,
                   requires_grad: bool = False) -> torch.Tensor:
+        if dtype is None:
+            dtype = self.dtype
+        if device is None:
+            device = self.device
         if Image is not None and isinstance(x, Image.Image):
             x = np.array(x)
         if isinstance(x, torch.Tensor):

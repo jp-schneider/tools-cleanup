@@ -36,6 +36,9 @@ class MultiRunnerConfig(ExperimentConfig):
     name_experiment: str = field(default="MultiRunnerConfig")
     """Name for the multi runner, this is usually not used."""
 
+    skip_successfull_executed: bool = field(default=False)
+    """If True, the runner will skip configs that have already been executed successfully. Will only work if the output directory is set in the config."""
+
     dry_run: bool = field(default=False)
     """If True, the runner will not execute training."""
 
@@ -45,7 +48,8 @@ class MultiRunnerConfig(ExperimentConfig):
     preset_output_folder: bool = field(default=False)
     """If True, the output folder for child agents will be preset with a --output-folder argument."""
 
-    preset_output_folder_format_string: str = field(default="{get_runs_path}/{index:02d}_{get_name}_{year}_{month}_{day}_{hour}_{minute}_{second}")
+    preset_output_folder_format_string: str = field(
+        default="{get_runs_path}/{index:02d}_{get_name}_{year}_{month}_{day}_{hour}_{minute}_{second}")
     """The format string for the preset output folder."""
 
     name_cli_argument: str = field(default="--name-experiment")
