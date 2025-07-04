@@ -223,6 +223,7 @@ def get_package_info(project_root_path: Optional[str] = None) -> Optional[Dict[s
     # Check if the project root path is valid
     if not is_dev_module(project_root_path, is_root=True):
         return None
+    pyproject_path = os.path.join(project_root_path, "pyproject.toml")
     with open(pyproject_path, "r") as file:
         pyproject = toml.load(file)
     package_info = pyproject.get("tool", dict()).get("poetry", dict())
