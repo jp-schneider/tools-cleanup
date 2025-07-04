@@ -1639,7 +1639,10 @@ def plot_histogram(
     x: VEC_TYPE,
     label: Optional[Union[str, List[str]]] = None,
     bins: Any = None,
-    filter_nan: bool = False
+    filter_nan: bool = False,
+    yscale: Optional[str] = None,
+    is_counts: bool = False,
+
 ) -> Figure:
     """Gets a matplotlib histogram figure with a plot of vectors.
 
@@ -1652,6 +1655,21 @@ def plot_histogram(
 
     label : Optional[Union[str, List[str]]], optional
         Label or each dimension. If None just numerates the dimensions, by default None
+
+    bins : Any, optional
+        Bins for the histogram. If None, will use 'auto' binning, by default None
+        Can be a number of bins or a sequence of bin edges.
+
+    filter_nan : bool, optional
+        If NaN values should be filtered out, by default False
+
+    yscale : Optional[str], optional
+        Y scale for the plot, by default None
+        If 'log', will use logarithmic scale for the y-axis.
+
+    is_counts : bool, optional
+        If the input data is already counts, by default False
+        If True, will not calculate histogram, but use the input data as counts and bins must be provided.
 
     Returns
     -------
@@ -1681,11 +1699,24 @@ def plot_histogram(
 
     for i in range(x.shape[-1]):
         l = label[i] if label is not None else None
-        vals = x[:, i]
+        v = x[:, i]
         if filter_nan:
             vals = vals[~np.isnan(vals)]
-        ax.hist(vals, label=l, bins=bins)
+        if not is_counts:
+            if bins is None:
+                bins = 'auto'
+            vals, bins = np.histogram(v, bins=bins)
+        else:
+            vals = v
+        ax.hist(bins[:-1], bins, weights=vals, label=l)
+
+    if yscale is not None:
+        ax.set_yscale(yscale)
     ax.legend()
+
+    ax.set_xlabel("Value")
+    ax.set_ylabel("Count")
+
     return fig
 
 

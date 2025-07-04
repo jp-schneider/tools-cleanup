@@ -32,7 +32,9 @@ def get_logger(package_name: Optional[str] = None) -> logging.Logger:
             package_name = get_invoked_package_name()
         except Exception as error:
             print(f"Error while getting the package name: {error}")
-            package_name = "tools"
+            package_name = None
+    if package_name is None:
+        package_name = "tools"
     if package_name not in _loggers:
         _loggers[package_name] = logging.getLogger(package_name)
     return _loggers[package_name]
@@ -41,8 +43,7 @@ def get_logger(package_name: Optional[str] = None) -> logging.Logger:
 logger: logging.Logger = get_logger()
 """Default logger for the invoked package."""
 
-tools_logger: logging.Logger = get_logger(
-    get_package_name(get_project_root_path()))
+tools_logger: logging.Logger = get_logger("tools")
 """Logger for the tools package."""
 
 
