@@ -169,7 +169,7 @@ def read_directory(
     regex = re.compile(pattern)
     if not os.path.exists(path):
         from tools.logger.logging import logger
-        logger.warning(f"Non existing path: {path}")
+        logger.debug(f"Non existing path: {path}")
         return res
     for file in os.listdir(path):
         if pattern[0] == "^" and pattern[-1] == "$":

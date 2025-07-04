@@ -34,14 +34,37 @@
             "request": "launch",
             "program": "${workspaceFolder}/tools/scripts/convert_masks.py",
             "args": [
-                "--ov-masks-directory",  
+                "--ov-masks-directory",
                 "../nsf/data/datasets/waymo/segment-9758342966297863572/masks_anylabeling_complete" ,
                 "--output-directory",
                 "../nsf/data/datasets/waymo/segment-9758342966297863572/individual_object_masks"
             ],
             "console": "integratedTerminal"
         },
-        
+        {
+            "name": "Convert Masks",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/tools/scripts/convert_masks.py",
+            "args": [
+                "--ov-masks-directory",
+                "../nsf/data/datasets/waymo/segment-9758342966297863572/masks_anylabeling_complete" ,
+                "--output-directory",
+                "../nsf/data/datasets/waymo/segment-9758342966297863572/individual_object_masks"
+            ],
+            "console": "integratedTerminal"
+        },
+
+        {
+            "name": "Debug Version Script",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/tools/scripts/version.py",
+            "args": [
+                ".git/COMMIT_EDITMSG",
+            ],
+            "console": "integratedTerminal"
+        },
     ],
     "inputs": [
         {
