@@ -99,8 +99,6 @@ def get_module_path() -> str:
     """
     global EXECUTED_MODULE_PATH
     if EXECUTED_MODULE_PATH is None:
-        from tools.logger.logging import logger
-        logger.warning("The 'EXECUTED_MODULE_PATH' is not set. Setting it to the tools module path. Consider using 'set_module_path' to set the module path of the currently executable package.")
         EXECUTED_MODULE_PATH = current_module_path()
     return EXECUTED_MODULE_PATH
 
