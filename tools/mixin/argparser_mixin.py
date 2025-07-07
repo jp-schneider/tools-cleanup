@@ -276,6 +276,19 @@ class ArgparserMixin:
                 formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
         fields = cls._get_parser_members()
+        positional_args = cls.positional_args()
+        positional_args_set = set(positional_args)
+
+        def get_positional_index(name: str) -> int:
+            if name in positional_args_set:
+                return positional_args.index(name)
+            else:
+                idx = next((i for i, x in enumerate(
+                    fields) if x.name == name))
+                return len(positional_args) + idx
+
+        # Sort by positional args first
+        fields = sorted(fields, key=lambda x: get_positional_index(x.name))
 
         for field in fields:
             name = field.name.replace("_", sep)
@@ -299,12 +312,29 @@ class ArgparserMixin:
                 name_prefix = name_prefix.replace("_", sep)
             args["help"] = str(get_attribute_docstring(
                 cls, field_name=field.name).docstring_below)
-            parser.add_argument("--" + name_prefix + name, **args)
 
+            if field.name in positional_args_set:
+                # If its a positional argument, we need to set the name without prefix
+                parser.add_argument(name, **args)
+            else:
+                parser.add_argument("--" + name_prefix + name, **args)
         return parser
 
     @classmethod
-    def from_parsed_args(cls, parsed_args: Any) -> 'ArgparserMixin':
+    def positional_args(cls) -> List[str]:
+        """
+        Returns a list of positional arguments for the current class.
+        Positional arguments are defined as arguments which are not prefixed with "--".
+
+        Returns
+        -------
+        List[str]
+            List of positional arguments.
+        """
+        return []
+
+    @classmethod
+    def from_parsed_args(cls, parsed_args: Any, sep: str = "-") -> 'ArgparserMixin':
         """Creates an ArgparserMixin object from parsed_args which is the result
         of the argparser.parse_args() method.
         Parameters
@@ -324,6 +354,15 @@ class ArgparserMixin:
             if hasattr(parsed_args, name):
                 value = getattr(parsed_args, name)
                 ret[field.name] = cls._get_parser_arg_value(field, value)
+                continue
+            if field.name in cls.positional_args():
+                # If its a positional argument, we need to set the name without prefix
+                n = field.name.replace("_", sep)
+                if hasattr(parsed_args, n):
+                    value = getattr(parsed_args, n)
+                    ret[field.name] = cls._get_parser_arg_value(field, value)
+                    continue
+
         return cls(**ret)
 
     @classmethod

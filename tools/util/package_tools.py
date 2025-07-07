@@ -230,6 +230,35 @@ def get_package_info(project_root_path: Optional[str] = None) -> Optional[Dict[s
     return package_info
 
 
+def update_package_info(
+    package_info: Dict[str, Any],
+    project_root_path: Optional[str] = None,
+):
+    """
+    Updates the package information of the project.
+    The package information is defined as the package name, version and description.
+    Will return None if the project root path is not valid or the pyproject.toml file is not found.
+
+    Parameters
+    ----------
+    package_info : Dict[str, Any]
+        The package information to update.
+        Should contain at least the keys 'name', 'version' and 'description'.
+
+    project_root_path : str, optional
+        The root path of the project, by default None
+        None will use the current project root path.
+
+    """
+    pyproject_path = os.path.join(project_root_path, "pyproject.toml")
+    with open(pyproject_path, "r") as file:
+        pyproject = toml.load(file)
+
+    pyproject["tool"]["poetry"] = package_info
+    with open(pyproject_path, "w") as file:
+        toml.dump(pyproject, file)
+
+
 def get_package_name(project_root_path: Optional[str] = None) -> Optional[str]:
     """Gets the package name of the project.
     The package name is defined as the name of the package.

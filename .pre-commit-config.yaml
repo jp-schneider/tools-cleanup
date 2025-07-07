@@ -16,3 +16,20 @@ repos:
     -   id: poetry-lock
     -   id: poetry-export
     -   id: poetry-install
+-   repo: local
+    hooks:
+      - id: check-version-message-commit-msg
+        name: Check Version Message (Commit-Msg Hook)
+        entry: poetry run python tools/scripts/version.py
+        language: system
+        stages: [commit-msg]
+      - id: create-commit-tags
+        name: Create Commit Tags
+        entry: poetry run python tools/scripts/tag.py
+        language: system
+        stages: [post-commit]
+        args: [
+          "--commit-message-path",
+          ".git/COMMIT_EDITMSG",
+        ]
+        always_run: true
