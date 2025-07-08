@@ -84,7 +84,6 @@ def create_tags(cfg: TagConfig):
         return
 
     for tag in cfg.tags:
-
         # Check if the tag already exists
         cmd = ["git", "tag", "-l", tag]
         try:

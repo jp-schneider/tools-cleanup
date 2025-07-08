@@ -28,4 +28,8 @@ repos:
         entry: poetry run python tools/scripts/tag.py
         language: system
         stages: [post-commit]
+        args: [
+          "--commit-message-path",
+          ".git/COMMIT_EDITMSG",
+        ]
         always_run: true

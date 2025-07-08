@@ -65,6 +65,18 @@
             ],
             "console": "integratedTerminal"
         },
+        {
+            "name": "Debug Tag Script",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/tools/scripts/tag.py",
+            "args": [
+                "920e5279867d0c4b5664a0329da29d0ff9792774",
+                "--commit-message-path",
+                ".git/COMMIT_EDITMSG",
+            ],
+            "console": "integratedTerminal"
+        },
     ],
     "inputs": [
         {
