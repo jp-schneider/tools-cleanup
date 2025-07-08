@@ -160,3 +160,4 @@ cython_debug/
 #.idea/
 notebooks/logo.ipynb
 notebooks/test.svg
+.python-version
