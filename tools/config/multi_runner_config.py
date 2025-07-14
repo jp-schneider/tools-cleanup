@@ -1,15 +1,15 @@
 from dataclasses import dataclass, field
-from typing import Optional, Union
+from typing import Optional, Type, Union
 
 from tools.config.experiment_config import ExperimentConfig
 from tools.config.output_config import OutputConfig
-
+from tools.util.path_tools import process_path
 
 @dataclass
 class MultiRunnerConfig(ExperimentConfig):
     """Configuration for the MultiRunner. This runner is used to run multiple runners using one runner, usually in a sequential or parallel manner."""
 
-    base_config: Union[str, OutputConfig] = None
+    base_config: Optional[Union[str, OutputConfig]] = None
     """The base config which will be used for the child runners."""
 
     runner_type: str = None
@@ -30,7 +30,7 @@ class MultiRunnerConfig(ExperimentConfig):
     create_job_file: bool = field(default=False)
     """If True, a job file will be created."""
 
-    job_file_path: Optional[str] = None
+    job_file_path: Optional[str] = field(default="temp/jobfiles")
     """The path to the job file. If None, a job file will be created in the config directory."""
 
     name_experiment: str = field(default="MultiRunnerConfig")
@@ -53,3 +53,14 @@ class MultiRunnerConfig(ExperimentConfig):
     """The format string for the preset output folder."""
 
     name_cli_argument: str = field(default="--name-experiment")
+
+    @classmethod
+    def multi_config_runner_type(cls) -> Type:
+        """Returns the type of the multi config runner to handle the current config."""
+        from tools.run.multi_config_runner import MultiConfigRunner
+        return MultiConfigRunner
+    
+    def prepare(self) -> None:
+        super().prepare()
+        self.config_directory = process_path(self.config_directory, interpolate=True, make_exist=True, interpolate_object=self, variable_name="config_directory", allow_interpolation_invocation=True)
+    
