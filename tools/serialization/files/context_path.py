@@ -43,6 +43,7 @@ class ContextPath(Path):
     def from_format_path(cls,
                          path: str,
                          context: Optional[Any] = None,
+                         format_kwargs: Optional[Dict[str, Any]] = None,
                          **kwargs: Any
                          ) -> Union["ContextPath", PathLibPath]:
         """Creates a new context path from a path containing format variables.
@@ -55,9 +56,11 @@ class ContextPath(Path):
         context : List[FormatVariable]
             The context for the path.
         """
-        fmt = []
+        fmt = []#
+        if format_kwargs is None:
+            format_kwargs = {}
         new_path = parse_format_string(
-            path, [context], found_variables=fmt, additional_variables=kwargs)[0]
+            path, [context], found_variables=fmt, additional_variables=kwargs, **format_kwargs)[0]
         fmt = flatten_list(fmt)
         if len(fmt) == 0:
             return PathLibPath(new_path)

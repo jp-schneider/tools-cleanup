@@ -38,6 +38,10 @@ import matplotlib.text as mtext
 from tools.util.typing import DEFAULT, _DEFAULT
 from pathlib import Path
 from mpl_toolkits.mplot3d import Axes3D
+import matplotlib.patches as mpatches
+import matplotlib.lines as mlines  # For creating proxy Line2D objects
+
+LegendArtist = Union[mpatches.Patch, mlines.Line2D]
 
 
 def set_default_output_dir(output_dir: Optional[Union[str, Path]] = None):
@@ -483,6 +487,7 @@ def get_mpl_figure(
         subplot_kw: Optional[Dict[str, Any]] = None,
         ax_mode: Literal["1d", "2d"] = "1d",
         frame_on: bool = False,
+        gridspec_kw: Optional[Dict[str, Any]] = None
 ) -> Tuple[Figure, Union[Axes, List[Axes]]]:
     """Create a eventually tight matplotlib figure with axes.
 
@@ -504,6 +509,10 @@ def get_mpl_figure(
     frame_on : bool, optional
         If the frame should be on, by default False
         Only used if tight is True.
+    gridspec_kw : Optional[Dict[str, Any]], optional
+        Optional kwargs for the gridspec, by default None
+        Can be used to adjust spacing etc.
+        Further read: https://matplotlib.org/stable/api/_as_gen/matplotlib.gridspec.GridSpec.html#matplotlib.gridspec.GridSpec
     Returns
     -------
     Tuple[Figure, Axes | List[Axes]]
@@ -537,7 +546,10 @@ def get_mpl_figure(
             axes.append(ax)
     else:
         fig, ax = plt.subplots(rows, cols, figsize=(size * ratio_x * cols,
-                                                    size * ratio_y * rows), subplot_kw=subplot_kw)
+                                                    size * ratio_y * rows),
+                               subplot_kw=subplot_kw,
+                               gridspec_kw=gridspec_kw
+                               )
         axes.append(ax)
     axes = np.array(axes)
     if ax_mode == "2d" and len(axes.shape) == 1:
@@ -645,7 +657,8 @@ def should_use_logarithm(x: np.ndarray, magnitudes: int = 2, allow_zero: bool = 
 
 
 def preserve_legend(ax: Axes,  # type: ignore
-                    patches: List[Patch],  # type: ignore
+                    # Renamed for clarity: these are the new *artists* to add
+                    patches: List[LegendArtist],
                     create_if_not_exists: bool = True,
                     **kwargs):
     """Checks if the axis has a legend and appends the patches to the legend.
@@ -667,11 +680,21 @@ def preserve_legend(ax: Axes,  # type: ignore
     """
     if ax.get_legend() is not None:
         lgd = ax.get_legend()
-        handles = list(lgd.legend_handles)
-        labels = [x.get_label() for x in lgd.legend_handles]
-        handles.extend(patches)
-        labels.extend([p.get_label() for p in patches])
-        ax.legend(handles=handles, labels=labels, **kwargs)
+        # Get existing handles (the drawn artists in the legend)
+        current_handles = list(lgd.legendHandles)
+
+        # Get existing labels from the legend's Text objects (most reliable way)
+        current_labels = [text_obj.get_text() for text_obj in lgd.get_texts()]
+
+        # Combine existing and new handles/labels
+        all_handles = current_handles + patches
+        # For new handles, assume they have their labels correctly set
+        all_labels = current_labels + [h.get_label() for h in patches]
+
+        # Recreate the legend with the combined list
+        # Ensure that the old legend is removed before creating the new one
+        lgd.remove()
+        ax.legend(handles=all_handles, labels=all_labels, **kwargs)
     else:
         if create_if_not_exists:
             ax.legend(handles=patches, **kwargs)
@@ -980,32 +1003,39 @@ def plot_as_image(data: VEC_TYPE,
         _col_cmaps = []
         _col_use_mathjax = []
         v_name = "?"
-        if isinstance(variable_name, (List, tuple)):
+        if variable_name is None:
+            v_name = None
+        elif isinstance(variable_name, (List, tuple)):
             if len(variable_name) > i:
                 v_name = variable_name[i]
         else:
             v_name = variable_name
 
-        v_name = str(v_name)
-
-        used_mj, v_name = used_mathjax(v_name)
+        if v_name is not None:
+            v_name = str(v_name)
+            used_mj, v_name = used_mathjax(v_name)
+        else:
+            used_mj = False
 
         if (len(input_data) > 1) and numbering:
             title_num_str = f"{rows + 1}: "
         if 'complex' in str(data.dtype):
             cols = 2
-            _col_titles.append(f"{title_num_str}|{v_name}|")
+            _col_titles.append(
+                f"{title_num_str}|{v_name}|") if v_name is not None else _col_titles.append(None)
             _col_use_mathjax.append(used_mj)
             _col_images.append(np.abs(data))
             _col_cmaps.append(cmap)
 
-            _col_titles.append(f"{title_num_str}angle({v_name})")
+            _col_titles.append(
+                f"{title_num_str}angle({v_name})") if v_name is not None else _col_titles.append(None)
             _col_use_mathjax.append(used_mj)
             angle = np.angle(data)
             _col_images.append(angle)
             _col_cmaps.append(phase_cmap)
         else:
-            _col_titles.append(title_num_str + v_name)
+            _col_titles.append(
+                title_num_str + v_name) if v_name is not None else _col_titles.append(None)
             _col_use_mathjax.append(used_mj)
             _col_images.append(data)
             if cmap is None:
@@ -1118,7 +1148,7 @@ def plot_as_image(data: VEC_TYPE,
                         _log = np.where(non_finite, np.nan, _log)
                         _log = np.where(negative, -_log, _log)
                         _image = _log
-                        _title = f"log_{{10}}({_title})"
+                        _title = f"log_{{10}}({_title})" if _title is not None else None
                         _use_mathjax = True
                 if _cscale == "count":
                     color_mapping = dict()
@@ -1219,16 +1249,17 @@ def plot_as_image(data: VEC_TYPE,
                     pp2.loc1, pp2.loc2 = connect_corners[1], flip(
                         connect_corners[1])
 
-            if inpaint_title == True or (inpaint_title == DEFAULT and tight):
+            if inpaint_title == True or (inpaint_title == DEFAULT and tight) and _title is not None:
                 _inp_raw = np.zeros(
                     tuple(_image.shape[:2] + (4,)), dtype=np.uint8)
                 _inpaint_img = _inpaint_title(
                     _inp_raw, _title, **(inpaint_title_kwargs if inpaint_title_kwargs is not None else dict()))
                 ax.imshow(_inpaint_img)
             elif not tight:
-                if _use_mathjax:
-                    _title = f"${_title}$"
-                ax.set_title(_title)
+                if _title is not None:
+                    if _use_mathjax:
+                        _title = f"${_title}$"
+                    ax.set_title(_title)
 
             if colorbar:
                 _cbar_format = None
@@ -1497,6 +1528,8 @@ def plot_vectors(y: VEC_TYPE,
                  xticks_horizontal_alignment: Optional[str] = None,
                  title: Optional[str] = None,
                  legend: bool = True,
+                 yerr: Optional[VEC_TYPE] = None,
+                 yerr_kw: Optional[Dict[str, Any]] = None,
                  ) -> Figure:
     """Gets a matplotlib line figure with a plot of vectors.
 
@@ -1549,6 +1582,31 @@ def plot_vectors(y: VEC_TYPE,
         1. Positions of the ticks
         2. Labels of the ticks
 
+    xticks_rotation : Optional[float], optional
+        Rotation of the x ticks, by default None
+        If None, will not rotate the ticks.
+
+    xticks_horizontal_alignment : Optional[str], optional
+        Horizontal alignment of the x ticks, by default None
+        If None, will use "center".
+
+    title : Optional[str], optional
+        Title for the plot, by default None
+
+    legend : bool, optional
+        If a legend should be shown, by default True
+
+    yerr : Optional[VEC_TYPE], optional
+        Y error values for the plot, by default None
+        Shape should be ([..., N], D)
+        If provided, will add error bars to the plot.
+        Batch dimensions will be flattened.
+
+    yerr_kw : Optional[Dict[str, Any]], optional
+        Additional kwargs for the error bars, by default None
+        If provided, will be passed to the errorbar function.
+        E.g. {'ecolor': 'gray', 'capsize': 2, 'elinewidth': 1}
+
     Returns
     -------
     Figure
@@ -1565,6 +1623,12 @@ def plot_vectors(y: VEC_TYPE,
     if len(y.shape) == 1:
         y = y[:, None]
     y, shape = flatten_batch_dims(y, -2)
+
+    if yerr is not None:
+        yerr = numpyify(yerr)
+        if len(yerr.shape) == 1:
+            yerr = yerr[:, None]
+        yerr, _ = flatten_batch_dims(yerr, -2)
 
     if label is None:
         label = [str(i) for i in range(y.shape[-1])]
@@ -1592,19 +1656,40 @@ def plot_vectors(y: VEC_TYPE,
     handles = []
 
     for i in range(y.shape[-1]):
+        xpos = None
+        ypos = None
         if mode == "plot":
-            handle, = ax.plot(x, y[:, i], label=label[i])
+            xpos = x
+            ypos = y[:, i]
+            handle, = ax.plot(xpos, ypos, label=label[i])
         elif mode == "scatter":
-            handle = ax.scatter(x, y[:, i], label=label[i])
+            xpos = x
+            ypos = y[:, i]
+            handle = ax.scatter(xpos, ypos, label=label[i])
         elif mode == "bar":
             position = x + i * bar_width
             # Center the bars
+            xpos = position
             position = position - (bar_width * y.shape[-1]) / 2
+            ypos = y[:, i]
             handle = ax.bar(
-                position, y[:, i], width=bar_width, label=label[i], align="edge")
+                position, ypos, width=bar_width, label=label[i], align="edge")
         else:
             raise ValueError("Mode should be either plot or scatter.")
         handles.append(handle)
+        if yerr is not None:
+            if yerr_kw is None:
+                yerr_kw = dict()
+            if "ecolor" not in yerr_kw:
+                yerr_kw["ecolor"] = "gray"
+            if "capsize" not in yerr_kw:
+                yerr_kw["capsize"] = 2
+            if "elinewidth" not in yerr_kw:
+                yerr_kw["elinewidth"] = 1
+            if "linestyle" not in yerr_kw:
+                yerr_kw["linestyle"] = ''
+            h = ax.errorbar(xpos, ypos, yerr=yerr[:, i], **yerr_kw)
+            handles.append(h)
 
     if mode == "bar":
         from matplotlib.ticker import (MultipleLocator, AutoMinorLocator)

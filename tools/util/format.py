@@ -14,11 +14,12 @@ from tools.error import ArgumentNoneError
 from tools.error.argument_none_type_suggestion_error import ArgumentNoneTypeSuggestionError
 from tools.util.path_tools import format_os_independent
 from tools.util.typing import DEFAULT, MISSING
-from tools.util.reflection import dynamic_import
+from tools.util.reflection import dynamic_import, get_nested_value, set_nested_value
 from traceback import FrameSummary, extract_stack
 from types import FrameType, TracebackType
 import pandas as pd
 from dataclasses import dataclass, field
+
 CAMEL_SEPERATOR_PATTERN = re.compile(
     r'((?<!^)(?<!_))((?=[A-Z][a-z])|((?<=[a-z])(?=[A-Z])))')
 UPPER_SNAKE_PATTERN = re.compile(r'^([A-Z]+_?)*([A-Z]+)$')
@@ -593,6 +594,8 @@ def parse_format_string(format_string: str,
 
             if value is not None and callable(value) and allow_invocation:
                 value = value()
+
+            
 
             use_format = format
             if use_format is None and key in default_key_formatters:

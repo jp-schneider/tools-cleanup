@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Any, Callable, Dict, Generator, List, Optional, Literal, Tuple, Union
+from typing import Any, Callable, Dict, Generator, List, Optional, Literal, Tuple, Union, TYPE_CHECKING  
 
 import torch
 from tools.util.format import parse_enum
@@ -15,13 +15,14 @@ from PIL.Image import Exif, Image
 try:
     from PIL.ExifTags import Base as ExifTagsBase
 except Exception as err:
-    if "cannot import name 'Base' from 'PIL.ExifTags'" in str(err):
-        from PIL.ExifTags import TAGS as Exif_Tags
-        from enum import Enum
-        ExifTagsBase = Enum(
-            'ExifTagsBase', {v: k for k, v in Exif_Tags.items()})
-    else:
-        ExifTagsBase = object
+    if not TYPE_CHECKING:
+        if "cannot import name 'Base' from 'PIL.ExifTags'" in str(err):
+            from PIL.ExifTags import TAGS as Exif_Tags
+            from enum import Enum
+            ExifTagsBase = Enum(
+                'ExifTagsBase', {v: k for k, v in Exif_Tags.items()})
+        else:
+            ExifTagsBase = object
 
 from tools.util.format import parse_format_string
 from tqdm.auto import tqdm
@@ -31,6 +32,15 @@ from torch.nn.functional import grid_sample
 from tools.util.progress_factory import ProgressFactory
 from tools.util.sized_generator import SizedGenerator, sized_generator
 
+try:
+    import matplotlib.pyplot as plt
+    import matplotlib.cm as cm
+    from matplotlib.colors import Colormap
+except Exception as err:
+    if not TYPE_CHECKING:
+        plt = None
+        cm = None
+        Colormap = None
 
 def create_image_exif(metadata: Dict[Union[str, ExifTagsBase], Any]) -> Exif:
     """Creates an Exif object from the given metadata.
@@ -201,6 +211,60 @@ def load_image(
         raise err
 
 
+def apply_colormap(image: VEC_TYPE,
+                   colormap: Union[str, Colormap] = "viridis",
+                   vmin: Optional[VEC_TYPE] = None,
+                   vmax: Optional[VEC_TYPE] = None,
+                   ) -> np.ndarray:
+    """Applies a colormap to the given image.
+
+    Parameters
+    ----------
+    image : VEC_TYPE
+        The image to apply the colormap to. 
+        Image should be in the shape (H, W[, C]) for numpy arrays or ([C,] H, W) for torch tensors.
+        C should be 1.
+    colormap : Union[str, Colormap], optional
+        The colormap to apply, can be a string or a Colormap instance, by default "viridis"
+    vmin : Optional[VEC_TYPE], optional
+        The minimum value for the colormap if not specified, will be set to the min of the image, by default None
+    vmax : Optional[VEC_TYPE], optional
+        The maximum value for the colormap if not specified, will be set to the max of the image, by default None
+dded
+    Returns
+    -------
+    np.ndarray
+        The image with the colormap applied. Shape will be (H, W, NC), where NC is the number of channels in the colormap.
+
+    Raises
+    ------
+    ImportError
+        If Matplotlib is not installed.
+    TypeError
+        If the colormap is not a string or a Colormap instance.
+    """
+    from tools.transforms.to_numpy_image import numpyify_image
+    from tools.transforms.numpy.min_max import MinMax
+    image = numpyify_image(image)
+    if isinstance(colormap, str):
+        if plt is None or cm is None:
+            raise ImportError(
+                "Matplotlib is not installed, but is required to apply colormaps.")
+        colormap = cm.get_cmap(colormap)
+    if not isinstance(colormap, Colormap):
+        raise TypeError(
+            f"Colormap should be a string or a Colormap instance, got {type(colormap)}")
+    if vmin is None:
+        vmin = np.min(image)
+    if vmax is None:    
+        vmax = np.max(image)
+    norm = MinMax(0, colormap.N -1)
+    norm.min = vmin
+    norm.max = vmax
+    norm.fitted = True
+    v = colormap(norm(image).round().astype(int))
+    return v
+    
 def save_image(image: VEC_TYPE,
                path: Union[str, Path],
                override: bool = True,
@@ -211,8 +275,8 @@ def save_image(image: VEC_TYPE,
     Parameters
     ----------
     data : VEC_TYPE
-        Data to be saved as an image. Should be in the shape (H, W, C)
-        for numpy arrays or (C, H, W) torch tensors.
+        Data to be saved as an image. Should be in the shape (H, W[, C])
+        for numpy arrays or ([C,] H, W) torch tensors.
     path : Union[str, Path]
         Path to save the image to.
     override : bool, optional

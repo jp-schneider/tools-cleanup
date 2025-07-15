@@ -165,7 +165,10 @@ class MultiRunner(TrainableRunner):
         preset_output_folder = self.config.preset_output_folder
         job_file_path = self.config.job_file_path
 
-        exp_name_date = f"{self.base_config.get_experiment_name()}_{self.date_created}"
+        if self.base_config is not None:
+            exp_name_date = f"{self.base_config.get_name()}_{self.date_created}"
+        else:
+            exp_name_date = f"{self.config.get_name()}_{self.date_created}"
 
         # Create job file
         if job_file_path is None or (

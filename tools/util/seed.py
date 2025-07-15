@@ -5,7 +5,7 @@ import numpy as np
 from tools.logger.logging import logger
 
 
-def seed_all(seed: int, deterministic: bool = False, warn_only: bool = False, log: bool = True) -> None:
+def seed_all(seed: int, deterministic: bool = False, warn_only: bool = False, log: bool = False) -> None:
     """Seed all random number generators.
 
     Parameters
