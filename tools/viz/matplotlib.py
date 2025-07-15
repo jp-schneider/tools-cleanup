@@ -3,7 +3,7 @@
 import inspect
 import io
 import re
-from typing import Any, Callable, Dict, Iterable, List, Literal, Optional, Sequence, Union, Tuple
+from typing import Any, Callable, Dict, Iterable, List, Literal, Optional, Sequence, Union, Tuple, TYPE_CHECKING
 
 from matplotlib.animation import FuncAnimation
 from matplotlib.colors import ListedColormap
@@ -23,9 +23,10 @@ try:
     from matplotlib.colors import LinearSegmentedColormap
     from matplotlib.patches import Patch
 except (ModuleNotFoundError, ImportError):
-    plt = None
-    Figure = None
-    Axes = None
+    if not TYPE_CHECKING:
+        plt = None
+        Figure = None
+        Axes = None
     pass
 import os
 from functools import wraps
@@ -482,7 +483,7 @@ def get_mpl_figure(
         subplot_kw: Optional[Dict[str, Any]] = None,
         ax_mode: Literal["1d", "2d"] = "1d",
         frame_on: bool = False,
-) -> Tuple[Figure, Union[Axes, List[Axes]]]:  # type: ignore
+) -> Tuple[Figure, Union[Axes, List[Axes]]]:
     """Create a eventually tight matplotlib figure with axes.
 
     Parameters
