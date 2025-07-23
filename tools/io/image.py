@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Any, Callable, Dict, Generator, List, Optional, Literal, Tuple, Union, TYPE_CHECKING  
+from typing import Any, Callable, Dict, Generator, List, Optional, Literal, Tuple, Union, TYPE_CHECKING
 
 import torch
 from tools.util.format import parse_enum
@@ -41,6 +41,7 @@ except Exception as err:
         plt = None
         cm = None
         Colormap = None
+
 
 def create_image_exif(metadata: Dict[Union[str, ExifTagsBase], Any]) -> Exif:
     """Creates an Exif object from the given metadata.
@@ -221,7 +222,7 @@ def apply_colormap(image: VEC_TYPE,
     Parameters
     ----------
     image : VEC_TYPE
-        The image to apply the colormap to. 
+        The image to apply the colormap to.
         Image should be in the shape (H, W[, C]) for numpy arrays or ([C,] H, W) for torch tensors.
         C should be 1.
     colormap : Union[str, Colormap], optional
@@ -256,15 +257,16 @@ dded
             f"Colormap should be a string or a Colormap instance, got {type(colormap)}")
     if vmin is None:
         vmin = np.min(image)
-    if vmax is None:    
+    if vmax is None:
         vmax = np.max(image)
-    norm = MinMax(0, colormap.N -1)
+    norm = MinMax(0, colormap.N - 1)
     norm.min = vmin
     norm.max = vmax
     norm.fitted = True
     v = colormap(norm(image).round().astype(int))
     return v
-    
+
+
 def save_image(image: VEC_TYPE,
                path: Union[str, Path],
                override: bool = True,
@@ -461,7 +463,7 @@ def compute_max_resolution(image_shape: Tuple[int, int], max_size: int) -> Tuple
 def resize_image(
         image: VEC_TYPE,
         max_size: Optional[int] = None,
-        size: Optional[Tuple[int, int]] = None,
+        size: Optional[Union[Tuple[int, int], VEC_TYPE]] = None,
         factor: Optional[float] = None,
 ) -> np.ndarray:
     """Resizes the image to the given max size.
@@ -470,7 +472,7 @@ def resize_image(
     Parameters
     ----------
     image : np.ndarray
-        Image to resize. Should be in the shape (H, W, C) or (B, H, W, C)
+        Image to resize. Should be in the shape (H, W[, C]) or (B, H, W, C) for numpy arrays or ([B, C,] H, W) for torch tensors.
     max_size : int
         Max size of the longest side of the image.
     size : Optional[Tuple[int, int]], optional
@@ -486,13 +488,27 @@ def resize_image(
     """
     from torchvision.transforms import Compose, Resize, ToTensor
     from tools.transforms.to_numpy_image import ToNumpyImage
+    from tools.util.torch import tensorify
     dtype = image.dtype
     is_tensor = torch.is_tensor(image)
+    channel_added = False
     if len(image.shape) == 4:
         B, H, W, C = image.shape
     elif len(image.shape) == 3:
         H, W, C = image.shape
         B = 1
+    elif len(image.shape) == 2:
+        if is_tensor:
+            B = 1
+            H, W = image.shape
+            C = 1
+            image = image.unsqueeze(0)
+        else:
+            B = 1
+            H, W = image.shape
+            C = 1
+            image = np.expand_dims(image, axis=-1)
+        channel_added = True
     else:
         raise ValueError("Image should have shape B x H x W x C or H x W x C")
     if max_size is None and size is None and factor is None:
@@ -510,6 +526,7 @@ def resize_image(
             ([ToNumpyImage(output_dtype=dtype)] if not is_tensor else [])
         )
     elif size is not None:
+        size = tuple(tensorify(size).int().tolist())
         transforms = Compose(
             ([ToTensor()] if not is_tensor else [])
             + [Resize(size)]
@@ -523,8 +540,14 @@ def resize_image(
             + ([ToNumpyImage(output_dtype=dtype)] if not is_tensor else [])
         )
     if len(transforms.transforms) == 0:
-        return image
-    return transforms(image)
+        res = image
+    res = transforms(image)
+    if channel_added:
+        if is_tensor:
+            res = res.squeeze(0)
+        else:
+            res = np.squeeze(res, axis=-1)
+    return res
 
 
 def index_image_folder(path, filename_format=r"(?P<index>[0-9]+).png", return_dict: bool = False) -> Union[List[str], List[Dict[str, Any]]]:
@@ -953,7 +976,8 @@ def check_text_overlap(occupied_area: np.ndarray,
     overlap_area = 0
 
     text_mask = np.zeros_like(occupied_area, dtype=bool)
-    text_mask[int(row):int(row + text_height), int(col):int(col + text_width)] = True
+    text_mask[int(row):int(row + text_height), int(col)
+                  :int(col + text_width)] = True
     overlap_with_occupied = np.sum(occupied_area[text_mask])
     overlap_area += overlap_with_occupied
 

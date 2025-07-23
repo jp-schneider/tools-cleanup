@@ -4,6 +4,8 @@ from typing import Optional, Type, Union
 from tools.config.experiment_config import ExperimentConfig
 from tools.config.output_config import OutputConfig
 from tools.util.path_tools import process_path
+from datetime import datetime
+
 
 @dataclass
 class MultiRunnerConfig(ExperimentConfig):
@@ -45,6 +47,9 @@ class MultiRunnerConfig(ExperimentConfig):
     n_parallel: int = field(default=1)
     """Number of parallel executions."""
 
+    child_config_creation_date: Optional[datetime] = field(default=None)
+    """The date when the child configs were created. If None, the current date will be used."""
+
     preset_output_folder: bool = field(default=False)
     """If True, the output folder for child agents will be preset with a --output-folder argument."""
 
@@ -52,15 +57,16 @@ class MultiRunnerConfig(ExperimentConfig):
         default="{get_runs_path}/{index:02d}_{get_name}_{year}_{month}_{day}_{hour}_{minute}_{second}")
     """The format string for the preset output folder."""
 
-    name_cli_argument: str = field(default="--name-experiment")
+    name_cli_argument: Optional[str] = field(default="--name")
+    """The name of the command line argument for the experiment name."""
 
     @classmethod
     def multi_config_runner_type(cls) -> Type:
         """Returns the type of the multi config runner to handle the current config."""
         from tools.run.multi_config_runner import MultiConfigRunner
         return MultiConfigRunner
-    
+
     def prepare(self) -> None:
         super().prepare()
-        self.config_directory = process_path(self.config_directory, interpolate=True, make_exist=True, interpolate_object=self, variable_name="config_directory", allow_interpolation_invocation=True)
-    
+        self.config_directory = process_path(self.config_directory, interpolate=True, make_exist=True,
+                                             interpolate_object=self, variable_name="config_directory", allow_interpolation_invocation=True)
