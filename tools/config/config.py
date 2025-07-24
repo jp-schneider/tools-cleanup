@@ -33,6 +33,9 @@ class Config(JsonConvertible, ArgparserMixin):
     seed: int = field(default=42)
     """Seed for the initialization of the random number generator. Before large random operations in synthetic setting model."""
 
+    __config_path__: Optional[str] = field(default=None)
+    """Path to the config file. This is set automatically when the config is loaded from a file."""
+
     def __post_init__(self):
         if self.diff_config is not None and isinstance(self.diff_config, str):
             if os.path.exists(self.diff_config):
@@ -40,6 +43,13 @@ class Config(JsonConvertible, ArgparserMixin):
                     self.diff_config)
             else:
                 self.diff_config = JsonConvertible.from_json(self.diff_config)
+
+    @classmethod
+    def argparser_ignore_fields(cls) -> List[str]:
+        fields = []
+        fields.extend(super().argparser_ignore_fields())
+        fields.append('__config_path__')
+        return fields
 
     def compute_diff(self, other: 'Config') -> Dict[str, Any]:
         """Computes the differences of the current object to another.
@@ -156,12 +166,14 @@ class Config(JsonConvertible, ArgparserMixin):
     def __ignore_on_iter__(self) -> Set[str]:
         s = super().__ignore_on_iter__()
         s.add("progress_factory")
+        s.add("__config_path__")
         return s
 
     def __getstate__(self):
         state = self.__dict__.copy()
         # Don't pickle baz
         del state["progress_factory"]
+        del state["__config_path__"]
         return state
 
     def __setstate__(self, state):

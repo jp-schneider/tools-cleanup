@@ -170,6 +170,8 @@ class MultiConfigRunner(MultiRunner):
 
         for config_path in configs:
             config = JsonConvertible.load_from_file(config_path)
+            if hasattr(config, '__config_path__'):
+                config.__config_path__ = config_path
             rnr = self.runner_type(config=config)
             rnr.parent = self
             self.child_runners.append(rnr)
