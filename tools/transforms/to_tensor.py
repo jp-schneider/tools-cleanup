@@ -53,7 +53,13 @@ class ToTensor(Transform):
             if (dtype and x.dtype != dtype) or (device and x.device != device):
                 x = x.to(dtype=dtype, device=device)
             return x
-        return torch.tensor(x, dtype=dtype, device=device, requires_grad=requires_grad)
+        try:
+            return torch.tensor(x, dtype=dtype, device=device, requires_grad=requires_grad)
+        except ValueError as e:
+            if isinstance(x, np.ndarray) and "At least one stride in the given numpy array is negative" in str(e):
+                return torch.tensor(x.copy(), dtype=dtype, device=device, requires_grad=requires_grad)
+            else:
+                raise e
 
 
 tensorify = ToTensor()

@@ -66,7 +66,7 @@ class JsonSerializationRuleRegistry():
             JsonPathSerializationRule,
             JsonFileHandleSerializationRule,
             JsonContextPathSerializationRule,
-
+            JsonProgressFactorySerializationRule,
         )
         all_simple_rules: List[Type[JsonSerializationRule]] = [
             JsonIdentitySerializationRule,
@@ -86,7 +86,8 @@ class JsonSerializationRuleRegistry():
             JsonDefaultSingletonSerializationRule,
             JsonPathSerializationRule,
             JsonFileHandleSerializationRule,
-            JsonContextPathSerializationRule
+            JsonContextPathSerializationRule,
+            JsonProgressFactorySerializationRule
         ]
 
         if 'numpy' in sys.modules:
