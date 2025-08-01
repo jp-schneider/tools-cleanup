@@ -25,6 +25,9 @@ import copy
 class MultiRunner(TrainableRunner):
     """A runner which can run multiple child runners. Typically used to find the best hyperparameters."""
 
+    config: MultiRunnerConfig
+    """Configuration of the multi runner."""
+
     child_runners: List[ConfigRunner]
     """Child runners which will be run / trained."""
 
@@ -135,6 +138,14 @@ class MultiRunner(TrainableRunner):
                 config = copy.deepcopy(config)
                 config.experiment_datetime = None
 
+            # Check if config has a name for the cli argument
+            prop_name = self.config.name_cli_argument
+            if prop_name is not None:
+                # Check if exits
+                name = prop_name.lstrip("--").replace("-", "_").lstrip("-")
+                if not hasattr(config, name):
+                    self.config.name_cli_argument = None
+
             path = config.save_to_file(
                 path, no_uuid=True, override=True, use_raw_context_paths=use_raw_context_paths)
             paths.append(path)
@@ -194,7 +205,8 @@ class MultiRunner(TrainableRunner):
         return job_file_path
 
     def create_jobs(self, ref_dir: Optional[str] = None, preset_output_folder: bool = False) -> List[Tuple[str, List[str]]]:
-        created_date = datetime.now()
+        created_date = datetime.now(
+        ) if self.config.child_config_creation_date is None else self.config.child_config_creation_date
         created_at = created_date.strftime("%y_%m_%d_%H_%M_%S")
         is_from_file = ref_dir is not None
 
@@ -263,7 +275,8 @@ class MultiRunner(TrainableRunner):
                 is_ref_dir_from_file=is_from_file,
                 name=experiment_name,
                 config_path=p,
-                output_folder=output_folder
+                output_folder=output_folder,
+                name_argument=self.config.name_cli_argument
             )
             items.append(item)
 
@@ -280,6 +293,7 @@ class MultiRunner(TrainableRunner):
                              ) -> Tuple[str, List[str]]:
         exec_file = relpath(
             self.__jobsrefdir__, runner_script_path, is_from_file=is_ref_dir_from_file)
+
         args = [
             f"--config-path", format_os_independent(config_path),
             name_argument, name

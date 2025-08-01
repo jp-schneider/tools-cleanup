@@ -5,6 +5,7 @@ from tools.config.config import Config
 from tools.config.output_config import OutputConfig
 from datetime import datetime
 
+
 @dataclass
 class ExperimentConfig(OutputConfig):
     """Experiment base config for executable learning experiments."""
@@ -23,14 +24,14 @@ class ExperimentConfig(OutputConfig):
 
     def get_name(self) -> str:
         return self.name_experiment
-    
+
     def get_runs_path(self) -> str:
         return self.runs_path
-    
+
     @property
     def start_datetime_string(self) -> str:
         return self.start_datetime.strftime("%Y-%m-%d_%H-%M-%S")
-    
+
     def prepare(self) -> None:
         super().prepare()
         if self.start_datetime is None:

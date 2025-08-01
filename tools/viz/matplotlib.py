@@ -656,8 +656,7 @@ def should_use_logarithm(x: np.ndarray, magnitudes: int = 2, allow_zero: bool = 
     return (max_ / min_) > math.pow(10, magnitudes)
 
 
-def preserve_legend(ax: Axes,  # type: ignore
-                    # Renamed for clarity: these are the new *artists* to add
+def preserve_legend(ax: Axes,
                     patches: List[LegendArtist],
                     create_if_not_exists: bool = True,
                     **kwargs):

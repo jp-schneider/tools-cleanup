@@ -21,9 +21,10 @@ DETAILED_EXCEPTION_HANDLING = {
     RuntimeError
 }
 
-time_regex = r"^(?P<year>\d{4})-(?P<month>0[1-9]|1[0-2])-(?P<day>0[1-9]|[12]\d|3[01])(T(?P<hour>[01]\d|2[0-3]):(?P<minute>[0-5]\d):(?P<second>[0-5]\d)(?P<fraction>\.\d{1,6})?(?P<timezone>Z|(?P<tz_offset_sign>[+-])(?P<tz_offset_hour>[01]\d|2[0-3])(?::(?P<tz_offset_minute>[0-5]\d))?)?)?$"
+time_regex = r"^(?P<year>\d{4})-(?P<month>0[1-9]|1[0-2])-(?P<day>0[1-9]|[12]\d|3[01])([\s|T](?P<hour>[01]\d|2[0-3]):(?P<minute>[0-5]\d):(?P<second>[0-5]\d)(\.(?P<fraction>\d{1,6}))?(?P<timezone>Z|(?P<tz_offset_sign>[+-])(?P<tz_offset_hour>[01]\d|2[0-3])(?::(?P<tz_offset_minute>[0-5]\d))?)?)?$"
 exit_code_message_regex = (
-    r"^Exit code: (?P<exit_code>\d+)(\. Date: " + time_regex + r")?(\n(?P<message>.*))?$"
+    r"^Exit code: (?P<exit_code>\d+)(\. Date: " +
+    time_regex.lstrip('^').rstrip("$") + r")?(\n(?P<message>((.*)\s)+))?$"
 )
 
 
@@ -40,10 +41,10 @@ class ExitMessage:
     exit_time: Optional[datetime] = None
     """Datetime when the exit message was created."""
 
-
+    @classmethod
     def from_file(cls, path: str) -> Optional["ExitMessage"]:
         """Load an exit message from a file.
-        
+
         Parameters
         ----------
         path : str
@@ -77,7 +78,7 @@ class ExitMessage:
                 second=int(m.group("second")) if m.group("second") else 0,
             )
         message = m.group("message") if m.group("message") else ""
-        return cls(message=message, exit_code=code, datetime=dt)
+        return cls(message=message, exit_code=code, exit_time=dt)
 
 
 def detailed_exception(err: Exception) -> int:
@@ -136,15 +137,14 @@ def load_exit_codes(directory: str) -> pd.DataFrame:
     return pd.DataFrame(files)
 
 
-
 def load_exit_message(path: str) -> Optional[ExitMessage]:
     """Loads the exit message from a file.
-    
+
     Parameters
     ----------
     path : str
         Path to the exit message file.
-        
+
     Returns
     -------
     Optional[ExitMessage]
@@ -152,7 +152,7 @@ def load_exit_message(path: str) -> Optional[ExitMessage]:
     """
     return ExitMessage.from_file(path)
 
-    
+
 class ScriptExecution:
     """Context manager which encapsulates the execution of a script and stores success or failure in a file."""
 

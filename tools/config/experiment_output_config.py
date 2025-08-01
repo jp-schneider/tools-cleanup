@@ -24,6 +24,16 @@ class ExperimentOutputConfig(OutputConfig):
         default="runs/{year}-{month:02d}-{day:02d}/{experiment_datetime_string}_{name}")
     """Output directory for the final output."""
 
+    experiment_logger: Literal["tensorboard",
+                               "wandb"] = field(default="tensorboard")
+    """Experiment logger to use. Default is tensorboard."""
+
+    experiment_logger_kwargs: Dict[str, Any] = field(default_factory=dict)
+    """Keyword arguments for the experiment logger constructor. Unused for tensorboard."""
+
+    project: str = field(default="sample_project")
+    """Project name for the experiment. Used for wandb."""
+
     def get_experiment_name(self) -> str:
         """Gets the (formatted) experiment name.
 
@@ -88,16 +98,6 @@ class ExperimentOutputConfig(OutputConfig):
                                         variable_name="output_path",
                                         reevaluate=reevaluate_output_path
                                         )
-
-    experiment_logger: Literal["tensorboard",
-                               "wandb"] = field(default="tensorboard")
-    """Experiment logger to use. Default is tensorboard."""
-
-    experiment_logger_kwargs: Dict[str, Any] = field(default_factory=dict)
-    """Keyword arguments for the experiment logger constructor. Unused for tensorboard."""
-
-    project: str = field(default="sample_project")
-    """Project name for the experiment. Used for wandb."""
 
     def get_experiment_logger_logging_config(self) -> Dict[str, Any]:
         """

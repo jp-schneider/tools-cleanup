@@ -86,7 +86,8 @@ class MultiConfigRunner(MultiRunner):
         return paths
 
     def create_jobs(self, ref_dir: Optional[str] = None, preset_output_folder: bool = False) -> List[Tuple[str, List[str]]]:
-        created_date = datetime.now()
+        created_date = datetime.now(
+        ) if self.config.child_config_creation_date is None else self.config.child_config_creation_date
         created_at = created_date.strftime("%y_%m_%d_%H_%M_%S")
         is_from_file = ref_dir is not None
         if ref_dir is None:
@@ -169,6 +170,8 @@ class MultiConfigRunner(MultiRunner):
 
         for config_path in configs:
             config = JsonConvertible.load_from_file(config_path)
+            if hasattr(config, '__config_path__'):
+                config.__config_path__ = config_path
             rnr = self.runner_type(config=config)
             rnr.parent = self
             self.child_runners.append(rnr)
