@@ -10,6 +10,7 @@ from tools.util.path_tools import read_directory
 from datetime import datetime
 from dataclasses import dataclass, field
 import re
+from tools.util.format import strfdelta
 
 EXCEPTION_ERROR_CODES = {
     KeyboardInterrupt: 130,
@@ -25,6 +26,12 @@ time_regex = r"^(?P<year>\d{4})-(?P<month>0[1-9]|1[0-2])-(?P<day>0[1-9]|[12]\d|3
 exit_code_message_regex = (
     r"^Exit code: (?P<exit_code>\d+)(\. Date: " +
     time_regex.lstrip('^').rstrip("$") + r")?(\n(?P<message>((.*)\s)+))?$"
+)
+
+running_file_pattern = r"^running_(?P<pid>\d+).txt$"
+running_message_regex = (
+    r"^Start-Date: (?P<start_date>" + time_regex.lstrip('^').rstrip("$") + r")" + os.linesep +
+    r"(?P<message>.*)?$"
 )
 
 
@@ -97,25 +104,49 @@ def get_exit_code(err: Optional[Exception]) -> int:
             return code
 
 
-def write_exit(config: OutputConfig, exit_code: int, err: Optional[Exception] = None, exit_time: Optional[datetime] = None):
+def write_exit(config: OutputConfig, exit_code: int, err: Optional[Exception] = None, exit_time: Optional[datetime] = None, message: Optional[str] = None) -> Optional[str]:
     if exit_time is None:
         exit_time = datetime.now().astimezone()
     if config is None or not hasattr(config, "output_folder"):
-        return
+        return None
     try:
         # Write exit code within a text file called exit_{exit_code}.txt
         path = os.path.join(config.output_folder, f"exit_{exit_code:03d}.txt")
         # Content will be the exception message if exit code is not 0, on success Add a success message
-        content = f"Exit code: {exit_code}. Date: {exit_time}\n"
+        content = f"Exit code: {exit_code}. Date: {exit_time}" + os.linesep
         if exit_code != 0:
             import traceback
             if err is not None:
-                content += f"\n{type(err)}: {str(err)}"
-                content += f"\nStacktrace:\n{''.join(traceback.format_exception(err))}"
+                content += f"{os.linesep}{type(err)}: {str(err)}"
+                content += f"{os.linesep}Stacktrace:{os.linesep}{''.join(traceback.format_exception(err))}"
+        if message is not None:
+            content += f"Message:{os.linesep}{message}"
         with open(path, "w") as f:
             f.write(content)
     except Exception as err:
-        return
+        return path
+    return path
+
+
+def write_running(config: OutputConfig, start_time: Optional[datetime] = None, message: str = "Running...") -> Optional[str]:
+    """Writes a running message to a file in the output folder."""
+    if start_time is None:
+        start_time = datetime.now().astimezone()
+    if config is None or not hasattr(config, "output_folder"):
+        return None
+    try:
+        path = os.path.join(config.output_folder, f"running_{os.getpid()}.txt")
+        # Create path if it does not exist
+        if not os.path.exists(config.output_folder):
+            os.makedirs(config.output_folder)
+        content = f"Start-Date: {start_time}{os.linesep}" + \
+            f"Message: {message}{os.linesep}"
+        with open(path, "w") as f:
+            f.write(content)
+    except Exception as err:
+        logger.error(f"Failed to write running message: {err}")
+        return None
+    return path
 
 
 def load_exit_codes(directory: str) -> pd.DataFrame:
@@ -169,11 +200,20 @@ class ScriptExecution:
         self.config = config
         self.scope = get_frame_summary(1)
         self.log_on_keyboard_interrupt = log_on_keyboard_interrupt
+        self.start_date = None
+        self.end_date = None
+        self.running_file_path = None
 
     def __enter__(self):
+        self.start_date = datetime.now().astimezone()
+        # Write running message to the output folder
+        self.running_file_path = write_running(
+            self.config, start_time=self.start_date)
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
+        end_date = datetime.now().astimezone()
+        self.end_date = end_date
         exit_code = get_exit_code(exc_val)
         if exc_val is not None:
             # Error occurred
@@ -187,7 +227,21 @@ class ScriptExecution:
             # No error occurred
             logger.info(
                 f"Script Context executed successfully. Exit Code: {exit_code}")
-        write_exit(self.config, exit_code, exc_val)
+        # Try to remove the running file
+        if self.running_file_path is not None and os.path.exists(self.running_file_path):
+            try:
+                os.remove(self.running_file_path)
+                self.running_file_path = None
+            except Exception as e:
+                logger.warning(f"Failed to remove running file: {e}")
+        # Create a message containing start and end date, and the timedelta
+        message = None
+        if self.start_date is not None and self.end_date is not None:
+            message = (f"Start-Date: {self.start_date}" + os.linesep +
+                       f"End-Date: {self.end_date}" + os.linesep +
+                       f"Duration: {strfdelta(self.end_date - self.start_date)}")
+        write_exit(self.config, exit_code, exc_val,
+                   exit_time=self.end_date, message=message)
         try:
             if isinstance(self.config, ExperimentOutputConfig):
                 if self.config.experiment_logger == "wandb":

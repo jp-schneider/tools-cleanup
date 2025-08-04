@@ -86,6 +86,7 @@ class MultiConfigRunner(MultiRunner):
         return paths
 
     def create_jobs(self, ref_dir: Optional[str] = None, preset_output_folder: bool = False) -> List[Tuple[str, List[str]]]:
+        import pandas as pd
         created_date = datetime.now(
         ) if self.config.child_config_creation_date is None else self.config.child_config_creation_date
         created_at = created_date.strftime("%y_%m_%d_%H_%M_%S")
@@ -126,11 +127,14 @@ class MultiConfigRunner(MultiRunner):
             minute=created_date.minute,
             second=created_date.second
         )
+        successful_context = dict()
+        skipped_rows = pd.DataFrame()
         for i, (_name, config_path) in enumerate(zip([x.get_name() for x in self.child_configs], rel_child_config_paths)):
             output_folder = None
+            cfg = self.child_configs[i]
             if preset_output_folder:
-                if self.child_configs[i].output_folder is not None:
-                    output_folder = self.child_configs[i].output_folder
+                if cfg.output_folder is not None:
+                    output_folder = cfg.output_folder
                 else:
                     # name_experiment = f"#{num_fmt.format(i)}_{_name}"
                     # path = os.path.join(
@@ -147,9 +151,16 @@ class MultiConfigRunner(MultiRunner):
                         os.path.basename(path), allow_dot=False)
                     output_folder = format_os_independent(
                         os.path.join(directory, base_name))
-            if self.config.skip_successfull_executed:
+            if self.config.skip_successful_executed:
                 # Check if the output folder already exists and skip if it contains a success file
-                if self._check_successful_executed(_name, output_folder):
+                if self._check_successful_executed(_name, output_folder, config=cfg, context=successful_context, log=False):
+                    path = successful_context.get(
+                        'current_successful_folder', None)
+                    skipped_rows = pd.concat([skipped_rows, pd.DataFrame({
+                        'name': [_name],
+                        'path': [path],
+                        'index': [i]
+                    })], ignore_index=True)
                     continue
 
             item = self._generate_single_job(
@@ -161,6 +172,11 @@ class MultiConfigRunner(MultiRunner):
                 name_argument=self.config.name_cli_argument
             )
             items.append(item)
+
+        if len(skipped_rows) > 0:
+            # Log skipped rows
+            logger.warning(
+                f"Skipped {len(skipped_rows)} rows as they have already been executed successfully. Success rate: {len(skipped_rows)}/{len(self.child_configs)}")
 
         self.__jobs__ = items
         return items

@@ -1,7 +1,7 @@
 from dataclasses import field
 
 import sys
-from typing import List, Type, Optional, Tuple
+from typing import Any, Dict, List, Type, Optional, Tuple
 
 from matplotlib import pyplot as plt
 from tools.config.config import Config
@@ -20,6 +20,9 @@ from tools.logger.logging import logger
 from tools.util.format import parse_type, parse_format_string
 import gc
 import copy
+from tools.util.path_tools import read_directory_recursive
+import pandas as pd
+from tools.util.reflection import _get_nested_value, NOTSET
 
 
 class MultiRunner(TrainableRunner):
@@ -151,15 +154,83 @@ class MultiRunner(TrainableRunner):
             paths.append(path)
         return paths
 
-    def _check_successful_executed(self, name: str, output_folder: Optional[str] = None, log: bool = True) -> bool:
+    def _check_successful_executed(self, name: str, output_folder: Optional[str] = None, config: Optional[Config] = None, log: bool = True, context: Optional[Dict[str, Any]] = None) -> bool:
+        from tools.context.script_execution import load_exit_codes
+        if context is not None:
+            if "current_successful_folder" in context:
+                context.pop("current_successful_folder")
+            context["current_successful_folder"] = None
         if output_folder is not None and os.path.exists(output_folder):
-            from tools.context.script_execution import load_exit_codes
             exit_codes = load_exit_codes(output_folder)
             if len(exit_codes) > 0 and 0 in exit_codes['code'].values:
                 if log:
                     logger.info(
-                        f"Skipping job for config {name} as it has already been executed successfully.")
+                        f"Skipping job for config {name} as it has already been executed successfully in {output_folder}.")
                 return True
+        # Check using the matcher args
+        parsed_runs = context.get(
+            'parsed_runs', None) if context is not None else None
+        match_groups = context.get(
+            'match_groups', None) if context is not None else None
+        if parsed_runs is None:
+            if self.config.successful_runs_matcher_args is None or len(self.config.successful_runs_matcher_args) == 0:
+                logger.info(
+                    f"No matcher args configured for successful runs, skipping check for {name}.")
+                parsed_runs = pd.DataFrame()
+            else:
+                parsed_runs = pd.DataFrame()
+                match_groups = self.config.successful_runs_matcher_args
+                for i, matcher_args in enumerate(match_groups):
+                    file_contexts = read_directory_recursive(
+                        matcher_args.pattern, parser=matcher_args.parser)
+                    df = pd.DataFrame(file_contexts)
+                    df["__match_properties_group__"] = i
+                    parsed_runs = pd.concat(
+                        [parsed_runs, df], ignore_index=True)
+            if context is not None:
+                # Store parsed runs in context for later use
+                context['parsed_runs'] = parsed_runs
+                context["match_groups"] = match_groups
+        if len(parsed_runs) == 0:
+            if log:
+                logger.info(
+                    f"No runs found for matcher args, skipping check for {name}.")
+            return False
+        if match_groups is None:
+            if log:
+                logger.info(
+                    f"No match groups configured, skipping check for {name}.")
+            return False
+        for i, matcher_args in enumerate(match_groups):
+            if matcher_args.match_properties is None or len(matcher_args.match_properties) == 0:
+                if log:
+                    logger.info(
+                        f"No match properties configured for matcher args {i}, skipping check for {name}.")
+                continue
+            comp = parsed_runs[parsed_runs["__match_properties_group__"] == i]
+            if len(comp) == 0:
+                continue
+            filter_mask = pd.Series([True] * len(comp))
+            for group_name, prop_name in matcher_args.match_properties.items():
+                if prop_name != "name":
+                    prop_value = _get_nested_value(config, prop_name)
+                else:
+                    prop_value = name
+                if prop_value == NOTSET:
+                    raise ValueError(
+                        f"Property {prop_name} is not set in config {name}.")
+                filter_mask &= (comp[group_name] == prop_value)
+            if filter_mask.any():
+                # Check if any of the filtered runs has a success file
+                matched = comp[filter_mask]
+                for _, row in matched.iterrows():
+                    codes = load_exit_codes(row['path'])
+                    if len(codes) > 0 and 0 in codes['code'].values:
+                        if log:
+                            logger.info(
+                                f"Job for config {name} has already been executed successfully at path: {row['path']}.")
+                        context["current_successful_folder"] = row['path']
+                        return True
         return False
 
     def create_job_file(self) -> str:
@@ -244,17 +315,18 @@ class MultiRunner(TrainableRunner):
             minute=created_date.minute,
             second=created_date.second
         )
+        success_context = dict()
         for i, p in enumerate(rel_paths):
             output_folder = None
             experiment_name = f"{self.base_config.name_experiment}_{i}"
-
+            cfg = self.child_configs[i]
             if preset_output_folder:
-                if self.child_configs[i].output_folder is not None:
-                    output_folder = self.child_configs[i].output_folder
+                if cfg.output_folder is not None:
+                    output_folder = cfg.output_folder
                 else:
                     path = parse_format_string(
                         self.config.preset_output_folder_format_string,
-                        [self.child_configs[i]],
+                        [cfg],
                         allow_invocation=True,
                         additional_variables=date_args
                     )[0]
@@ -263,11 +335,11 @@ class MultiRunner(TrainableRunner):
                         os.path.basename(path), allow_dot=False)
                     output_folder = format_os_independent(
                         os.path.join(directory, base_name))
-            if self.config.skip_successfull_executed:
+            if self.config.skip_successful_executed:
                 # Check if the output folder already exists and skip if it contains a success file
                 of = output_folder if output_folder is not None else self.child_configs[
                     i].output_folder
-                if self._check_successful_executed(experiment_name, output_folder=of):
+                if self._check_successful_executed(experiment_name, output_folder=of, config=cfg, context=success_context):
                     continue
 
             item = self._generate_single_job(
@@ -338,18 +410,21 @@ class MultiRunner(TrainableRunner):
                     raise ValueError("End must be greater or equal to start.")
         else:
             end = len(runner.child_runners)
-
+        success_context = dict()
         for i in range(start, end):
             child_runner = runner.child_runners[i]
             try:
                 cfg = child_runner.config
                 cfg.prepare()
                 # Check if the child runner is already executed successfully
-                if config.skip_successfull_executed:
+                if config.skip_successful_executed:
                     if self._check_successful_executed(
                             cfg.get_name(),
                             output_folder=cfg.output_folder,
-                            log=False):
+                            config=cfg,
+                            log=False,
+                            success_context=success_context
+                    ):
                         status[i] = "skipped"
                         logger.info(
                             f"Skipping child runner #{i} as it has already been executed successfully.")

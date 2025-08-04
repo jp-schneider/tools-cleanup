@@ -1,10 +1,47 @@
 from dataclasses import dataclass, field
-from typing import Optional, Type, Union
+from typing import Optional, Type, Union, Dict, List, Any
 
 from tools.config.experiment_config import ExperimentConfig
 from tools.config.output_config import OutputConfig
 from tools.util.path_tools import process_path
 from datetime import datetime
+from tools.serialization.json_convertible import JsonConvertible
+
+
+def _get_default_match_parser():
+    return dict(
+        fyear=int,
+        fmonth=int,
+        fday=int,
+        year=int,
+        month=int,
+        day=int,
+        hour=int,
+        min=int,
+        sec=int,
+        name=str
+    )
+
+
+def _get_default_match_properties():
+    return dict(name="name")
+
+
+@dataclass
+class RunsMatcherArgs(JsonConvertible):
+    """Configures matching parameters to load e.g. existing runs which could have the same experiment to avoid re-running them."""
+
+    pattern: str = field(
+        default=r"runs/(?P<fyear>\d{4})-(?P<fmonth>\d{2})-(?P<fday>\d{2})/(?P<year>\d{4})-(?P<month>\d{2})-(?P<day>\d{2})_(?P<hour>\d{2})-(?P<min>\d{2})-(?P<sec>\d{2})_(?P<name>.+)")
+    """Search pattern to match existing runs. Default is r"runs/(?P<fyear>\d{4})-(?P<fmonth>\d{2})-(?P<fday>\d{2})/(?P<year>\d{4})-(?P<month>\d{2})-(?P<day>\d{2})_(?P<hour>\d{2})-(?P<min>\d{2})-(?P<sec>\d{2})_(?P<name>.+)"."""
+
+    parser: Optional[Dict[str, Any]] = field(
+        default_factory=_get_default_match_parser)
+    """Parser to use for the pattern. Default is _get_default_match_parser()."""
+
+    match_properties: Dict[str, str] = field(
+        default_factory=_get_default_match_properties)
+    """Defines the properties to match in the pattern. Keys are the group names withing the regex, values should be the target property name, e.g. of the config. Default is _get_default_match_properties()."""
 
 
 @dataclass
@@ -38,8 +75,12 @@ class MultiRunnerConfig(ExperimentConfig):
     name_experiment: str = field(default="MultiRunnerConfig")
     """Name for the multi runner, this is usually not used."""
 
-    skip_successfull_executed: bool = field(default=False)
+    skip_successful_executed: bool = field(default=False)
     """If True, the runner will skip configs that have already been executed successfully. Will only work if the output directory is set in the config."""
+
+    successful_runs_matcher_args: List[RunsMatcherArgs] = field(
+        default_factory=lambda: [RunsMatcherArgs()])
+    """Arguments to match existing runs. This is used to avoid re-running experiments that have already been executed successfully."""
 
     dry_run: bool = field(default=False)
     """If True, the runner will not execute training."""
