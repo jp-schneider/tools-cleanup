@@ -36,6 +36,7 @@ class KeyValueItem(JsonConvertible):
         return (self.key, self.value)
 
 
+@register_type()
 class KeyValueDictWrapper(JsonConvertible):
     """Type for a dictionary which keys are not strings or all from a different kind.
     Converts these into a key-value list, where each key-value pair is serialized independently.
@@ -66,6 +67,7 @@ class KeyValueDictWrapper(JsonConvertible):
         return _type(_d)
 
 
+@register_type()
 class KeyTypeDictWrapper(JsonConvertible):
     """Wrapper for a dictionary which keys are not a string, but a different type which can be easily converted to and from string.
     Assumes all keys are from the same type.
