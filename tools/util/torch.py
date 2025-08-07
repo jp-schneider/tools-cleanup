@@ -216,7 +216,7 @@ def numpy_to_torch_dtype(dtype: Union[str, np.dtype]) -> torch.dtype:
         If the dtype is not supported.
     """
     numpy_to_torch_dtype_dict = {
-        np.bool: torch.bool,
+        np.bool_: torch.bool,
         np.uint8: torch.uint8,
         np.int8: torch.int8,
         np.int16: torch.int16,
@@ -232,6 +232,12 @@ def numpy_to_torch_dtype(dtype: Union[str, np.dtype]) -> torch.dtype:
         dtype = np.dtype(dtype)
     if dtype in numpy_to_torch_dtype_dict:
         return numpy_to_torch_dtype_dict[dtype]
+    elif isinstance(dtype, np.dtype):
+        try:
+            dt = getattr(np, dtype.name)
+            return numpy_to_torch_dtype(dt)
+        except AttributeError:
+            raise ValueError(f"Unsupported numpy dtype {dtype.name}")
     else:
         raise ValueError(f"Unsupported dtype {dtype}")
 
