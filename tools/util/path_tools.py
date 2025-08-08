@@ -557,7 +557,7 @@ def process_path(
         If the path is a ContextPath, reevaluate it with the given context, by default False.
     allow_interpolation_invocation : bool, optional
         If the interpolation should allow invocation of methods on the interpolate_object, by default False.
-        
+
     Returns
     -------
     Optional[Path]
@@ -591,7 +591,8 @@ def process_path(
         raise ValueError(
             f"Path {'for ' + variable_name + ' ' if variable_name is not None else ''}must be a string or Path object.")
     if interpolate:
-        p = ContextPath.from_format_path(path, context=interpolate_object, format_kwargs=dict(allow_invocation=allow_interpolation_invocation))
+        p = ContextPath.from_format_path(path, context=interpolate_object, format_kwargs=dict(
+            allow_invocation=allow_interpolation_invocation))
     else:
         p = Path(path).resolve()
     return _checks(p)
@@ -771,3 +772,30 @@ def display_path(
         if trimmed_path is None:
             trimmed_path = path_replace
         return os.path.join(trimmed_path, filename)
+
+
+def copy_to_clipboard(
+    text: str,
+) -> bool:
+    """Copies the given text to the clipboard.
+
+    Parameters
+    ----------
+    text : str
+        The text to copy to the clipboard.
+
+    Returns
+    -------
+    bool
+        If the text was copied to the clipboard.
+        Returns True if successful, False otherwise.
+    """
+    if os.name == 'nt':
+        command = 'echo \'' + text.strip() + '\' | clip'
+        with subprocess.Popen(["powershell", "-C", command], stdin=subprocess.PIPE, stderr=subprocess.PIPE, stdout=subprocess.PIPE) as p:
+            logger.info("Content on Clipboard!")
+            return True
+    else:
+        raise NotImplementedError(
+            f"Clipboard copying is not implemented for os: {os.name}.")
+    return False
