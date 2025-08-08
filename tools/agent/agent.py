@@ -9,6 +9,7 @@ from tools.event import Event
 from tools.logger.experiment_logger import ExperimentLogger
 from tools.util.torch import VEC_TYPE
 from tools.util.path_tools import open_folder
+from tools.util.timer import Timer
 
 
 class Agent(ABC):
@@ -84,6 +85,10 @@ class Agent(ABC):
         self.progress_bar = True
 
         self.logger = None
+
+        self._training_timer: Optional[Timer] = None
+        self._epoch_timer: Optional[Timer] = None
+
         self._attach_events()
 
     def get_shared_event_context(self) -> Dict[str, Any]:

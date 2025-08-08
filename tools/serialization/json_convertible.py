@@ -181,7 +181,7 @@ class JsonConvertible:
     def convert_to_json_dict(cls,
                              obj: Any,
                              handle_unmatched: Literal['identity',
-                                                       'raise', 'jsonpickle'] = 'identity',
+                                                       'raise', 'jsonpickle'] = 'jsonpickle',
                              memo: Optional[Dict[Any, UUID]] = None,
                              **kwargs
                              ) -> Dict[str, Any]:
@@ -269,7 +269,7 @@ class JsonConvertible:
                 # If does not match any match child policy Will fallback to the handle_unmatched approach
                 res = convert(
                     obj, None, dict(), handle_unmatched=handle_unmatched, memo=memo, **kwargs)
-                if uid is not None and res is not None and not no_uuid:
+                if uid is not None and res is not None and not no_uuid and isinstance(res, dict):
                     res['__uuid__'] = str(uid)
                 return res
 
@@ -310,7 +310,7 @@ class JsonConvertible:
     def convert_to_json_str(cls,
                             obj: Any,
                             handle_unmatched: Literal['identity',
-                                                      'raise', 'jsonpickle'] = 'identity',
+                                                      'raise', 'jsonpickle'] = 'jsonpickle',
                             ensure_ascii: bool = False,
                             indent: int = 4,
                             **kwargs) -> str:
@@ -391,7 +391,7 @@ class JsonConvertible:
     def convert_to_json_file(cls, obj: Any,
                              path: str,
                              handle_unmatched: Literal['identity',
-                                                       'raise', 'jsonpickle'] = 'identity',
+                                                       'raise', 'jsonpickle'] = 'jsonpickle',
                              ensure_ascii: bool = False,
                              indent: int = 4,
                              override: bool = False,
@@ -443,7 +443,7 @@ class JsonConvertible:
     def convert_to_yaml_str(cls,
                             obj: Any,
                             handle_unmatched: Literal['identity',
-                                                      'raise', 'jsonpickle'] = 'identity',
+                                                      'raise', 'jsonpickle'] = 'jsonpickle',
                             ensure_ascii: bool = False,
                             indent: int = 4,
                             toplevel_wrapping: bool = True,
@@ -488,7 +488,7 @@ class JsonConvertible:
 
     def to_json_dict(self,
                      handle_unmatched: Literal['identity',
-                                               'raise', 'jsonpickle'] = 'identity',
+                                               'raise', 'jsonpickle'] = 'jsonpickle',
                      memo: Optional[Dict[Any, UUID]] = None,
                      **kwargs
                      ) -> Dict[str, Any]:
