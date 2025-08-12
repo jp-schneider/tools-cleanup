@@ -25,7 +25,7 @@ DETAILED_EXCEPTION_HANDLING = {
 time_regex = r"^(?P<year>\d{4})-(?P<month>0[1-9]|1[0-2])-(?P<day>0[1-9]|[12]\d|3[01])([\s|T](?P<hour>[01]\d|2[0-3]):(?P<minute>[0-5]\d):(?P<second>[0-5]\d)(\.(?P<fraction>\d{1,6}))?(?P<timezone>Z|(?P<tz_offset_sign>[+-])(?P<tz_offset_hour>[01]\d|2[0-3])(?::(?P<tz_offset_minute>[0-5]\d))?)?)?$"
 exit_code_message_regex = (
     r"^Exit code: (?P<exit_code>\d+)(\. Date: " +
-    time_regex.lstrip('^').rstrip("$") + r")?(\n(?P<message>((.*)\s)+))?$"
+    time_regex.lstrip('^').rstrip("$") + r")?(\n(?P<message>(.|\s)*))$"
 )
 
 running_file_pattern = r"^running_(?P<pid>\d+).txt$"
