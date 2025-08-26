@@ -75,6 +75,8 @@ class MultiConfigRunner(MultiRunner):
         num_digits = len(str(len(self.child_configs)))
         num_fmt = f"{{:0{num_digits}d}}"
         paths = []
+        bar = self.config.progress_factory.bar(
+            desc="Saving child configs", total=len(self.child_configs), delay=5)
         for i, config in enumerate(self.child_configs):
             fmt = f"{num_fmt}_{config.get_name()}.yaml"
             base_name = fmt.format(i)
@@ -83,6 +85,7 @@ class MultiConfigRunner(MultiRunner):
             path = config.save_to_file(
                 path, no_uuid=True, no_large_data=True, override=True)
             paths.append(path)
+            bar.update(1)
         return paths
 
     def create_jobs(self, ref_dir: Optional[str] = None, preset_output_folder: bool = False) -> List[Tuple[str, List[str]]]:
@@ -129,6 +132,8 @@ class MultiConfigRunner(MultiRunner):
         )
         successful_context = dict()
         skipped_rows = pd.DataFrame()
+        bar = self.config.progress_factory.bar(
+            desc="Creating jobs", total=len(self.child_configs), delay=5)
         for i, (_name, config_path) in enumerate(zip([x.get_name() for x in self.child_configs], rel_child_config_paths)):
             output_folder = None
             cfg = self.child_configs[i]
@@ -172,6 +177,7 @@ class MultiConfigRunner(MultiRunner):
                 name_argument=self.config.name_cli_argument
             )
             items.append(item)
+            bar.update(1)
 
         if len(skipped_rows) > 0:
             # Log skipped rows
@@ -183,7 +189,8 @@ class MultiConfigRunner(MultiRunner):
 
     def build(self, build_children: bool = True, **kwargs) -> None:
         configs = self.get_config_paths()
-
+        bar = self.config.progress_factory.bar(
+            desc="Loading child runner configs", total=len(configs), delay=5)
         for config_path in configs:
             config = JsonConvertible.load_from_file(config_path)
             if hasattr(config, '__config_path__'):
@@ -191,6 +198,7 @@ class MultiConfigRunner(MultiRunner):
             rnr = self.runner_type(config=config)
             rnr.parent = self
             self.child_runners.append(rnr)
+            bar.update(1)
 
         # Build children
         if build_children:

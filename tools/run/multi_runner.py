@@ -210,7 +210,7 @@ class MultiRunner(TrainableRunner):
             comp = parsed_runs[parsed_runs["__match_properties_group__"] == i]
             if len(comp) == 0:
                 continue
-            filter_mask = pd.Series([True] * len(comp))
+            filter_mask = pd.Series([True] * len(comp), index=comp.index)
             for group_name, prop_name in matcher_args.match_properties.items():
                 if prop_name != "name":
                     prop_value = _get_nested_value(config, prop_name)
@@ -222,6 +222,9 @@ class MultiRunner(TrainableRunner):
                 filter_mask &= (comp[group_name] == prop_value)
             if filter_mask.any():
                 # Check if any of the filtered runs has a success file
+                if len(filter_mask) != len(comp):
+                    logger.warning(
+                        f"Filter mask length {len(filter_mask)} does not match comparison length {len(comp)} for config {name}.")
                 matched = comp[filter_mask]
                 for _, row in matched.iterrows():
                     codes = load_exit_codes(row['path'])
