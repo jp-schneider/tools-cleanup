@@ -11,6 +11,7 @@ from datetime import datetime
 from dataclasses import dataclass, field
 import re
 from tools.util.format import strfdelta
+from tools.logger.logging import logger
 
 EXCEPTION_ERROR_CODES = {
     KeyboardInterrupt: 130,
@@ -102,6 +103,7 @@ def get_exit_code(err: Optional[Exception]) -> int:
             if exception in DETAILED_EXCEPTION_HANDLING:
                 return detailed_exception(err)
             return code
+    return 1
 
 
 def write_exit(config: OutputConfig, exit_code: int, err: Optional[Exception] = None, exit_time: Optional[datetime] = None, message: Optional[str] = None) -> Optional[str]:
@@ -109,6 +111,7 @@ def write_exit(config: OutputConfig, exit_code: int, err: Optional[Exception] = 
         exit_time = datetime.now().astimezone()
     if config is None or not hasattr(config, "output_folder"):
         return None
+    path = None
     try:
         # Write exit code within a text file called exit_{exit_code}.txt
         path = os.path.join(config.output_folder, f"exit_{exit_code:03d}.txt")
@@ -133,6 +136,9 @@ def write_running(config: OutputConfig, start_time: Optional[datetime] = None, m
     if start_time is None:
         start_time = datetime.now().astimezone()
     if config is None or not hasattr(config, "output_folder"):
+        return None
+    if config.output_folder is None:
+        logger.warning("Output folder is None, can not write running message.")
         return None
     try:
         path = os.path.join(config.output_folder, f"running_{os.getpid()}.txt")

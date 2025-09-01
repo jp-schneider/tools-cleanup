@@ -3,7 +3,10 @@ from tools.serialization.json_convertible import JsonConvertible
 from tools.serialization.rules.json_serialization_rule import JsonSerializationRule
 import torch
 from tools.util.reflection import dynamic_import
+from tools.util.reflection import register_type
 
+
+@register_type()
 class TorchDtypeValueWrapper(JsonConvertible):
 
     __type_alias__ = "torch/dtype"

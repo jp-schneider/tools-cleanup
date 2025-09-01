@@ -1,6 +1,6 @@
 import base64
 import logging
-from typing import Any, Dict, List, Literal, Type
+from typing import Any, Dict, List, Literal, Optional, Type
 from tools.error.argument_none_error import ArgumentNoneError
 from tools.serialization.json_convertible import JsonConvertible
 from tools.serialization.rules.json_serialization_rule import JsonSerializationRule
@@ -11,16 +11,11 @@ import numpy as np
 import os
 from tools.util.reflection import dynamic_import
 
-
-def _encode_buffer(buf: bytes) -> str:
-    return base64.b64encode(buf).decode()
-
-
-def _decode_buffer(buf: str) -> bytes:
-    return base64.b64decode(buf.encode())
+from tools.logger.logging import logger, get_messaged
+from tools.serialization.compressable_mixin import CompressableMixin
 
 
-class TensorValueWrapper(JsonConvertible):
+class TensorValueWrapper(CompressableMixin):
 
     __type_alias__ = "torch/Tensor"
 
@@ -29,15 +24,17 @@ class TensorValueWrapper(JsonConvertible):
                  decoding: bool = False,
                  max_display_values: int = 100,
                  no_large_data: bool = False,
+                 compression: bool = False,
                  **kwargs):
-        super().__init__(decoding, **kwargs)
+        super().__init__(decoding=decoding, compression=compression, **kwargs)
         if decoding:
             return
         self.dtype = str(value.dtype)
         self.device = str(value.device)
         self.has_data = not no_large_data
         if self.has_data:
-            self.data = TensorValueWrapper.to_serialized_string(value)
+            self.data = TensorValueWrapper.to_ascii(
+                value.detach().cpu(), compression=self.compression)
         else:
             self.data = None
         inner = ""
@@ -52,22 +49,33 @@ class TensorValueWrapper(JsonConvertible):
         self.preview = repr(value)
 
     @classmethod
-    def to_serialized_string(cls, value: torch.Tensor) -> str:
+    def to_bytes(cls, value: torch.Tensor) -> bytes:
         with io.BytesIO() as buf:
             torch.save(value, buf)
             buf.seek(0)
-            return _encode_buffer(buf.read())
+            return buf.read()
 
     @classmethod
-    def from_serialized_string(cls, value: str) -> torch.Tensor:
+    def from_bytes(cls, value: bytes) -> torch.Tensor:
         with io.BytesIO() as buf:
-            buf.write(_decode_buffer(value))
+            buf.write(value)
             buf.seek(0)
-            return torch.load(buf, weights_only=True)
+            try:
+                return torch.load(buf, weights_only=True)
+            except Exception as e:
+                no_cuda_device_err = "Attempting to deserialize object on a CUDA device but torch.cuda.is_available() is False"
+                if no_cuda_device_err in str(e):
+                    # Load to CPU instead
+                    if get_messaged("json_tensor_no_cuda_device"):
+                        logger.warning(
+                            "Tensor was saved with CUDA device, but no CUDA device is available. Loading to CPU instead.")
+                    return torch.load(buf, map_location=torch.device('cpu'), weights_only=True)
+                else:
+                    raise e
 
     def to_python(self, no_tensor_data_warning: bool = True) -> torch.Tensor:
         if self.has_data:
-            return TensorValueWrapper.from_serialized_string(self.data)
+            return TensorValueWrapper.from_ascii(self.data, compression=self.compression)
         else:
             json_str = self.to_json()
             if no_tensor_data_warning:

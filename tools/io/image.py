@@ -44,7 +44,6 @@ except Exception as err:
 import struct
 
 
-
 def create_image_exif(metadata: Dict[Union[str, ExifTagsBase], Any]) -> Exif:
     """Creates an Exif object from the given metadata.
     Metadata can contain any key-value pair, if key is a regular Exif tag, it will be displayed as such, other keys will be wrapped
@@ -325,15 +324,21 @@ def save_image(image: VEC_TYPE,
             Image.fromarray(img).save(path, **args)
             # raise ValueError("Exif data is not supported for tiff images.")
         else:
-            try:
-                import cv2
-                # If 3 channel, convert to BGR
-                if img.shape[-1] == 3:
-                    img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
-                cv2.imwrite(path, img)
-            except ImportError as err:
-                raise ImportError(
-                    "OpenCV is not installed, but is required to save tiff images.")
+            if img.shape[-1] > 1:
+                # Using tiffile
+                try:
+                    import tifffile
+                    tifffile.imwrite(path, img)
+                except ImportError as err:
+                    raise ImportError(
+                        "tifffile is not installed, but is required to save multi-channel tiff images.")
+            else:
+                try:
+                    import cv2
+                    cv2.imwrite(path, img)
+                except ImportError as err:
+                    raise ImportError(
+                        "OpenCV is not installed, but is required to save tiff images.")
     # Numpy save
     elif ext.lower() == ".npy":
         if len(args) > 0:
@@ -986,8 +991,7 @@ def check_text_overlap(occupied_area: np.ndarray,
     overlap_area = 0
 
     text_mask = np.zeros_like(occupied_area, dtype=bool)
-    text_mask[int(row):int(row + text_height), int(col)
-                  :int(col + text_width)] = True
+    text_mask[int(row):int(row + text_height), int(col)              :int(col + text_width)] = True
     overlap_with_occupied = np.sum(occupied_area[text_mask])
     overlap_area += overlap_with_occupied
 
