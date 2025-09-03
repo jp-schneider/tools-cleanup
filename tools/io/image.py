@@ -309,6 +309,8 @@ def save_image(image: VEC_TYPE,
     if not override:
         path = numerated_file_name(path)
 
+    path = os.path.abspath(path)
+
     if mkdirs:
         if not os.path.exists(os.path.dirname(path)):
             os.makedirs(os.path.dirname(path), exist_ok=True)
