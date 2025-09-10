@@ -1727,7 +1727,8 @@ def plot_histogram(
     filter_nan: bool = False,
     yscale: Optional[str] = None,
     is_counts: bool = False,
-
+    ax: Optional[Axes] = None,
+    histtype: Literal["bar", "barstacked", "step", "stepfilled"] = "bar",
 ) -> Figure:
     """Gets a matplotlib histogram figure with a plot of vectors.
 
@@ -1756,6 +1757,9 @@ def plot_histogram(
         If the input data is already counts, by default False
         If True, will not calculate histogram, but use the input data as counts and bins must be provided.
 
+    ax : Optional[Axes], optional
+        Matplotlib axes to plot on. If None, a new figure and axes will be created.
+
     Returns
     -------
     Figure
@@ -1779,8 +1783,10 @@ def plot_histogram(
         if len(label) != x.shape[-1]:
             raise ValueError(
                 "Number of labels should match the last dimension of the input data.")
-
-    fig, ax = get_mpl_figure(1, 1)
+    if ax is None:
+        fig, ax = get_mpl_figure(1, 1)
+    else:
+        fig = ax.figure
 
     for i in range(x.shape[-1]):
         l = label[i] if label is not None else None
@@ -1793,7 +1799,7 @@ def plot_histogram(
             vals, bins = np.histogram(v, bins=bins)
         else:
             vals = v
-        ax.hist(bins[:-1], bins, weights=vals, label=l)
+        ax.hist(bins[:-1], bins, weights=vals, label=l, histtype=histtype)
 
     if yscale is not None:
         ax.set_yscale(yscale)

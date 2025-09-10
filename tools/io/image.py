@@ -44,7 +44,6 @@ except Exception as err:
 import struct
 
 
-
 def create_image_exif(metadata: Dict[Union[str, ExifTagsBase], Any]) -> Exif:
     """Creates an Exif object from the given metadata.
     Metadata can contain any key-value pair, if key is a regular Exif tag, it will be displayed as such, other keys will be wrapped
@@ -896,7 +895,7 @@ def rgba_to_rgb(img: VEC_TYPE, base_color: VEC_TYPE) -> VEC_TYPE:
     return img
 
 
-def gamma_correction(image: VEC_TYPE, gamma: Union[_DEFAULT, float] = DEFAULT) -> Tuple[np.ndarray, np.ndarray]:
+def gamma_correction(image: VEC_TYPE, gamma: Union[_DEFAULT, float] = DEFAULT, domain_dtype: np.dtype = np.uint8) -> Tuple[np.ndarray, np.ndarray]:
     """
     Applies gamma correction to the given image.
     The gamma value is calculated based on the mean brightness of the image, or can be specified manually.
@@ -911,6 +910,11 @@ def gamma_correction(image: VEC_TYPE, gamma: Union[_DEFAULT, float] = DEFAULT) -
         Gamma value or DEFAULT, by default DEFAULT
         If DEFAULT, the gamma value will be calculated based on the mean brightness of the image.
 
+
+    domain_dtype : np.dtype, optional
+        The dtype of the image, by default np.uint8
+        Can be also dtype np.uint16.
+
     Returns
     -------
     Tuple[np.ndarray, np.ndarray]
@@ -920,33 +924,53 @@ def gamma_correction(image: VEC_TYPE, gamma: Union[_DEFAULT, float] = DEFAULT) -
     import cv2
     import math
     from tools.transforms.to_numpy_image import ToNumpyImage
+    if domain_dtype not in [np.uint8, np.uint16]:
+        raise ValueError(
+            f"Domain dtype should be np.uint8 or np.uint16, got {domain_dtype}")
 
-    numpyify = ToNumpyImage(output_dtype=np.uint8)
+    numpyify = ToNumpyImage(output_dtype=domain_dtype)
+    nbits = np.iinfo(domain_dtype).bits
     image = numpyify(image)
     is_rgba = image.shape[-1] == 4
     rgba_image = None
 
-    if is_rgba:
-        # Convert to RGB
-        rgba_image = image.copy()
-        image = image[..., :3]
-    # convert img to HSV
-    hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
-    hue, sat, val = cv2.split(hsv)
+    H, W, C = image.shape
 
-    if gamma == DEFAULT:
-        mid = 0.5
-        mean = np.mean(val)
-        gamma = math.log(mid*255)/math.log(mean)
+    def determine_gamma_value(v) -> float:
+        return math.log(0.5 * (2 ** nbits - 1)) / math.log(np.mean(v))
 
-    val_corrected = np.power(val, gamma).clip(0, 255).astype(np.uint8)
+    if C not in [3, 4]:
+        if C != 1:
+            raise ValueError(
+                f"Image should have 1, 3 or 4 channels, got {C} channels.")
+        else:
+            # Apply gamma correction
+            if gamma == DEFAULT:
+                gamma = determine_gamma_value(image)
+            gamma_corrected = np.power(image, gamma).clip(
+                0, 2 ** nbits - 1).astype(domain_dtype)
+            return gamma_corrected, gamma
+    else:
+        if is_rgba:
+            # Convert to RGB
+            rgba_image = image.copy()
+            image = image[..., :3]
+        # convert img to HSV
+        hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+        hue, sat, val = cv2.split(hsv)
 
-    hsv_corrected = cv2.merge([hue, sat, val_corrected])
-    gamma_corrected = cv2.cvtColor(hsv_corrected, cv2.COLOR_HSV2BGR)
+        if gamma == DEFAULT:
+            gamma = determine_gamma_value(val)
 
-    if is_rgba:
-        rgba_image[..., :3] = gamma_corrected
-        gamma_corrected = rgba_image
+        val_corrected = np.power(val, gamma).clip(
+            0, 2 ** nbits - 1).astype(domain_dtype)
+
+        hsv_corrected = cv2.merge([hue, sat, val_corrected])
+        gamma_corrected = cv2.cvtColor(hsv_corrected, cv2.COLOR_HSV2BGR)
+
+        if is_rgba:
+            rgba_image[..., :3] = gamma_corrected
+            gamma_corrected = rgba_image
     return gamma_corrected, gamma
 
 
@@ -986,8 +1010,7 @@ def check_text_overlap(occupied_area: np.ndarray,
     overlap_area = 0
 
     text_mask = np.zeros_like(occupied_area, dtype=bool)
-    text_mask[int(row):int(row + text_height), int(col)
-                  :int(col + text_width)] = True
+    text_mask[int(row):int(row + text_height), int(col)              :int(col + text_width)] = True
     overlap_with_occupied = np.sum(occupied_area[text_mask])
     overlap_area += overlap_with_occupied
 
