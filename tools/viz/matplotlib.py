@@ -40,8 +40,38 @@ from pathlib import Path
 from mpl_toolkits.mplot3d import Axes3D
 import matplotlib.patches as mpatches
 import matplotlib.lines as mlines  # For creating proxy Line2D objects
+from matplotlib import font_manager
+from matplotlib.font_manager import FontProperties
 
 LegendArtist = Union[mpatches.Patch, mlines.Line2D]
+
+
+def register_font(font_path: str) -> FontProperties:
+    """
+    Registers a font with matplotlib.
+    Path should be a path to a .ttf or .otf file.
+
+    Registered font can be used by setting the font family to the font name.
+
+    Example:
+        prop = register_font("/path/to/font.ttf")
+        plt.rcParams['font.family'] = 'serif' # Optional, set family to serif
+        plt.rcParams['font.serif'] = prop.get_name() # Use the registered font when serif is requested
+
+    Parameters
+    ----------
+    font_path : str
+        The path to the font file to register.
+
+    Returns
+    -------
+    FontProperties
+        The registered font properties.
+        x.get_name() can be used to get the font name.
+    """
+    font_manager.fontManager.addfont(font_path)
+    prop = font_manager.FontProperties(fname=font_path)
+    return prop
 
 
 def set_default_output_dir(output_dir: Optional[Union[str, Path]] = None):
@@ -140,6 +170,10 @@ def saveable(
     fps: int, optional
         Frames per second for the animation. Default 24.
 
+    rc_context: Dict[str, Any], optional
+        Matplotlib rc context to use for the figure, will be used in a with plt.rc_context(rc_context) block, such that the effects are only local to the function call.
+        Useful to set font sizes, families etc. For a full list of rc params see: https://matplotlib.org/stable/tutorials/introductory/customizing.html#customizing-with-matplotlibrc-files
+
     Parameters
     ----------
     default_ext : Union[str, List[str]], optional
@@ -190,21 +224,23 @@ def saveable(
             display = kwargs.pop("display", False)
             display_auto_close = kwargs.pop("display_auto_close", True)
             fps = kwargs.pop("fps", default_fps)
+            rc_context = kwargs.pop("rc_context", dict())
 
             ani = None
             # Get interactive mode.
             is_interactive = mpl.is_interactive()
 
-            if set_interactive_mode is not None:
-                mpl.interactive(set_interactive_mode)
-            try:
-                out = function(*args, **kwargs)
-                if is_animation:
-                    sa = out[0]
-                    ani = out[1]
-                    out = sa
-            finally:
-                mpl.interactive(is_interactive)
+            with plt.rc_context(rc_context):
+                if set_interactive_mode is not None:
+                    mpl.interactive(set_interactive_mode)
+                try:
+                    out = function(*args, **kwargs)
+                    if is_animation:
+                        sa = out[0]
+                        ani = out[1]
+                        out = sa
+                finally:
+                    mpl.interactive(is_interactive)
 
             if tight_layout:
                 if is_figure_collection:
@@ -1529,6 +1565,7 @@ def plot_vectors(y: VEC_TYPE,
                  legend: bool = True,
                  yerr: Optional[VEC_TYPE] = None,
                  yerr_kw: Optional[Dict[str, Any]] = None,
+                 size: float = 5,
                  ) -> Figure:
     """Gets a matplotlib line figure with a plot of vectors.
 
@@ -1606,6 +1643,9 @@ def plot_vectors(y: VEC_TYPE,
         If provided, will be passed to the errorbar function.
         E.g. {'ecolor': 'gray', 'capsize': 2, 'elinewidth': 1}
 
+    size : float, optional
+        Size of the figure, by default 5 inches.
+
     Returns
     -------
     Figure
@@ -1644,7 +1684,7 @@ def plot_vectors(y: VEC_TYPE,
         x = numpyify(x)
         x, _ = flatten_batch_dims(x, -1)
     if ax is None:
-        fig, ax = get_mpl_figure(1, 1)
+        fig, ax = get_mpl_figure(1, 1, size=size)
     else:
         fig = ax.figure
 
@@ -1727,7 +1767,6 @@ def plot_histogram(
     filter_nan: bool = False,
     yscale: Optional[str] = None,
     is_counts: bool = False,
-
 ) -> Figure:
     """Gets a matplotlib histogram figure with a plot of vectors.
 
@@ -1782,18 +1821,17 @@ def plot_histogram(
 
     fig, ax = get_mpl_figure(1, 1)
 
+    sample_vals = []
+    if not is_counts:
+        if bins is None:
+            bins = 'auto'
     for i in range(x.shape[-1]):
-        l = label[i] if label is not None else None
         v = x[:, i]
         if filter_nan:
-            vals = vals[~np.isnan(vals)]
-        if not is_counts:
-            if bins is None:
-                bins = 'auto'
-            vals, bins = np.histogram(v, bins=bins)
-        else:
-            vals = v
-        ax.hist(bins[:-1], bins, weights=vals, label=l)
+            v = v[~np.isnan(v)]
+        sample_vals.append(v)
+
+    ax.hist(sample_vals, bins, label=label)
 
     if yscale is not None:
         ax.set_yscale(yscale)
@@ -2307,3 +2345,46 @@ register_alpha_map('binary')
 register_alpha_map('Greens')
 register_alpha_map('Reds')
 register_alpha_map('Blues')
+
+
+@saveable()
+def colorbar(cmap: str = "viridis", vmin: float = 0., vmax: float = 1., size: float = 1, ratio_or_img: float = 8., ax: Optional[Axes] = None, vertical: bool = True) -> Figure:
+    """Creates a colorbar figure.
+
+    Parameters
+    ----------
+    cmap : str, optional
+        Colormap to use, by default "viridis"
+    vmin : float, optional
+        Minimum value of the colorbar, by default 0.
+    vmax : float, optional
+        Maximum value of the colorbar, by default 1.
+    size : float, optional
+        Size of the figure in inches, by default 2
+    vertical : bool, optional
+        If the colorbar should be vertical or horizontal, by default True
+
+    Returns
+    -------
+    Figure
+        Matplotlib figure with the colorbar.
+    """
+    from matplotlib.colors import Normalize
+    from matplotlib.colorbar import Colorbar
+    ax_provided = ax is not None
+    if ax is None:
+        if vertical:
+            fig, ax = get_mpl_figure(
+                1, 1, size=size, ratio_or_img=ratio_or_img)
+        else:
+            fig, ax = get_mpl_figure(
+                1, 1, size=size * (1 / ratio_or_img), ratio_or_img=1 / ratio_or_img)
+    else:
+        fig = ax.figure
+    norm = Normalize(vmin=vmin, vmax=vmax)
+    cbar = Colorbar(ax, cmap=plt.get_cmap(cmap),
+                    norm=norm,
+                    orientation='vertical' if vertical else 'horizontal')
+    if not ax_provided:
+        fig.tight_layout()
+    return fig

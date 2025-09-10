@@ -73,12 +73,12 @@ class TensorValueWrapper(CompressableMixin):
                 else:
                     raise e
 
-    def to_python(self, no_tensor_data_warning: bool = True) -> torch.Tensor:
+    def to_python(self, no_tensor_data_warning: bool = False) -> torch.Tensor:
         if self.has_data:
             return TensorValueWrapper.from_ascii(self.data, compression=self.compression)
         else:
             json_str = self.to_json()
-            if no_tensor_data_warning:
+            if not no_tensor_data_warning:
                 logging.warning(
                     f"Tensor was saved without data, can not recover! Result will be without data. Wrapper value was: {os.linesep + json_str}")
             shp = self.shape.replace("(", "").replace(")", "")
@@ -111,4 +111,4 @@ class JsonTensorSerializationRule(JsonSerializationRule):
         return TensorValueWrapper(value=value, **kwargs).to_json_dict(handle_unmatched=handle_unmatched, **kwargs)
 
     def backward(self, value: TensorValueWrapper, **kwargs) -> torch.Tensor:
-        return value.to_python(no_tensor_data_warning=kwargs.get("no_tensor_data_warning", True))
+        return value.to_python(no_tensor_data_warning=kwargs.get("no_tensor_data_warning", False))
