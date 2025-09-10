@@ -309,6 +309,8 @@ def save_image(image: VEC_TYPE,
     if not override:
         path = numerated_file_name(path)
 
+    path = os.path.abspath(path)
+
     if mkdirs:
         if not os.path.exists(os.path.dirname(path)):
             os.makedirs(os.path.dirname(path), exist_ok=True)
@@ -324,15 +326,21 @@ def save_image(image: VEC_TYPE,
             Image.fromarray(img).save(path, **args)
             # raise ValueError("Exif data is not supported for tiff images.")
         else:
-            try:
-                import cv2
-                # If 3 channel, convert to BGR
-                if img.shape[-1] == 3:
-                    img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
-                cv2.imwrite(path, img)
-            except ImportError as err:
-                raise ImportError(
-                    "OpenCV is not installed, but is required to save tiff images.")
+            if img.shape[-1] > 1:
+                # Using tiffile
+                try:
+                    import tifffile
+                    tifffile.imwrite(path, img)
+                except ImportError as err:
+                    raise ImportError(
+                        "tifffile is not installed, but is required to save multi-channel tiff images.")
+            else:
+                try:
+                    import cv2
+                    cv2.imwrite(path, img)
+                except ImportError as err:
+                    raise ImportError(
+                        "OpenCV is not installed, but is required to save tiff images.")
     # Numpy save
     elif ext.lower() == ".npy":
         if len(args) > 0:

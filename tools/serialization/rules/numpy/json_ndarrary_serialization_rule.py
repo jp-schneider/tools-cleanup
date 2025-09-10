@@ -9,49 +9,44 @@ try:
     import numpy as np
 except (ModuleNotFoundError, ImportError):
     pass
+from tools.serialization.compressable_mixin import CompressableMixin
 
 
-def _encode_buffer(buf: bytes) -> str:
-    return base64.b64encode(buf).decode()
-
-
-def _decode_buffer(buf: str) -> bytes:
-    return base64.b64decode(buf.encode())
-
-
-class NDArrayValueWrapper(JsonConvertible):
+class NDArrayValueWrapper(CompressableMixin):
 
     __type_alias__ = "numpy/ndarray"
 
     def __init__(self,
                  value: np.ndarray = None,
                  decoding: bool = False,
+                 compression: bool = False,
                  **kwargs):
-        super().__init__(decoding, **kwargs)
+        super().__init__(decoding=decoding, compression=compression, **kwargs)
         if decoding:
             return
         self.dtype = str(value.dtype)
-        self.value = NDArrayValueWrapper.to_serialized_string(value)
+        self.value = NDArrayValueWrapper.to_ascii(
+            value, compression=self.compression)
 
     @classmethod
-    def to_serialized_string(cls, value: np.ndarray) -> str:
+    def from_bytes(cls, buf: bytes) -> np.ndarray:
+        with io.BytesIO() as b:
+            b.write(buf)
+            b.seek(0)
+            return np.load(b)
+
+    @classmethod
+    def to_bytes(cls, value: np.ndarray) -> bytes:
         with io.BytesIO() as buf:
             np.save(buf, value)
             buf.seek(0)
-            return _encode_buffer(buf.read())
-
-    @classmethod
-    def from_serialized_string(cls, value: str) -> np.ndarray:
-        with io.BytesIO() as buf:
-            buf.write(_decode_buffer(value))
-            buf.seek(0)
-            return np.load(buf)
+            return buf.getvalue()
 
     def to_python(self) -> np.ndarray:
         if isinstance(self.value, list):
             return np.array(self.value).astype(np.dtype(self.dtype))
         elif isinstance(self.value, str):
-            return NDArrayValueWrapper.from_serialized_string(self.value)
+            return NDArrayValueWrapper.from_ascii(self.value, compression=self.compression)
         else:
             raise ArgumentNoneError("value")
 
