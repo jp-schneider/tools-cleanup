@@ -308,6 +308,12 @@ def save_image(image: VEC_TYPE,
     img = numpyify_image(image)
     if not override:
         path = numerated_file_name(path)
+    # If image has shape (B, H, W, C) and B != 1, raise error
+    if len(img.shape) == 4:
+        if img.shape[0] != 1:
+            raise ValueError(
+                f"Image should have shape ([B], H, W[, C]) or ([B], C, H, W) with B == 1 if specified, got {img.shape}")
+        img = img[0]
 
     path = os.path.abspath(path)
 
