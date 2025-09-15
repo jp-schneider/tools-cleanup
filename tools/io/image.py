@@ -186,7 +186,7 @@ def load_image(
     try:
         if ext.lower() == ".npy":
             return np.load(path)
-        elif ext.lower() in [".tiff", ".tif"] and not load_metadata:
+        elif ext.lower() in [".tiff", ".tif", ".exr"] and not load_metadata:
             try:
                 import cv2
                 image = cv2.imread(path, cv2.IMREAD_UNCHANGED)
