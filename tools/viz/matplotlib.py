@@ -873,7 +873,8 @@ def plot_as_image(data: VEC_TYPE,
                   interpolation: Optional[str] = None,
                   tight: bool = False,
                   frame_on: bool = False,
-                  imshow_kw: Optional[Dict[str, Any]] = None,
+                  imshow_kw: Optional[Union[Dict[str, Any],
+                                            List[Dict[str, Any]]]] = None,
                   norm: bool = False,
                   keep_transparency: bool = False,
                   inpaint_title: Union[bool, _DEFAULT] = DEFAULT,
@@ -886,6 +887,9 @@ def plot_as_image(data: VEC_TYPE,
                   axis_enabled: Union[bool, _DEFAULT] = DEFAULT,
                   gamma_correction: bool = False,
                   gamma: Union[_DEFAULT, float] = DEFAULT,
+                  quantile_clipping: bool = False,
+                  quantile_clipping_range: Tuple[float, float] = (
+                      0.0005, 0.9995)
                   ) -> AxesImage:
     """Plots a 2D (complex) image with matplotib. Supports numpy arrays and torch tensors.
 
@@ -973,6 +977,17 @@ def plot_as_image(data: VEC_TYPE,
         Gamma value for the gamma correction, by default DEFAULT
         If DEFAULT, the gamma value will be estimated based on the observed image intensity.
         Set custom gamma value to use a specific gamma correction.
+
+    quantile_clipping : bool, optional
+        If the image should be quantile clipped, by default False
+        This can be useful to remove outliers from the image, not disturbing the overall image impression when using colorscales.
+        Only used if no custom vmin and vmax are provided in imshow_kw.
+
+    quantile_clipping_range : Tuple[float, float], optional
+        Quantile range for the quantile clipping, by default (0.0005, 0.9995)
+        First value is the lower quantile, second value is the upper quantile.
+        Determined on a per-image basis.
+
     Returns
     -------
     AxesImage
@@ -1030,13 +1045,17 @@ def plot_as_image(data: VEC_TYPE,
     img_title = []
     use_mathjax = []
     cmaps = []
+    imshow_kw_list = []
 
+    data_item = 0
     for i, data in enumerate(input_data):
         title_num_str = ""
         _col_images = []
         _col_titles = []
         _col_cmaps = []
         _col_use_mathjax = []
+        _col_imshow_kw = []
+
         v_name = "?"
         if variable_name is None:
             v_name = None
@@ -1062,12 +1081,29 @@ def plot_as_image(data: VEC_TYPE,
             _col_images.append(np.abs(data))
             _col_cmaps.append(cmap)
 
+            if isinstance(imshow_kw, (List, tuple)):
+                if len(imshow_kw) > data_item:
+                    _col_imshow_kw.append(dict(imshow_kw[data_item]))
+                else:
+                    _col_imshow_kw.append(dict())
+            else:
+                _col_imshow_kw.append(dict(imshow_kw))
+            data_item += 1
+
             _col_titles.append(
                 f"{title_num_str}angle({v_name})") if v_name is not None else _col_titles.append(None)
             _col_use_mathjax.append(used_mj)
             angle = np.angle(data)
             _col_images.append(angle)
             _col_cmaps.append(phase_cmap)
+            if isinstance(imshow_kw, (List, tuple)):
+                if len(imshow_kw) > data_item:
+                    _col_imshow_kw.append(dict(imshow_kw[data_item]))
+                else:
+                    _col_imshow_kw.append(dict())
+            else:
+                _col_imshow_kw.append(dict(imshow_kw))
+            data_item += 1
         else:
             _col_titles.append(
                 title_num_str + v_name) if v_name is not None else _col_titles.append(None)
@@ -1084,11 +1120,20 @@ def plot_as_image(data: VEC_TYPE,
                 else:
                     _col_cmaps.append(cmap)
 
+            if isinstance(imshow_kw, (List, tuple)):
+                if len(imshow_kw) > data_item:
+                    _col_imshow_kw.append(dict(imshow_kw[data_item]))
+                else:
+                    _col_imshow_kw.append(dict())
+            else:
+                _col_imshow_kw.append(dict(imshow_kw))
+            data_item += 1
+
         images.append(_col_images)
         img_title.append(_col_titles)
         cmaps.append(_col_cmaps)
         use_mathjax.append(_col_use_mathjax)
-
+        imshow_kw_list.append(_col_imshow_kw)
         rows += 1
 
     images = np.stack(images, axis=0)
@@ -1115,6 +1160,15 @@ def plot_as_image(data: VEC_TYPE,
             img_title = img_title.swapaxes(0, 1)
             cmaps = cmaps.swapaxes(0, 1)
             use_mathjax = use_mathjax.swapaxes(0, 1)
+
+            # Transpose imshow_kw_list which contains lists of dicts without converting to np.array
+            swapped_list = []
+            for i in range(rows):  # Cols after swap
+                col_list = []
+                for j in range(cols):  # Rows
+                    col_list.append(imshow_kw_list[i][j])
+                swapped_list.append(col_list)
+            imshow_kw_list = swapped_list
 
     if axes is None:
         if native_size:
@@ -1151,14 +1205,13 @@ def plot_as_image(data: VEC_TYPE,
             _image = images[row][col]
             _title = img_title[row][col]
             _use_mathjax = use_mathjax[row][col]
+            _imshow_kw = imshow_kw_list[row][col]
 
             color_mapping = None
 
             def op_only_finite(x, fnc):
                 return fnc(x[(~np.isnan(x)) & (~np.isinf(x))])
 
-            vmin = op_only_finite(_image, np.min)
-            vmax = op_only_finite(_image, np.max)
             _cmap = cmaps[row][col]
             if isinstance(_cmap, str):
                 _cmap = plt.get_cmap(_cmap)
@@ -1202,18 +1255,49 @@ def plot_as_image(data: VEC_TYPE,
                 vmax = len(_cmap.colors) - 1
                 vmin = 0
 
-            if "vmin" in imshow_kw:
-                vmin = imshow_kw.pop("vmin")
+            finite_image = None
+            quantile_clipped = False
+
+            if "vmin" in _imshow_kw:
+                vmin = _imshow_kw.pop("vmin")
             else:
-                vmin = op_only_finite(_image, np.min)
-            if "vmax" in imshow_kw:
-                vmax = imshow_kw.pop("vmax")
+                if quantile_clipping:
+                    # Filter out NaN and Inf values for quantile calculation
+                    if finite_image is None:
+                        finite_image = _image[(
+                            ~np.isnan(_image)) & (~np.isinf(_image))]
+                    vmin = np.quantile(
+                        finite_image, quantile_clipping_range[0])
+                    _image = np.where((~np.isnan(_image)) & (
+                        ~np.isinf(_image)) & (_image < vmin), vmin, _image)
+                    quantile_clipped = True
+                else:
+                    vmin = op_only_finite(_image, np.min)
+            if "vmax" in _imshow_kw:
+                vmax = _imshow_kw.pop("vmax")
             else:
-                vmax = op_only_finite(_image, np.max)
-            if "cmap" in imshow_kw:
-                _cmap = imshow_kw.pop("cmap")
-            if "interpolation" in imshow_kw:
-                interpolation = imshow_kw.pop("interpolation")
+                if quantile_clipping:
+                    # Filter out NaN and Inf values for quantile calculation
+                    if finite_image is None:
+                        finite_image = _image[(
+                            ~np.isnan(_image)) & (~np.isinf(_image))]
+                    vmax = np.quantile(
+                        finite_image, quantile_clipping_range[1])
+                    _image = np.where((~np.isnan(_image)) & (
+                        ~np.isinf(_image)) & (_image > vmax), vmax, _image)
+                    quantile_clipped = True
+                else:
+                    vmax = op_only_finite(_image, np.max)
+
+            if quantile_clipped:
+                def floor_wrap(n):
+                    return "$\lfloor " + str(n) + "\\rceil_{" + str(quantile_clipping_range[0]) + "}^{" + str(quantile_clipping_range[1]) + "}$"
+                _title = floor_wrap(_title)
+
+            if "cmap" in _imshow_kw:
+                _cmap = _imshow_kw.pop("cmap")
+            if "interpolation" in _imshow_kw:
+                interpolation = _imshow_kw.pop("interpolation")
 
             if norm:
                 _norm = MinMax(new_min=0, new_max=1)
@@ -1231,7 +1315,7 @@ def plot_as_image(data: VEC_TYPE,
                 _cmap.set_bad(color='white')
 
             ax.imshow(_image, vmin=vmin, vmax=vmax, cmap=_cmap,
-                      interpolation=interpolation, **imshow_kw)
+                      interpolation=interpolation, **_imshow_kw)
 
             if inset_args is not None:
                 from mpl_toolkits.axes_grid1.inset_locator import zoomed_inset_axes
@@ -1251,7 +1335,7 @@ def plot_as_image(data: VEC_TYPE,
 
                     inset_ax = zoomed_inset_axes(ax, zoom=zoom, loc=loc)
                     inset_ax.imshow(_image, vmin=vmin, vmax=vmax, cmap=_cmap,
-                                    interpolation=interpolation, **imshow_kw)
+                                    interpolation=interpolation, **_imshow_kw)
                     inset_ax.set_xlim(start_xy[0], end_xy[0])
                     inset_ax.set_ylim(end_xy[1], start_xy[1])
                     inset_ax.get_xaxis().set_ticks([])
@@ -1767,6 +1851,8 @@ def plot_histogram(
     filter_nan: bool = False,
     yscale: Optional[str] = None,
     is_counts: bool = False,
+    ax: Optional[Axes] = None,
+    histtype: Literal["bar", "barstacked", "step", "stepfilled"] = "bar",
 ) -> Figure:
     """Gets a matplotlib histogram figure with a plot of vectors.
 
@@ -1795,6 +1881,9 @@ def plot_histogram(
         If the input data is already counts, by default False
         If True, will not calculate histogram, but use the input data as counts and bins must be provided.
 
+    ax : Optional[Axes], optional
+        Matplotlib axes to plot on. If None, a new figure and axes will be created.
+
     Returns
     -------
     Figure
@@ -1818,8 +1907,10 @@ def plot_histogram(
         if len(label) != x.shape[-1]:
             raise ValueError(
                 "Number of labels should match the last dimension of the input data.")
-
-    fig, ax = get_mpl_figure(1, 1)
+    if ax is None:
+        fig, ax = get_mpl_figure(1, 1)
+    else:
+        fig = ax.figure
 
     sample_vals = []
     if not is_counts:
@@ -1831,7 +1922,7 @@ def plot_histogram(
             v = v[~np.isnan(v)]
         sample_vals.append(v)
 
-    ax.hist(sample_vals, bins, label=label)
+    ax.hist(sample_vals, bins, label=label, histtype=histtype)
 
     if yscale is not None:
         ax.set_yscale(yscale)
