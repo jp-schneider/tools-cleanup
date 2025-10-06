@@ -298,8 +298,8 @@ def latex_postprocessor(text: str,
     UNDERSCORE_IN_TEXT = r"(?<=([A-z0-9\_]))\_(?=[A-z0-9\_])"
     BF_SERIES = r"(\\bfseries)( )(?P<text>[A-z0-9.\-\_\+]+)( )"
     TEXT_DECO_UNDERLINE = r"(\\text-decorationunderline)( )(?P<text>[A-z0-9.\-\_\+]+)( )"
-    CELL_ITEM = r"(?<=(&|\n)\s)\{?(?P<text>[^&\n]+?)\}?(?=\s&)"
-    CELL_ITEM_LAST = r"(?<=(&|\n)\s)\{?(?P<text>[^&\n]+?)\}?(?=\s\\\\)"
+    CELL_ITEM = r"(?<=(&|\n)\s)(?P<text>\{?[^&\n]+?\}?)(?=\s&)"
+    CELL_ITEM_LAST = r"(?<=(&|\n)\s)(?P<text>\{?[^&\n]+?\}?)(?=\s\\\\)"
 
     if replace_underline:
         text = re.sub(UNDERSCORE_IN_TEXT, r"\_", text)

@@ -1291,8 +1291,9 @@ def plot_as_image(data: VEC_TYPE,
 
             if quantile_clipped:
                 def floor_wrap(n):
-                    return "$\lfloor " + str(n) + "\\rceil_{" + str(quantile_clipping_range[0]) + "}^{" + str(quantile_clipping_range[1]) + "}$"
+                    return "\lfloor " + str(n) + "\\rceil_{" + str(quantile_clipping_range[0]) + "}^{" + str(quantile_clipping_range[1]) + "}"
                 _title = floor_wrap(_title)
+                _use_mathjax = True
 
             if "cmap" in _imshow_kw:
                 _cmap = _imshow_kw.pop("cmap")
