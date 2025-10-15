@@ -174,7 +174,7 @@ class ProgressFactory:
         _kwargs = dict(kwargs)
         if is_reusable:
             _kwargs["leave"] = True
-        if tag is None and is_reusable:
+        if tag is not None and is_reusable:
             # Add PID to tag to avoid clashes between multiple processes
             tag = f"{os.getpid()}_{tag}"
         element = self._get_or_create(

@@ -28,6 +28,10 @@ UPPER_PATTERN = re.compile(r'^([A-Z]+)$')
 REGEX_ISO_8601_PATTERN = r'^(-?(?:[1-9][0-9]*)?[0-9]{4})-(1[0-2]|0[1-9])-(3[01]|0[1-9]|[12][0-9])T(2[0-3]|[01][0-9]):([0-5][0-9]):([0-5][0-9])(\.[0-9]+)?(Z|[+-](?:2[0-3]|[01][0-9]):[0-5][0-9])?$'
 REGEX_ISO_COMPILED = re.compile(REGEX_ISO_8601_PATTERN)
 
+FORMAT_STRING_VARIABLE_PATTERN = r"\{((?P<localizer>(ENV)|(env))\:)?(?P<variable>[A-z0-9\_]+)(?P<formatter>:[0-9A-z\.\,]+)?\}"
+FORMAT_STRING_VARIABLE_PATTERN_COMPILED = re.compile(
+    FORMAT_STRING_VARIABLE_PATTERN)
+
 
 @dataclass
 class FormatVariable():
@@ -470,6 +474,24 @@ def _get_default_formatters() -> Dict[Type, Callable[[Any], str]]:
     }
 
 
+def is_format_string(format_string: str) -> bool:
+    """Checks if a string is a format string.
+
+    A format string is defined as a string which contains at least one variable in the form {variable}.
+
+    Parameters
+    ----------
+    format_string : str
+        The string to check.
+
+    Returns
+    -------
+    bool
+        True if the string is a format string, False otherwise.
+    """
+    return FORMAT_STRING_VARIABLE_PATTERN_COMPILED.search(format_string) is not None
+
+
 def parse_format_string(format_string: str,
                         obj_list: List[Any],
                         index_variable: str = "index",
@@ -535,8 +557,7 @@ def parse_format_string(format_string: str,
     List[str]
         Formatted strings.
     """
-    pattern = re.compile(
-        r"\{((?P<localizer>(ENV)|(env))\:)?(?P<variable>[A-z0-9\_]+)(?P<formatter>:[0-9A-z\.\,]+)?\}")
+    pattern = FORMAT_STRING_VARIABLE_PATTERN_COMPILED
 
     matches = [m.groupdict() for m in pattern.finditer(format_string)]
     # Check which variables should included in the format string

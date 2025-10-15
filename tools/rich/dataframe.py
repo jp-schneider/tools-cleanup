@@ -126,4 +126,7 @@ class RichDataFrame:
             col_text = "all"
         self.table.caption = (f"{'Only the' if len(self.df) > self.row_limit or len(self.df.columns) > self.col_limit else ''}" +
                               f"[bold magenta not dim] {row_text} {self.row_limit if len(self.df) > self.row_limit else str(len(self.df))} rows[/bold magenta not dim]" +
-                              f" and {'the'} [bold green not dim]{col_text} {self.col_limit if len(self.df.columns) > self.col_limit else str(len(self.df.columns))} columns[/bold green not dim] are shown.")
+                              ("" if len(self.df) <= self.row_limit else "of " + f"[bold green not dim]{len(self.df)} rows[/bold green not dim]") +
+                              f" and {'the'} [bold green not dim]{col_text} {self.col_limit if len(self.df.columns) > self.col_limit else str(len(self.df.columns))} columns[/bold green not dim]" +
+                              "" if len(self.df.columns) <= self.col_limit else " of " + f"[bold green not dim]{len(self.df.columns)} columns[/bold green not dim]" +
+                              " are shown.")

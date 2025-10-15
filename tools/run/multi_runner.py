@@ -160,6 +160,13 @@ class MultiRunner(TrainableRunner):
             if "current_successful_folder" in context:
                 context.pop("current_successful_folder")
             context["current_successful_folder"] = None
+        if output_folder is None and config is not None:
+            # Check if output folder is set to a valid path in the config
+            from tools.util.format import is_format_string
+            f = str(config.output_folder)
+            if f is not None and len(f) > 0 and not is_format_string(f):
+                output_folder = f
+
         if output_folder is not None and os.path.exists(output_folder):
             exit_codes = load_exit_codes(output_folder)
             if len(exit_codes) > 0 and 0 in exit_codes['code'].values:
