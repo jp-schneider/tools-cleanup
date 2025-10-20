@@ -29,9 +29,10 @@ class MinMax(InvertableTransform, FittableTransform):
     def __init__(self,
                  new_min: np.ndarray = -1,
                  new_max: np.ndarray = 1,
-                 axis: Optional[Union[int, Tuple[int]]] = None
+                 axis: Optional[Union[int, Tuple[int]]] = None,
+                 **kwargs
                  ):
-        super().__init__()
+        super().__init__(**kwargs)
         self.min = np.zeros(1)
         self.max = np.ones(1)
         self.new_min = np.array(new_min)

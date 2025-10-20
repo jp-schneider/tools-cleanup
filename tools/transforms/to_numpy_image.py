@@ -50,6 +50,12 @@ class ToNumpyImage(ToNumpy):
             return (x * 255).astype(np.uint8)
         elif self.output_dtype in FLOAT_SET and x.dtype == np.uint8:
             return x.astype(self.output_dtype) / 255
+        elif self.output_dtype == np.uint16 and x.dtype in FLOAT_SET:
+            eps = 0.1
+            if x.min() < (0 - eps) or x.max() > (1 + eps):
+                logger.warning(
+                    f"Converting float image to uint16, but values are not in [0, 1]: {x.min()}, {x.max()}")
+            return (x * 2 ** 16).astype(np.uint16)
         elif self.output_dtype in FLOAT_SET and x.dtype in FLOAT_SET:
             return x.astype(self.output_dtype)
         else:

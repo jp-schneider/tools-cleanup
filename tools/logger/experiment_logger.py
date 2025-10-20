@@ -6,6 +6,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple, Union, TYPE_CHECK
 
 
 from tools.config.experiment_output_config import ExperimentOutputConfig
+from tools.event.training_started_event_args import TrainingStartedEventArgs
 from tools.metric.metric_entry import MetricEntry
 from tools.util.path import PATH_TYPE
 from tools.util.typing import VEC_TYPE
@@ -79,6 +80,8 @@ class ExperimentLogger():
                         log_config: bool = True,
                         log_graph: bool = True,
                         log_config_only_once: bool = True,
+                        log_epoch_time: bool = True,
+                        log_training_time: bool = True,
                         name: Optional[str] = None,
                         ) -> 'ExperimentLogger':
         if name is None:
@@ -102,6 +105,10 @@ class ExperimentLogger():
                 logger.get_log_agent_config_handle(only_once=log_config_only_once))
         if log_graph:
             agent.batch_processed.attach(logger.log_graph())
+        if log_epoch_time:
+            agent.epoch_processed.attach(logger.log_epoch_time)
+        if log_training_time:
+            agent.training_finished.attach(logger.log_final_time)
         return logger
 
     def apply_to(self,
@@ -112,6 +119,8 @@ class ExperimentLogger():
                  log_config: bool = True,
                  log_graph: bool = True,
                  log_config_only_once: bool = True,
+                 log_epoch_time: bool = True,
+                 log_training_time: bool = True,
                  ) -> 'ExperimentLogger':
         agent.logger = self
         if log_loss:
@@ -128,6 +137,10 @@ class ExperimentLogger():
                 self.get_log_agent_config_handle(only_once=log_config_only_once))
         if log_graph:
             agent.batch_processed.attach(self.log_graph())
+        if log_epoch_time:
+            agent.epoch_processed.attach(self.log_epoch_time)
+        if log_training_time:
+            agent.training_finished.attach(self.log_final_time)
         return self
 
     @classmethod
@@ -166,6 +179,53 @@ class ExperimentLogger():
             time=output_args.time,
             batch=output_args.tracker.global_steps, epoch=output_args.tracker.global_epochs
         )
+
+    def log_final_time(self, ctx: Dict[str, Any], output_args: TrainingStartedEventArgs):
+        """Logs the final time.
+
+        Parameters
+        ----------
+        ctx : Dict[str, Any]
+            The context dict.
+        output_args : ModelStepEventArgs
+            The output args of the model step.
+        """
+        agent = ctx.get('source')
+        if not hasattr(agent, "_training_timer") or agent._training_timer is None:
+            return
+        self.log(
+            {
+                "time/final": agent._training_timer.elapsed().total_seconds(),
+                "time/final_total": agent._training_timer.elapsed(total=True).total_seconds()
+            },
+            step=agent.tracker.global_steps,
+            epoch=agent.tracker.global_epochs
+        )
+
+    def log_epoch_time(self, ctx: Dict[str, Any], output_args: ModelStepEventArgs):
+        """Logs the epoch time.
+
+        Parameters
+        ----------
+        ctx : Dict[str, Any]
+            The context dict.
+        output_args : TrainingStartedEventArgs
+            The output args of the training started event.
+        """
+        if output_args.scope == LearningScope.EPOCH:
+            agent = ctx.get('source')
+            if not hasattr(agent, "_epoch_timer") or agent._epoch_timer is None:
+                return
+            time = agent._epoch_timer.elapsed()
+            time_total = agent._epoch_timer.elapsed(total=True)
+            self.log(
+                {
+                    "time/epoch": time.total_seconds(),
+                    "time/epoch_total": time_total.total_seconds()
+                },
+                step=agent.tracker.global_epochs,
+                epoch=agent.tracker.global_epochs,
+            )
 
     def log_metric(self, metric_column: str) -> Callable:
         """Getting a logger function for the given metric name.

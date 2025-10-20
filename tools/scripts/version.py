@@ -178,7 +178,7 @@ def change_version(cfg: VersionConfig) -> bool:
                 print(
                     f"Forcefully downgrading version from {current_version} to {cfg.dedicated_version}.")
         cfg.updated_version = vers
-    else:
+    elif cfg.dedicated_version is None and cfg.auto_bump != AutoBumpStrategy.NONE:
         # Bump the version based on the auto_bump strategy
         major, minor, patch = map(int, current_version.split('.'))
         if cfg.auto_bump == AutoBumpStrategy.MAJOR:
@@ -191,6 +191,9 @@ def change_version(cfg: VersionConfig) -> bool:
         elif cfg.auto_bump == AutoBumpStrategy.PATCH:
             patch += 1
         cfg.updated_version = f"{major}.{minor}.{patch}"
+    else:
+        # No change needed
+        return False
 
     # Update the package info with the new version
     cfg.package_info["version"] = cfg.updated_version

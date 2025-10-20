@@ -41,6 +41,7 @@ except Exception as err:
         plt = None
         cm = None
         Colormap = None
+import struct
 
 
 def create_image_exif(metadata: Dict[Union[str, ExifTagsBase], Any]) -> Exif:
@@ -66,7 +67,11 @@ def create_image_exif(metadata: Dict[Union[str, ExifTagsBase], Any]) -> Exif:
         raise ValueError("MakerNote is a reserved Exif tag")
 
     real_tags = {k: v for k, v in metadata.items() if k in TAGS}
+    NAMED_TAGS = {v: k for k, v in TAGS.items()}
+    real_tags_named = {k: v for k, v in metadata.items() if k in NAMED_TAGS}
     for k in real_tags:
+        metadata.pop(k)
+    for k in real_tags_named:
         metadata.pop(k)
     metadata_json = JsonConvertible.convert_to_json_str(metadata,
                                                         handle_unmatched="raise",
@@ -78,6 +83,8 @@ def create_image_exif(metadata: Dict[Union[str, ExifTagsBase], Any]) -> Exif:
 
     for k, v in real_tags.items():
         exif[k] = v
+    for k, v in real_tags_named.items():
+        exif[ExifTagsBase(NAMED_TAGS.get(k))] = v
     return exif
 
 
@@ -179,7 +186,7 @@ def load_image(
     try:
         if ext.lower() == ".npy":
             return np.load(path)
-        elif ext.lower() in [".tiff", ".tif"]:
+        elif ext.lower() in [".tiff", ".tif", ".exr"] and not load_metadata:
             try:
                 import cv2
                 image = cv2.imread(path, cv2.IMREAD_UNCHANGED)
@@ -301,6 +308,14 @@ def save_image(image: VEC_TYPE,
     img = numpyify_image(image)
     if not override:
         path = numerated_file_name(path)
+    # If image has shape (B, H, W, C) and B != 1, raise error
+    if len(img.shape) == 4:
+        if img.shape[0] != 1:
+            raise ValueError(
+                f"Image should have shape ([B], H, W[, C]) or ([B], C, H, W) with B == 1 if specified, got {img.shape}")
+        img = img[0]
+
+    path = os.path.abspath(path)
 
     if mkdirs:
         if not os.path.exists(os.path.dirname(path)):
@@ -314,16 +329,24 @@ def save_image(image: VEC_TYPE,
     # If tiff use opencv
     if ext.lower() == ".tiff" or ext.lower() == ".tif":
         if len(args) > 0:
-            raise ValueError("Exif data is not supported for tiff images.")
-        try:
-            import cv2
-            # If 3 channel, convert to BGR
-            if img.shape[-1] == 3:
-                img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
-            cv2.imwrite(path, img)
-        except ImportError as err:
-            raise ImportError(
-                "OpenCV is not installed, but is required to save tiff images.")
+            Image.fromarray(img).save(path, **args)
+            # raise ValueError("Exif data is not supported for tiff images.")
+        else:
+            if img.shape[-1] > 1:
+                # Using tiffile
+                try:
+                    import tifffile
+                    tifffile.imwrite(path, img)
+                except ImportError as err:
+                    raise ImportError(
+                        "tifffile is not installed, but is required to save multi-channel tiff images.")
+            else:
+                try:
+                    import cv2
+                    cv2.imwrite(path, img)
+                except ImportError as err:
+                    raise ImportError(
+                        "OpenCV is not installed, but is required to save tiff images.")
     # Numpy save
     elif ext.lower() == ".npy":
         if len(args) > 0:
@@ -886,7 +909,7 @@ def rgba_to_rgb(img: VEC_TYPE, base_color: VEC_TYPE) -> VEC_TYPE:
     return img
 
 
-def gamma_correction(image: VEC_TYPE, gamma: Union[_DEFAULT, float] = DEFAULT) -> Tuple[np.ndarray, np.ndarray]:
+def gamma_correction(image: VEC_TYPE, gamma: Union[_DEFAULT, float] = DEFAULT, domain_dtype: np.dtype = np.uint8) -> Tuple[np.ndarray, np.ndarray]:
     """
     Applies gamma correction to the given image.
     The gamma value is calculated based on the mean brightness of the image, or can be specified manually.
@@ -901,6 +924,11 @@ def gamma_correction(image: VEC_TYPE, gamma: Union[_DEFAULT, float] = DEFAULT) -
         Gamma value or DEFAULT, by default DEFAULT
         If DEFAULT, the gamma value will be calculated based on the mean brightness of the image.
 
+
+    domain_dtype : np.dtype, optional
+        The dtype of the image, by default np.uint8
+        Can be also dtype np.uint16.
+
     Returns
     -------
     Tuple[np.ndarray, np.ndarray]
@@ -910,33 +938,53 @@ def gamma_correction(image: VEC_TYPE, gamma: Union[_DEFAULT, float] = DEFAULT) -
     import cv2
     import math
     from tools.transforms.to_numpy_image import ToNumpyImage
+    if domain_dtype not in [np.uint8, np.uint16]:
+        raise ValueError(
+            f"Domain dtype should be np.uint8 or np.uint16, got {domain_dtype}")
 
-    numpyify = ToNumpyImage(output_dtype=np.uint8)
+    numpyify = ToNumpyImage(output_dtype=domain_dtype)
+    nbits = np.iinfo(domain_dtype).bits
     image = numpyify(image)
     is_rgba = image.shape[-1] == 4
     rgba_image = None
 
-    if is_rgba:
-        # Convert to RGB
-        rgba_image = image.copy()
-        image = image[..., :3]
-    # convert img to HSV
-    hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
-    hue, sat, val = cv2.split(hsv)
+    H, W, C = image.shape
 
-    if gamma == DEFAULT:
-        mid = 0.5
-        mean = np.mean(val)
-        gamma = math.log(mid*255)/math.log(mean)
+    def determine_gamma_value(v) -> float:
+        return math.log(0.5 * (2 ** nbits - 1)) / math.log(np.mean(v))
 
-    val_corrected = np.power(val, gamma).clip(0, 255).astype(np.uint8)
+    if C not in [3, 4]:
+        if C != 1:
+            raise ValueError(
+                f"Image should have 1, 3 or 4 channels, got {C} channels.")
+        else:
+            # Apply gamma correction
+            if gamma == DEFAULT:
+                gamma = determine_gamma_value(image)
+            gamma_corrected = np.power(image, gamma).clip(
+                0, 2 ** nbits - 1).astype(domain_dtype)
+            return gamma_corrected, gamma
+    else:
+        if is_rgba:
+            # Convert to RGB
+            rgba_image = image.copy()
+            image = image[..., :3]
+        # convert img to HSV
+        hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+        hue, sat, val = cv2.split(hsv)
 
-    hsv_corrected = cv2.merge([hue, sat, val_corrected])
-    gamma_corrected = cv2.cvtColor(hsv_corrected, cv2.COLOR_HSV2BGR)
+        if gamma == DEFAULT:
+            gamma = determine_gamma_value(val)
 
-    if is_rgba:
-        rgba_image[..., :3] = gamma_corrected
-        gamma_corrected = rgba_image
+        val_corrected = np.power(val, gamma).clip(
+            0, 2 ** nbits - 1).astype(domain_dtype)
+
+        hsv_corrected = cv2.merge([hue, sat, val_corrected])
+        gamma_corrected = cv2.cvtColor(hsv_corrected, cv2.COLOR_HSV2BGR)
+
+        if is_rgba:
+            rgba_image[..., :3] = gamma_corrected
+            gamma_corrected = rgba_image
     return gamma_corrected, gamma
 
 
@@ -976,8 +1024,7 @@ def check_text_overlap(occupied_area: np.ndarray,
     overlap_area = 0
 
     text_mask = np.zeros_like(occupied_area, dtype=bool)
-    text_mask[int(row):int(row + text_height), int(col)
-                  :int(col + text_width)] = True
+    text_mask[int(row):int(row + text_height), int(col)              :int(col + text_width)] = True
     overlap_with_occupied = np.sum(occupied_area[text_mask])
     overlap_area += overlap_with_occupied
 
@@ -1566,3 +1613,153 @@ def linear_segmented_smoothing(
     # Set x if outside domain
     y[~in_domain] = x[~in_domain]
     return torch.clamp(y, 0, 1).detach()
+
+
+class UnknownImageFormat(Exception):
+    pass
+
+
+def get_image_size(file_path: str) -> Tuple[int, int]:
+    """
+    Returns (width, height) for a given img file content, checks the first few bytes making it efficient.
+
+    Credits
+    -------
+    Parts of this code originate from:
+    https://stackoverflow.com/questions/15800704/get-image-size-without-loading-image-into-memory
+    Author:      Paulo Scardine (based on code from Emmanuel VAÏSSE)
+
+    Created:     26/09/2013
+    Copyright:   (c) Paulo Scardine 2013
+    Licence:     MIT
+
+    Parameters
+    ----------
+    file_path : str
+        Path to the image file.
+
+    Returns
+    -------
+    Tuple[int, int]
+        The width and height of the image.
+    """
+    size = os.path.getsize(file_path)
+    ext = os.path.splitext(file_path)[-1].lower().lstrip(".")
+    with open(file_path, "rb") as f:
+        height = -1
+        width = -1
+        data = f.read(26)
+        if "gif" in ext and (size >= 10) and data[:6] in ('GIF87a', 'GIF89a'):
+            # GIFs
+            w, h = struct.unpack("<HH", data[6:10])
+            width = int(w)
+            height = int(h)
+        elif "bmp" in ext and data.startswith(b'\x42\x4D'):
+            # Indicats BM => Bitmap files
+            # Read unsigned int, little endian
+            size_mb = struct.unpack("<i", data[2:6])[0] / 1024  # size in KB
+            bmp_info_header = data[14:]
+            width = struct.unpack('<i', bmp_info_header[4:8])[
+                0]   # Offset 4 within BITMAPINFOHEADER
+            height = struct.unpack('<i', bmp_info_header[8:12])[
+                0]  # Offset 8 within BITMAPINFOHEADER
+        elif ("tif" in ext):
+            tiff_header = data[:8]
+            byte_order_signature = tiff_header[0:2]
+            if byte_order_signature == b'II':
+                byte_order = '<'  # Little-endian
+            elif byte_order_signature == b'MM':
+                byte_order = '>'  # Big-endian
+            else:
+                raise ValueError("Invalid TIFF byte order signature.")
+                return None
+            version = struct.unpack(byte_order + 'H', tiff_header[2:4])[0]
+            if version != 42:
+                raise ValueError(
+                    f"Invalid TIFF version ({version}). Expected 42.")
+
+            first_ifd_offset = struct.unpack(
+                byte_order + 'I', tiff_header[4:8])[0]
+            f.seek(first_ifd_offset)
+
+            # 3. Read the number of IFD entries
+            num_entries_bytes = f.read(2)
+            if len(num_entries_bytes) < 2:
+                raise ValueError("Could not read number of IFD entries.")
+
+            num_entries = struct.unpack(byte_order + 'H', num_entries_bytes)[0]
+            width = None
+            height = None
+
+            # 4. Iterate through IFD Entries (12 bytes each)
+            for _ in range(num_entries):
+                entry_bytes = f.read(12)
+                if len(entry_bytes) < 12:
+                    raise ValueError("Incomplete IFD entry.")
+
+                # Each entry is: Tag (2 bytes), Field Type (2 bytes), Number of Values (4 bytes), Value/Offset (4 bytes)
+                tag, field_type, count, value_or_offset = struct.unpack(
+                    byte_order + 'HHII', entry_bytes)
+
+                # TIFF Tag for ImageWidth is 256 (0x0100)
+                if tag == 256:
+                    # For simple types like SHORT or LONG, the value is often directly in value_or_offset
+                    # Assuming common types where width fits in 4 bytes
+                    width = value_or_offset
+                # TIFF Tag for ImageLength (Height) is 257 (0x0101)
+                elif tag == 257:
+                    # Assuming common types where height fits in 4 bytes
+                    height = value_or_offset
+
+                # If both are found, we can exit early
+                if width is not None and height is not None:
+                    return width, height
+
+            # If we reached here, dimensions weren't found in the first IFD
+            raise ValueError(
+                "ImageWidth and/or ImageLength tags not found in the first IFD.")
+
+        elif "png" in ext and ((size >= 24) and data.startswith(b'\211PNG\r\n\032\n')
+                               and (data[12:16] == b'IHDR')):
+            # PNGs
+            w, h = struct.unpack(">LL", data[16:24])
+            width = int(w)
+            height = int(h)
+        elif "png" in ext and (size >= 16) and data.startswith(b'\211PNG\r\n\032\n'):
+            # older PNGs?
+            w, h = struct.unpack(">LL", data[8:16])
+            width = int(w)
+            height = int(h)
+        elif ("jpg" in ext or "jpeg" in ext) and (size >= 2) and data.startswith(b'\377\330'):
+            # JPEG
+            msg = " raised while trying to decode as JPEG."
+            f.seek(0)
+            f.read(2)
+            b = f.read(1)
+            try:
+                while (b and ord(b) != 0xDA):
+                    while (ord(b) != 0xFF):
+                        b = f.read(1)
+                    while (ord(b) == 0xFF):
+                        b = f.read(1)
+                    if (ord(b) >= 0xC0 and ord(b) <= 0xC3):
+                        f.read(3)
+                        h, w = struct.unpack(">HH", f.read(4))
+                        break
+                    else:
+                        input.read(
+                            int(struct.unpack(">H", input.read(2))[0])-2)
+                    b = input.read(1)
+                width = int(w)
+                height = int(h)
+            except struct.error:
+                raise UnknownImageFormat("StructError" + msg)
+            except ValueError:
+                raise UnknownImageFormat("ValueError" + msg)
+            except Exception as e:
+                raise UnknownImageFormat(e.__class__.__name__ + msg)
+        else:
+            raise UnknownImageFormat(
+                f"Unable to get information for file {file_path}."
+            )
+    return width, height

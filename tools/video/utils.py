@@ -102,7 +102,8 @@ def write_mp4_generator(
         codec: str = DEFAULT,
         progress_bar: bool = False,
         progress_factory: Optional[ProgressFactory] = None,
-        frame_counter_offset: int = 0
+        frame_counter_offset: int = 0,
+        use_transparency_grid: bool = True
 ):
     """Writes the frames to a video file.
 
@@ -127,6 +128,9 @@ def write_mp4_generator(
         Show progress bar, by default False
     frame_counter_offset : int, optional
         Offset for the frame counter, by default 0
+    use_transparency_grid : bool, optional
+        Whether to use a transparency grid for the video, by default True
+        Will replace the alpha channel with a transparency grid if the frame has an alpha channel.
 
     Raises
     ------
@@ -152,7 +156,7 @@ def write_mp4_generator(
                        inpaint_title=title,
                        inpaint_counter=frame_counter,
                        counter_format=fmt,
-                       use_transparency_grid=True,
+                       use_transparency_grid=use_transparency_grid,
                        codec=codec,
                        counter_offset=frame_counter_offset
                        ) as writer:

@@ -172,8 +172,10 @@ class Config(JsonConvertible, ArgparserMixin):
     def __getstate__(self):
         state = self.__dict__.copy()
         # Don't pickle baz
-        del state["progress_factory"]
-        del state["__config_path__"]
+        if "progress_factory" in state:
+            del state["progress_factory"]
+        if "__config_path__" in state:
+            del state["__config_path__"]
         return state
 
     def __setstate__(self, state):

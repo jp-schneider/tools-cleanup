@@ -216,7 +216,7 @@ def numpy_to_torch_dtype(dtype: Union[str, np.dtype]) -> torch.dtype:
         If the dtype is not supported.
     """
     numpy_to_torch_dtype_dict = {
-        np.bool: torch.bool,
+        np.bool_: torch.bool,
         np.uint8: torch.uint8,
         np.int8: torch.int8,
         np.int16: torch.int16,
@@ -232,6 +232,12 @@ def numpy_to_torch_dtype(dtype: Union[str, np.dtype]) -> torch.dtype:
         dtype = np.dtype(dtype)
     if dtype in numpy_to_torch_dtype_dict:
         return numpy_to_torch_dtype_dict[dtype]
+    elif isinstance(dtype, np.dtype):
+        try:
+            dt = getattr(np, dtype.name)
+            return numpy_to_torch_dtype(dt)
+        except AttributeError:
+            raise ValueError(f"Unsupported numpy dtype {dtype.name}")
     else:
         raise ValueError(f"Unsupported dtype {dtype}")
 
@@ -501,6 +507,7 @@ def batched_exec(*input,
                  progress_bar: bool = False,
                  pf: Optional[ProgressFactory] = None,
                  free_memory: bool = False,
+                 progress_bar_delay: float = 2.,
                  **kwargs
                  ) -> torch.Tensor:
     """Execute a function in batches.
@@ -526,6 +533,9 @@ def batched_exec(*input,
     free_memory : bool, optional
         If memory should be freed after each batch, by default False
         Will call torch.cuda.empty_cache() and gc.collect()
+
+    progress_bar_delay : float, optional
+        Delay in seconds before which needs to expire before a bar is displayed, by default 2.
 
     Returns
     -------
@@ -554,7 +564,7 @@ def batched_exec(*input,
     bar = None
     if progress_bar:
         bar = pf.tqdm(total=len(
-            slices), desc=f"Batched Execution: {class_name(func)}", tag=f"BATCH_EXEC_" + class_name(func), is_reusable=True)
+            slices), desc=f"Batched Execution: {class_name(func)}", tag=f"BATCH_EXEC_" + class_name(func), is_reusable=True, delay=progress_bar_delay)
 
     for s in slices:
         _ins = [i[s] for i in input]

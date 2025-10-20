@@ -6,9 +6,11 @@ import inspect
 from tqdm.contrib import DummyTqdmFile
 import contextlib
 import sys
+import os
 
 ORIGINAL_STDOUT = None
 """Variable to store the original stdout. When using std_out_err_redirect_tqdm context manager."""
+
 
 class ProgressElement(tqdm):
 
@@ -172,6 +174,9 @@ class ProgressFactory:
         _kwargs = dict(kwargs)
         if is_reusable:
             _kwargs["leave"] = True
+        if tag is not None and is_reusable:
+            # Add PID to tag to avoid clashes between multiple processes
+            tag = f"{os.getpid()}_{tag}"
         element = self._get_or_create(
             *args, tag=tag, is_reusable=is_reusable, **_kwargs)
         return element
@@ -250,4 +255,3 @@ def std_out_err_redirect_tqdm():
         raise exc
     finally:
         sys.stdout, sys.stderr = orig_out_err
-

@@ -226,6 +226,7 @@ class TorchAgent(Agent):
 
             epoch_output_event_args = None
             with Timer() as epoch_timer:
+                self._epoch_timer = epoch_timer
                 if epoch_progress_bar:
                     epoch_progress_bar.set_description(
                         'Epoch {}/{}'.format(epoch + 1, num_epochs), refresh=True)
@@ -241,7 +242,6 @@ class TorchAgent(Agent):
                     torch.random.manual_seed(shuffle_seed)
 
                 dataloaders = OrderedDict()
-
                 collate_fn = None
 
                 # Setting up the data loaders
@@ -311,39 +311,48 @@ class TorchAgent(Agent):
                         is_training_finished = True
                         raise err
                     finally:
-                        tracker.epoch(
-                            in_training=(phase == LearningMode.TRAINING))
+                        with (self._epoch_timer.pause(), self._training_timer.pause()):
+                            tracker.epoch(
+                                in_training=(phase == LearningMode.TRAINING))
 
-                        epoch_loss = epoch_data_tracker.running_loss
-                        # Track epoch main metric
-                        tracker.epoch_metric(Tracker.get_metric_name(
-                            self.loss), value=epoch_loss,
-                            in_training=(phase == LearningMode.TRAINING),
-                            is_primary=True)
+                            epoch_loss = epoch_data_tracker.running_loss
+                            # Track epoch main metric
+                            tracker.epoch_metric(Tracker.get_metric_name(
+                                self.loss), value=epoch_loss,
+                                in_training=(phase == LearningMode.TRAINING),
+                                is_primary=True)
 
-                        epoch_output_event_args = TorchModelStepEventArgs(
-                            model=model,
-                            model_args=self.model_args,
-                            optimizer=optimizer,
-                            mode=phase,
-                            label=epoch_data_tracker.combined_labels(),
-                            output=epoch_data_tracker.combined_predictions(),
-                            input=epoch_data_tracker.combined_inputs(),
-                            indices=epoch_data_tracker.combined_indices(),
-                            loss=epoch_loss,
-                            loss_name=self.get_loss_name(),
-                            tracker=tracker,
-                            remaining_iterations=remaining_iterations if not is_training_finished else 0,
-                            dataset_config=dataset_config,
-                            scope=LearningScope.EPOCH
-                        )
-                        self.epoch_processed.notify(
-                            epoch_output_event_args)
+                            tracker.epoch_metric("epoch_time", value=self._epoch_timer.elapsed().total_seconds(),
+                                                 in_training=(
+                                                     phase == LearningMode.TRAINING),
+                                                 is_primary=False)
+                            tracker.epoch_metric("epoch_time_total", value=self._epoch_timer.elapsed(total=True).total_seconds(),
+                                                 in_training=(
+                                                     phase == LearningMode.TRAINING),
+                                                 is_primary=False)
 
-                        if use_progress_bar:
-                            epoch_progress_bar.set_postfix(
-                                loss=epoch_loss, refresh=False)
+                            epoch_output_event_args = TorchModelStepEventArgs(
+                                model=model,
+                                model_args=self.model_args,
+                                optimizer=optimizer,
+                                mode=phase,
+                                label=epoch_data_tracker.combined_labels(),
+                                output=epoch_data_tracker.combined_predictions(),
+                                input=epoch_data_tracker.combined_inputs(),
+                                indices=epoch_data_tracker.combined_indices(),
+                                loss=epoch_loss,
+                                loss_name=self.get_loss_name(),
+                                tracker=tracker,
+                                remaining_iterations=remaining_iterations if not is_training_finished else 0,
+                                dataset_config=dataset_config,
+                                scope=LearningScope.EPOCH
+                            )
+                            self.epoch_processed.notify(
+                                epoch_output_event_args)
 
+                            if use_progress_bar:
+                                epoch_progress_bar.set_postfix(
+                                    loss=epoch_loss, refresh=False)
         except StopTraining as err:
             raise
         finally:
@@ -475,61 +484,61 @@ class TorchAgent(Agent):
                 loss.backward()
                 optimizer.step()
 
-        # Increase step
-        tracker.step(in_training=(phase == LearningMode.TRAINING))
+        with (self._epoch_timer.pause(), self._training_timer.pause()):
+            # Pausing times that are not dependent on the training step
+            tracker.step(in_training=(phase == LearningMode.TRAINING))
 
-        # Getting the loss
-        loss_detached = loss.item()
-        # detaching tensors
-        outputs_detached = TensorUtil.apply_deep(
-            device_outputs, fnc=lambda x: x.detach().cpu())
+            # Getting the loss
+            loss_detached = loss.item()
+            # detaching tensors
+            outputs_detached = TensorUtil.apply_deep(
+                device_outputs, fnc=lambda x: x.detach().cpu())
 
-        # Tracking data
-        epoch_data_tracker.push(
-            loss=loss_detached,
-            prediction=outputs_detached,
-            label=labels,
-            input=inputs,
-            indices=indices
-        )
-        # Track main loss
-        tracker.step_metric(Tracker.get_metric_name(
-            self.loss),
-            value=loss_detached,
-            in_training=(phase == LearningMode.TRAINING),
-            is_primary=True)
-
-        try:
-            # Batch notify
-            self.batch_processed.notify(TorchModelStepEventArgs(
-                model=model,
-                model_args=self.model_args,
-                optimizer=optimizer,
-                mode=phase,
-                label=labels,
-                output=outputs_detached,
-                indices=indices,
-                input=inputs,
+            # Tracking data
+            epoch_data_tracker.push(
                 loss=loss_detached,
-                loss_name=self.get_loss_name(),
-                tracker=tracker,
-                remaining_iterations=remaining_iterations,
-                dataset_config=dataset_config,
-                scope=LearningScope.BATCH
-            ))
-        finally:
-            if batch_progress_bar is not None:
-                batch_progress_bar.update()
-                batch_progress_bar.set_postfix(
-                    loss_avg=epoch_data_tracker.running_loss,
-                    loss=loss_detached,
-                    refresh=False)
+                prediction=outputs_detached,
+                label=labels,
+                input=inputs,
+                indices=indices
+            )
+            # Track main loss
+            tracker.step_metric(Tracker.get_metric_name(
+                self.loss),
+                value=loss_detached,
+                in_training=(phase == LearningMode.TRAINING),
+                is_primary=True)
 
-            elif epoch_progress_bar is not None:
-                epoch_progress_bar.set_postfix(
-                    loss_avg=epoch_data_tracker.running_loss,
+            try:
+                self.batch_processed.notify(TorchModelStepEventArgs(
+                    model=model,
+                    model_args=self.model_args,
+                    optimizer=optimizer,
+                    mode=phase,
+                    label=labels,
+                    output=outputs_detached,
+                    indices=indices,
+                    input=inputs,
                     loss=loss_detached,
-                    refresh=False)
+                    loss_name=self.get_loss_name(),
+                    tracker=tracker,
+                    remaining_iterations=remaining_iterations,
+                    dataset_config=dataset_config,
+                    scope=LearningScope.BATCH
+                ))
+            finally:
+                if batch_progress_bar is not None:
+                    batch_progress_bar.update()
+                    batch_progress_bar.set_postfix(
+                        loss_avg=epoch_data_tracker.running_loss,
+                        loss=loss_detached,
+                        refresh=False)
+
+                elif epoch_progress_bar is not None:
+                    epoch_progress_bar.set_postfix(
+                        loss_avg=epoch_data_tracker.running_loss,
+                        loss=loss_detached,
+                        refresh=False)
 
     def _pretrain(self,
                   model: torch.nn.Module,
@@ -580,126 +589,129 @@ class TorchAgent(Agent):
                     agent=self,
                     use_progress_bar=use_progress_bar,
                     **pretraining_kwargs)
-                # Save the state
-                if state is not None:
-                    _state = TensorUtil.apply_deep(
-                        state, lambda x: x.detach().cpu())
-                    os.makedirs(os.path.dirname(
-                        self.pretrain_state_path), exist_ok=True)
-                    torch.save(_state, self.pretrain_state_path)
-                    logger.info(
-                        f"Pretrain state saved to {self.pretrain_state_path}")
-                else:
-                    logger.info("No pretrain state returned, not saving...")
 
-            after_pretrain_event_args = TorchModelStepEventArgs(
-                model=model,
-                model_args=self.model_args,
-                mode=LearningMode.TRAINING,
-                scope=LearningScope.EPOCH,
-                remaining_iterations=0,
-                tracker=self.tracker,
-            )
-            self.after_pretrain.notify(after_pretrain_event_args)
-            self.save(execution_context=kwargs,
-                      keep_device=keep_device,
-                      stage=SaveStage.BEST,
-                      )
+                with self._training_timer.pause():
+                    # Save the state
+                    if state is not None:
+                        _state = TensorUtil.apply_deep(
+                            state, lambda x: x.detach().cpu())
+                        os.makedirs(os.path.dirname(
+                            self.pretrain_state_path), exist_ok=True)
+                        torch.save(_state, self.pretrain_state_path)
+                        logger.info(
+                            f"Pretrain state saved to {self.pretrain_state_path}")
+                    else:
+                        logger.info(
+                            "No pretrain state returned, not saving...")
+
+            with self._training_timer.pause():
+                after_pretrain_event_args = TorchModelStepEventArgs(
+                    model=model,
+                    model_args=self.model_args,
+                    mode=LearningMode.TRAINING,
+                    scope=LearningScope.EPOCH,
+                    remaining_iterations=0,
+                    tracker=self.tracker,
+                )
+                self.after_pretrain.notify(after_pretrain_event_args)
+                self.save(execution_context=kwargs,
+                          keep_device=keep_device,
+                          stage=SaveStage.BEST,
+                          )
 
             logger.info("Pretraining done!")
 
     def train(self, num_epochs=10, keep_device: bool = True, **kwargs):
-        training_timer = None
-        dataset = self.training_dataset
-        if dataset is None:
-            raise ValueError(
-                f"No dataset was provided, cant train!")
+        with Timer() as training_timer:
+            self._training_timer = training_timer
+            dataset = self.training_dataset
+            if dataset is None:
+                raise ValueError(
+                    f"No dataset was provided, cant train!")
 
-        # Initialize / get the model
-        model: torch.nn.Module = self._get_prepared_model()
+            # Initialize / get the model
+            model: torch.nn.Module = self._get_prepared_model()
 
-        # Getting / Creating optimizer
-        optimizer = self._get_optimizer(model)
+            # Getting / Creating optimizer
+            optimizer = self._get_optimizer(model)
 
-        # The loss function
-        criterion = self.loss
+            # The loss function
+            criterion = self.loss
 
-        if isinstance(criterion, TrackerLoss):
-            criterion: TrackerLoss
-            criterion.tracker = self.tracker
-            criterion.logger = self.logger
-            criterion._recursive_set_name_path()
+            if isinstance(criterion, TrackerLoss):
+                criterion: TrackerLoss
+                criterion.tracker = self.tracker
+                criterion.logger = self.logger
+                criterion._recursive_set_name_path()
 
-        # Init data
-        train_set, test_set = self._get_test_train_set(dataset)
-        dataset_config = dataset.get_config()
-        self.dataset_config = dataset_config
+            # Init data
+            train_set, test_set = self._get_test_train_set(dataset)
+            dataset_config = dataset.get_config()
+            self.dataset_config = dataset_config
 
-        # Init Metric tracker
-        tracker = self.tracker
-        if len(train_set) > 0:
-            tracker.create_metric(
-                criterion, is_primary=True, is_epoch=True, is_training=True, handle_exists="ignore")
-            tracker.create_metric(
-                criterion, is_primary=True, is_epoch=False, is_training=True, handle_exists="ignore")
-        if len(test_set) > 0:
-            tracker.create_metric(
-                criterion, is_primary=True, is_epoch=True, is_training=False, handle_exists="ignore")
-            tracker.create_metric(
-                criterion, is_primary=True, is_epoch=False, is_training=False, handle_exists="ignore")
+            # Init Metric tracker
+            tracker = self.tracker
+            if len(train_set) > 0:
+                tracker.create_metric(
+                    criterion, is_primary=True, is_epoch=True, is_training=True, handle_exists="ignore")
+                tracker.create_metric(
+                    criterion, is_primary=True, is_epoch=False, is_training=True, handle_exists="ignore")
+            if len(test_set) > 0:
+                tracker.create_metric(
+                    criterion, is_primary=True, is_epoch=True, is_training=False, handle_exists="ignore")
+                tracker.create_metric(
+                    criterion, is_primary=True, is_epoch=False, is_training=False, handle_exists="ignore")
 
-        # Main Metric
-        self._create_tracker_metrics_batch(train_set, test_set)
-        self._create_tracker_metrics_epoch(train_set, test_set)
+            # Main Metric
+            self._create_tracker_metrics_batch(train_set, test_set)
+            self._create_tracker_metrics_epoch(train_set, test_set)
 
-        tracker.extend_epoch_metrics(num_epochs, MetricMode.TRAINING)
-        tracker.extend_epoch_metrics(num_epochs, MetricMode.VALIDATION)
+            tracker.extend_epoch_metrics(num_epochs, MetricMode.TRAINING)
+            tracker.extend_epoch_metrics(num_epochs, MetricMode.VALIDATION)
 
-        # Whether to track progress
-        use_progress_bar: bool = kwargs.get("tqdm", self.progress_bar)
+            # Whether to track progress
+            use_progress_bar: bool = kwargs.get("tqdm", self.progress_bar)
 
-        # Pretraining if wanted:
-        self._pretrain(model, train_set=train_set, test_set=test_set,
-                       use_progress_bar=use_progress_bar, keep_device=keep_device, **kwargs)
+            # Pretraining if wanted:
+            self._pretrain(model, train_set=train_set, test_set=test_set,
+                           use_progress_bar=use_progress_bar, keep_device=keep_device, **kwargs)
 
-        if (self.pretrain_only == True or (self.pretrain_only is None and kwargs.get("pretrain_only", False))):
-            logger.info("Pretraining done, exiting...")
-            return
+            if (self.pretrain_only == True or (self.pretrain_only is None and kwargs.get("pretrain_only", False))):
+                logger.info("Pretraining done, exiting...")
+                return
 
-        epoch_progress_bar: Optional[tqdm] = None
-        ep = range(num_epochs)
+            epoch_progress_bar: Optional[tqdm] = None
+            ep = range(num_epochs)
 
-        if use_progress_bar:
-            if self.__epoch_progress_bar__ is not None:
-                epoch_progress_bar = self.__epoch_progress_bar__
-                epoch_progress_bar.reset(
-                    total=len(ep)
-                )
-            else:
-                epoch_progress_bar = tqdm(total=len(ep))
-                self.__epoch_progress_bar__ = epoch_progress_bar
+            if use_progress_bar:
+                if self.__epoch_progress_bar__ is not None:
+                    epoch_progress_bar = self.__epoch_progress_bar__
+                    epoch_progress_bar.reset(
+                        total=len(ep)
+                    )
+                else:
+                    epoch_progress_bar = tqdm(total=len(ep))
+                    self.__epoch_progress_bar__ = epoch_progress_bar
 
-        batch_progress_bar: Optional[tqdm] = None
-        if use_progress_bar:
-            if self.__batch_progress_bar__ is not None:
-                batch_progress_bar = self.__batch_progress_bar__
+            batch_progress_bar: Optional[tqdm] = None
+            if use_progress_bar:
+                if self.__batch_progress_bar__ is not None:
+                    batch_progress_bar = self.__batch_progress_bar__
 
-        ts_event_args = TorchTrainingStartedEventArgs(
-            model=model,
-            model_args=self.model_args,
-            optimizer=optimizer,
-            loss_name=self.get_loss_name(),
-            tracker=tracker,
-            remaining_iterations=num_epochs,
-            dataset_config=dataset_config,
-        )
-        self.training_starts.notify(ts_event_args)
+            ts_event_args = TorchTrainingStartedEventArgs(
+                model=model,
+                model_args=self.model_args,
+                optimizer=optimizer,
+                loss_name=self.get_loss_name(),
+                tracker=tracker,
+                remaining_iterations=num_epochs,
+                dataset_config=dataset_config,
+            )
+            self.training_starts.notify(ts_event_args)
 
-        training_err: Exception = None
+            training_err: Exception = None
 
-        try:
-            with Timer() as t:
-                training_timer = t
+            try:
                 for epoch in ep:
                     stop = False
                     try:
@@ -739,35 +751,46 @@ class TorchAgent(Agent):
                             self.__batch_progress_bar__ = batch_progress_bar
                     if stop:
                         break
-        except (Exception, KeyboardInterrupt) as err:
-            logger.error(
-                f"Error in training: {type(err).__name__}, Exit gracefully and propagate...")
-            training_err = err
-            raise
-        finally:
-            # Trimming metrics.
-            tracker.trim_metrics()
+            except (Exception, KeyboardInterrupt) as err:
+                logger.error(
+                    f"Error in training: {type(err).__name__}, Exit gracefully and propagate...")
+                training_err = err
+                raise
+            finally:
+                training_timer.stop()
 
-            # Moving model to cpu
-            if not keep_device and model is not None:
-                model.to('cpu')
+                tracker.epoch_metric("training_time",
+                                     value=self._training_timer.elapsed().total_seconds(),
+                                     in_training=True,
+                                     is_primary=False)
+                tracker.epoch_metric("training_time_total", value=self._training_timer.elapsed(total=True).total_seconds(),
+                                     in_training=True,
+                                     is_primary=False)
 
-            self.save(execution_context=kwargs, is_training_done=True,
-                      occurred_error=training_err, stage=SaveStage.END)
+                # Trimming metrics.
+                tracker.trim_metrics()
 
-            if not keep_device and self.device != "cpu":
-                # Destrop optimizer, because its invalid now
-                self._free_optimizer()
-            if batch_progress_bar:
-                batch_progress_bar.close()
-            logger.info(
-                f'Training of agent {self.date_name} complete in {strfdelta(training_timer.duration, "%D days %H:%M:%S")}')
-            best = tracker.get_best_performance()
-            if best:
+                # Moving model to cpu
+                if not keep_device and model is not None:
+                    model.to('cpu')
+
+                self.save(execution_context=kwargs, is_training_done=True,
+                          occurred_error=training_err, stage=SaveStage.END)
+
+                if not keep_device and self.device != "cpu":
+                    # Destrop optimizer, because its invalid now
+                    self._free_optimizer()
+                if batch_progress_bar:
+                    batch_progress_bar.close()
                 logger.info(
-                    f'Best model: {self.name}_Epoch_{best.step} Accuracy: {best.value:.3e} Tag: {best.tag}')
-            self.training_finished.notify(TrainingFinishedEventArgs(
-                training_error_occurred=training_err))
+                    f'Training of agent {self.date_name} complete in {strfdelta(training_timer.total_duration, "%D days %H:%M:%S")}, Time exlc. hooks: {strfdelta(training_timer.duration, "%D days %H:%M:%S")}')
+
+                best = tracker.get_best_performance()
+                if best:
+                    logger.info(
+                        f'Best model: {self.name}_Epoch_{best.step} Accuracy: {best.value:.3e} Tag: {best.tag}')
+                self.training_finished.notify(TrainingFinishedEventArgs(
+                    training_error_occurred=training_err))
 
     def _get_model(self) -> torch.nn.Module:
         """Creates the model if it does not exists.

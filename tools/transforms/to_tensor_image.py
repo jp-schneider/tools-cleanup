@@ -24,7 +24,8 @@ class ToTensorImage(ToTensor):
     def __init__(self, output_dtype: Optional[torch.dtype] = None, output_device: Optional[Union[str, torch.device]] = None):
         super().__init__()
         self.output_dtype = output_dtype
-        self.output_device = parse_device(output_device, False) if output_device is not None else None
+        self.output_device = parse_device(
+            output_device, False) if output_device is not None else None
 
     def transform(self, x: Union[NUMERICAL_TYPE, VEC_TYPE], **kwargs) -> torch.Tensor:
         is_tensor = isinstance(x, torch.Tensor)
@@ -52,8 +53,8 @@ class ToTensorImage(ToTensor):
                 logger.warning(
                     f"Converting float image to uint8, but values are not in [0, 1]: {x.min()}, {x.max()}")
             return (x * 255).to(torch.uint8)
-        elif self.output_dtype in FLOAT_SET and x.dtype == torch.uint8:
-            return x.to(self.output_dtype) / 255
+        elif self.output_dtype in FLOAT_SET and x.dtype in {torch.uint8, torch.uint16, torch.uint32, torch.uint64}:
+            return x.to(self.output_dtype) / (2**(x.dtype.itemsize * 8) - 1)
         elif self.output_dtype in FLOAT_SET and x.dtype in FLOAT_SET:
             return x.to(self.output_dtype)
         else:
