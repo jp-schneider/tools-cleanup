@@ -199,6 +199,8 @@ def value_mask_to_channel_masks(
     mask: VEC_TYPE,
     ignore_value: Optional[Union[int, List[int]]] = None,
     background_value: int = 0,
+    progress_bar: bool = False,
+    progress_factory: Optional[ProgressFactory] = None
 ) -> Tuple[np.ndarray, np.ndarray]:
     """Converts a value mask, where objects are identified as different values, to a channel mask, where each channel represents a different object.
 
@@ -237,8 +239,17 @@ def value_mask_to_channel_masks(
     _valid_classes = np.stack(valid_values)
     channel_mask = np.zeros(mask.shape + (len(_valid_classes),), dtype=bool)
 
+    bar = None
+    if progress_bar:
+        if progress_factory is None:
+            progress_factory = ProgressFactory.global_instance()
+        bar = progress_factory.bar(total=len(_valid_classes), desc="Converting Value to Channel Masks", is_reusable=True, tag="VAL2CHAN")
+
     for i, c in enumerate(_valid_classes):
         channel_mask[..., i] = (mask == c)
+        if bar is not None:
+            bar.update(1)
+
     return channel_mask, _valid_classes
 
 
@@ -955,6 +966,8 @@ def load_channel_masks(
 
 def merge_value_masks_to_channel_mask(
     value_masks: List[np.ndarray],
+    progress_bar: bool = False,
+    progress_factory: Optional[ProgressFactory] = None
 ) -> Tuple[np.ndarray, np.ndarray]:
     """Merges a list of value masks to a single channel mask.
 
@@ -970,7 +983,20 @@ def merge_value_masks_to_channel_mask(
         2. The object values of shape (C, 2) (y, x) where y is the index in the value_masks list, and x is the object value / index in the mask stack.
             For the subindex in value mask, order the elements when filterd by the object value (y) in a increasing order.
     """
-    comb = [value_mask_to_channel_masks(x) for x in value_masks]
+
+    bar = None
+    comb = []
+    if progress_bar:
+        if progress_factory is None:
+            progress_factory = ProgressFactory.global_instance()
+        bar = progress_factory.bar(total=len(value_masks), desc="Converting overlapping value masks to channel masks",
+                                   tag="MERGING_MASKS",
+                                   is_reusable=True)
+    for x in value_masks:
+        comb.append(value_mask_to_channel_masks(x, progress_bar=progress_bar, progress_factory=progress_factory))
+        if progress_bar:
+            bar.update(1)
+    
     gids = [x[1] for x in comb]
     lgids = []
     for i, x in enumerate(gids):
