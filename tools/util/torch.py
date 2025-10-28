@@ -502,14 +502,14 @@ def batched_generator_exec(
 
 
 def batched_exec(*input,
-                 func: Callable[[torch.Tensor], torch.Tensor],
+                 func: Callable[[torch.Tensor], Union[torch.Tensor, Tuple[torch.Tensor, ...]]],
                  batch_size: int,
                  progress_bar: bool = False,
                  pf: Optional[ProgressFactory] = None,
                  free_memory: bool = False,
                  progress_bar_delay: float = 2.,
                  **kwargs
-                 ) -> torch.Tensor:
+                 ) -> Union[torch.Tensor, Tuple[torch.Tensor, ...]]:
     """Execute a function in batches.
 
     Parameters
@@ -518,8 +518,8 @@ def batched_exec(*input,
         Should be a list of tensors which have a common batch dimension.
         (B, ...) this is the first dimension and will be used to batch the execution.
 
-    func : Callable[[torch.Tensor], torch.Tensor]
-        Function to execute. Should take a tensors as input and return a tensor as output.
+    func : Callable[[torch.Tensor], Union[torch.Tensor, Tuple[torch.Tensor, ...]]]
+        Function to execute. Should take a tensors as input and return a tensor as output, or a tuple of tensors.
 
     batch_size : int
         The batch size to use for the execution.
@@ -539,11 +539,19 @@ def batched_exec(*input,
 
     Returns
     -------
-    torch.Tensor
+    Union[torch.Tensor, Tuple[torch.Tensor, ...]]
         Concatenated results of the function execution.
+        Returns a single tensor if the function returns a single tensor,
+        otherwise returns a tuple of tensors.
+        The order of the output tensors corresponds to the order of the outputs from the function.
+
+        Size of the output tensors will be (B, ...) where B is the batch size of the input tensors.
     """
     import gc
-    results = []
+    results = dict()
+    num_outputs = None
+    is_tuple = False
+
     if progress_bar:
         if pf is None:
             pf = ProgressFactory()
@@ -569,13 +577,28 @@ def batched_exec(*input,
     for s in slices:
         _ins = [i[s] for i in input]
         r = func(*_ins, **kwargs)
-        results.append(r)
+        if isinstance(r, tuple):
+            if num_outputs is None:
+                num_outputs = len(r)
+                is_tuple = True
+        else:
+            if num_outputs is None:
+                num_outputs = 1
+            r = (r,)
+        for i in range(num_outputs):
+            if i not in results:
+                results[i] = []
+            results[i].append(r[i])
+
         if free_memory:
             gc.collect()
             torch.cuda.empty_cache()
         if progress_bar:
             bar.update(1)
-    return torch.cat(results, dim=0)
+    outs = tuple(torch.cat(results[i], dim=0) for i in range(num_outputs))
+    if not is_tuple:
+        return outs[0]
+    return outs
 
 
 def index_of_first(values: torch.Tensor, search: torch.Tensor) -> torch.Tensor:

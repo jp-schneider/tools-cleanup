@@ -43,7 +43,7 @@ class ConfigRunner(AbstractRunner):
         self.config.used_runner_type = class_name(self)
         self.__saved_config__ = None
 
-    def store_config(self, path: Optional[str] = None, **kwargs) -> str:
+    def store_config(self, path: Optional[str] = None, override: bool = False, **kwargs) -> str:
         """Stores the config of the runner to a file in the agent folder.
 
         Parameters
@@ -51,6 +51,9 @@ class ConfigRunner(AbstractRunner):
         path : Optional[str], optional
             Path where the config should be stored, by default None
             If None, the config is not stored to a file.
+
+        override : bool, optional
+            Whether to override an existing config file. Defaults to False.
 
         Returns
         -------
@@ -60,9 +63,8 @@ class ConfigRunner(AbstractRunner):
         if path is not None:
             path = os.path.join(
                 path, f"init_cfg_{to_snake_case(type(self.config).__name__)}.yaml")
-            path = numerated_file_name(path)
             path = self.config.save_to_file(
-                path, no_uuid=True, no_large_data=True)
+                path, no_uuid=True, no_large_data=True, override=override)
             with open(path, 'r') as f:
                 self.__saved_config__ = f.read()
             return path
