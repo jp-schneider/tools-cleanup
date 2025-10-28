@@ -226,6 +226,8 @@ def _compose_transformation_matrix(position: torch.Tensor, orientation: torch.Te
     torch.Tensor
         The composed transformation matrix.
     """
+    position, org_pos = flatten_batch_dims(position, -2)
+    orientation, org_orientation = flatten_batch_dims(orientation, -3)
     shp = position.shape[:-1]
     if len(shp) == 0:
         mat = torch.eye(4, dtype=orientation.dtype, device=orientation.device)
@@ -234,6 +236,7 @@ def _compose_transformation_matrix(position: torch.Tensor, orientation: torch.Te
                         device=orientation.device).repeat(shp[0], 1, 1)
     mat[..., :3, :3] = orientation
     mat[..., :3, 3] = position[..., :3]
+    mat = unflatten_batch_dims(mat, org_pos)
     return mat
 
 
