@@ -13,7 +13,7 @@ class ExperimentConfig(OutputConfig):
     name_experiment: str = field(default="Test")
     """Name of the experiment / agent. Agent will create a subdirectory for each experiment. Default is "Test"."""
 
-    runs_path: str = field(default=os.path.abspath("./runs/"))
+    runs_path: str = field(default_factory=lambda: os.path.abspath("./runs/"))
     """Base directory where the runs are stored. Agent will create a subdirectory for each run. Default is ./runs/."""
 
     run_script_path: str = field(default=None)
