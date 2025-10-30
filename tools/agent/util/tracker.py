@@ -685,7 +685,7 @@ class Tracker():
         return values
 
     def save_to_directory(self,
-                          directory: str, Fixes
+                          directory: str,
                           override: bool = True,
                           make_dirs: bool = True, **kwargs) -> str:
         """Saves the tracker to a directory.
