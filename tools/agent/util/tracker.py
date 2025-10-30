@@ -685,7 +685,7 @@ class Tracker():
         return values
 
     def save_to_directory(self,
-                          directory: str,
+                          directory: str, Fixes
                           override: bool = True,
                           make_dirs: bool = True, **kwargs) -> str:
         """Saves the tracker to a directory.
@@ -701,6 +701,8 @@ class Tracker():
             "{tracker_path}", dict(tracker_path=directory))
         values = self._save_to_directory(
             directory=directory, override=True, make_dirs=make_dirs, **kwargs)
+        if not os.path.exists(directory) and make_dirs:
+            os.makedirs(directory, exist_ok=True)
         path = os.path.join(directory, "tracker.json")
         JsonConvertible.convert_to_file(values,
                                         override=override,
