@@ -219,3 +219,61 @@ def log_dataframe(df: "pd.DataFrame",
     tbls = log_table(rdf.table, width=get_console_width())
     logger.log(level, (message.markup if message is not None else Text()) + tbls,
                extra={"markup": True, "highlighter": NullHighlighter()}, stacklevel=2)
+
+
+def log_only_to_handler(logger: logging.Logger, handler: logging.Handler, level: int, msg: str, *args, exc_info=None, extra=None, stack_info=False, stacklevel=1) -> None:
+    """
+    Logs a message only to a specific handler.
+
+    Parameters
+    ----------
+    logger : logging.Logger
+        The logger to use.
+    handler : logging.Handler
+        The handler to log to.
+    level : int
+        The logging level.
+    msg : str
+        The message to log.
+    """
+    record = _make_log_record(logger, level, msg, *args, exc_info=exc_info,
+                              extra=extra, stack_info=stack_info, stacklevel=stacklevel)
+    handler.handle(record)
+
+
+def _make_log_record(logger: logging.Logger, level: int, msg: str, *args, exc_info=None, extra=None, stack_info=False, stacklevel=1) -> logging.LogRecord:
+    """
+    Low-level logging routine which creates a LogRecord.
+
+    Parameters
+    ----------
+    logger : logging.Logger
+        The logger to use.
+    level : int
+        The logging level.
+    msg : str
+        The message to log.
+    Returns
+    -------
+    logging.LogRecord
+        The created LogRecord.
+    """
+    sinfo = None
+    if logging._srcfile:
+        # IronPython doesn't track Python frames, so findCaller raises an
+        # exception on some versions of IronPython. We trap it here so that
+        # IronPython can use logging.
+        try:
+            fn, lno, func, sinfo = logger.findCaller(stack_info, stacklevel)
+        except ValueError:  # pragma: no cover
+            fn, lno, func = "(unknown file)", 0, "(unknown function)"
+    else:  # pragma: no cover
+        fn, lno, func = "(unknown file)", 0, "(unknown function)"
+    if exc_info:
+        if isinstance(exc_info, BaseException):
+            exc_info = (type(exc_info), exc_info, exc_info.__traceback__)
+        elif not isinstance(exc_info, tuple):
+            exc_info = sys.exc_info()
+    record = logger.makeRecord(logger.name, level, fn, lno, msg, args,
+                               exc_info, func, extra, sinfo)
+    return record

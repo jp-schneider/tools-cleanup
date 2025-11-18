@@ -1,9 +1,11 @@
+from logging import Handler
+import logging
 from traceback import FrameSummary
 from tools.config.output_config import OutputConfig
 from tools.config.experiment_output_config import ExperimentOutputConfig
-from typing import Optional
+from typing import Optional, Tuple
 import os
-from tools.logger.logging import logger
+from tools.logger.logging import logger, log_only_to_handler
 from tools.util.format import get_frame_summary
 import pandas as pd
 from tools.util.path_tools import read_directory
@@ -11,8 +13,8 @@ from datetime import datetime
 from dataclasses import dataclass, field
 import re
 from tools.util.format import strfdelta
-from tools.logger.logging import logger
-
+import sys
+import io
 EXCEPTION_ERROR_CODES = {
     KeyboardInterrupt: 130,
     SyntaxError: 2,
@@ -155,6 +157,94 @@ def write_running(config: OutputConfig, start_time: Optional[datetime] = None, m
     return path
 
 
+def register_log_file(config: OutputConfig,
+                      file_path: Optional[str] = "log/log_{year}_{month}_{day}__{hour}_{minute}_{second}__{pid}_{script}.log",
+                      use_html: bool = False
+
+                      ) -> Optional[Handler]:
+    """Registers a log file in the output folder.
+
+    Parameters
+    ----------
+    config : OutputConfig
+        Config containing the output folder.
+    file_path : Optional[str], optional
+        Path to the log file, by default "log/log_{year}_{month}_{day}__{hour}_{minute}_{second}__{pid}_{sys.executable}.log"
+    use_html : bool, optional
+        Whether to use HTML formatting for the log file, by default False.
+        If True, the log file will be saved as .html, otherwise as .log.
+        If html is used, colors and styles will be preserved. If plain text is used, colors and styles will be removed, while basic formatting will be kept.
+    Returns
+    -------
+    Optional[Handler]
+        The log handler (if rich logging is used otherwise none).
+    """
+    from tools.util.format import parse_format_string
+    handler = None
+    full_path = None
+    if config is None or not hasattr(config, "output_folder"):
+        return None
+    if config.output_folder is None:
+        logger.warning("Output folder is None, can not register log file.")
+        return handler
+    try:
+        now = datetime.now().astimezone()
+        if file_path is None:
+            file_path = "log/log_{year}_{month}_{day}__{hour}_{minute}_{second}__{pid}_{sys.executable}.log"
+        items = dict(
+            year=now.year,
+            month=f"{now.month:02d}",
+            day=f"{now.day:02d}",
+            hour=f"{now.hour:02d}",
+            minute=f"{now.minute:02d}",
+            second=f"{now.second:02d}",
+            pid=os.getpid(),
+            script=os.path.basename(sys.argv[0]).replace(".", "_")
+        )
+        fp = parse_format_string(
+            file_path, [config], additional_variables=items)[0]
+        full_path = os.path.join(config.output_folder, fp)
+        # Create directory if it does not exist
+        dir_path = os.path.dirname(full_path)
+        if not os.path.exists(dir_path):
+            os.makedirs(dir_path)
+        # Add file handler to the logger
+        from tools.logger.logging import get_console
+        try:
+            from tools.rich.rich_file_handler import RichFileHandler
+        except ImportError:
+            RichFileHandler = None
+        if RichFileHandler is None:
+            handler = logging.FileHandler(full_path)
+            handler.setFormatter(logging.Formatter(
+                '%(asctime)s.%(msecs)03d %(levelname)-8s [%(filename)s:%(lineno)d] %(message)s', datefmt='%Y-%m-%d %H:%M:%S'))
+        else:
+            if use_html:
+                full_path = full_path.replace(".log", ".html")
+            handler = RichFileHandler(
+                filename=full_path, rich_tracebacks=True, log_time_format="%Y-%m-%d %H:%M:%S")
+        logger.addHandler(handler)
+        return handler
+    except Exception as err:
+        logger.exception(f"Failed to register log file: {err}")
+        return handler
+
+
+def unregister_log_file(handler: Handler) -> None:
+    """Unregisters a log file from the logger.
+
+    Parameters
+    ----------
+    log_file : str
+        Path to the log file.
+    """
+    from tools.logger.logging import logger
+    handlers = logger.handlers
+    if handler in handlers:
+        logger.removeHandler(handler)
+        handler.close()
+
+
 def load_exit_codes(directory: str) -> pd.DataFrame:
     """Loads the path to all exit code files in a given directory.
 
@@ -202,6 +292,8 @@ class ScriptExecution:
     def __init__(self,
                  config: OutputConfig,
                  log_on_keyboard_interrupt: bool = False,
+                 create_log_file: bool = True,
+                 use_html_log: bool = False
                  ):
         self.config = config
         self.scope = get_frame_summary(1)
@@ -209,12 +301,26 @@ class ScriptExecution:
         self.start_date = None
         self.end_date = None
         self.running_file_path = None
+        self.create_log_file = create_log_file
+        self.log_handler = None
+        self.use_html_log = use_html_log
 
     def __enter__(self):
         self.start_date = datetime.now().astimezone()
         # Write running message to the output folder
         self.running_file_path = write_running(
             self.config, start_time=self.start_date)
+        if self.create_log_file:
+            self.log_handler = register_log_file(
+                self.config, use_html=self.use_html_log)
+            # Create entry log message
+            log_only_to_handler(logger, handler=self.log_handler, level=logging.INFO,
+                                msg=f"Script Execution Context started for {self.scope.filename} at {self.start_date}")
+            log_only_to_handler(logger, handler=self.log_handler, level=logging.INFO,
+                                msg=f"Invocation:{os.linesep}{sys.executable} {' '.join(sys.argv)}")
+            yaml = self.config.to_yaml(no_uuid=True, no_large_data=True)
+            log_only_to_handler(logger, handler=self.log_handler,
+                                level=logging.INFO, msg=f"Configuration:{os.linesep}{yaml}")
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
@@ -228,7 +334,7 @@ class ScriptExecution:
                 logger.exception(
                     f"Raised {type(exc_val).__name__} in {filename}, exiting...")
                 logger.info(
-                    f"Exception occured, Context Terminated with Exit Code: {exit_code}")
+                    f"Exception occured, context terminated with exit code: {exit_code}")
         else:
             # No error occurred
             logger.info(
@@ -255,4 +361,9 @@ class ScriptExecution:
                     wandb.finish(exit_code=exit_code)
         except Exception as e:
             logger.warning(f"Failed to finish wandb run: {e}")
+
+        # Exit the file logging
+        if self.create_log_file or (self.log_handler is not None):
+            unregister_log_file(self.log_handler)
+            self.log_handler = None
         return False
