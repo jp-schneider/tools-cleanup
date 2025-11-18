@@ -889,7 +889,9 @@ def plot_as_image(data: VEC_TYPE,
                   gamma: Union[_DEFAULT, float] = DEFAULT,
                   quantile_clipping: bool = False,
                   quantile_clipping_range: Tuple[float, float] = (
-                      0.0005, 0.9995)
+                      0.0005, 0.9995),
+                  colorbar_hook: Optional[Callable[[
+                      Axes, int, int], None]] = None
                   ) -> AxesImage:
     """Plots a 2D (complex) image with matplotib. Supports numpy arrays and torch tensors.
 
@@ -987,6 +989,10 @@ def plot_as_image(data: VEC_TYPE,
         Quantile range for the quantile clipping, by default (0.0005, 0.9995)
         First value is the lower quantile, second value is the upper quantile.
         Determined on a per-image basis.
+
+    colorbar_hook : Optional[Callable[[Axes, int, int], None]], optional
+        Optional hook function which is called after the colorbar is created.
+        The function receives the colorbar axes, the row and column index of the image as input.
 
     Returns
     -------
@@ -1390,8 +1396,10 @@ def plot_as_image(data: VEC_TYPE,
                         return cft.format(x)
                 divider = make_axes_locatable(ax)
                 cax = divider.append_axes('right', size='5%', pad=0.05)
-                fig.colorbar(ax.get_images()[0], cax=cax,
-                             format=_cbar_format, orientation='vertical')
+                cbar = fig.colorbar(
+                    ax.get_images()[0], cax=cax, format=_cbar_format, orientation='vertical')
+                if colorbar_hook is not None:
+                    colorbar_hook(cax, row, col)
 
             if not ticks:
                 ax.get_xaxis().set_ticks([])
