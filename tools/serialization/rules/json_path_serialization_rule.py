@@ -27,7 +27,7 @@ class PathValueWrapper(JsonConvertible):
         if convert_path_to_cwd_relative:
             try:
                 path_str = relpath(os.getcwd(), path_str,
-                                   is_from_file=False, is_to_file=not value.is_dir())
+                                   is_from_file=False, is_to_file=not value.is_dir(), warn_on_different_drives=False)
             except ValueError as e:
                 if "path is on mount" in str(e):
                     # Use absolute path if path is on mount

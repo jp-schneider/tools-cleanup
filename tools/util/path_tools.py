@@ -47,7 +47,7 @@ def is_headless() -> bool:
         return str_to_bool(str(is_headless))
 
 
-def relpath(from_: str, to: str, is_from_file: bool = True, is_to_file: bool = True) -> str:
+def relpath(from_: str, to: str, is_from_file: bool = True, is_to_file: bool = True, warn_on_different_drives: bool = True) -> str:
     """Returns a relative path from from_ to to. Where _from and _to can be either a file or a directory.
     Simple wrapper around os.path.relpath which also handles files.
 
@@ -69,7 +69,18 @@ def relpath(from_: str, to: str, is_from_file: bool = True, is_to_file: bool = T
     """
     _to_dir = os.path.dirname(to) if is_to_file else to
     _from_dir = os.path.dirname(from_) if is_from_file else from_
-    path = os.path.relpath(_to_dir, _from_dir)
+    try:
+        path = os.path.relpath(_to_dir, _from_dir)
+    except ValueError as e:
+        if "path is on mount" in str(e):
+            # Different drives on windows, return absolute path
+            path = _to_dir
+            # Warn user
+            if warn_on_different_drives:
+                logger.warning(
+                    f"Could not compute relative path from '{from_}' to '{to}' as they are on different drives. Returning absolute path.")
+        else:
+            raise e from e
     if is_to_file:
         return os.path.join(path, os.path.basename(to))
     else:
@@ -182,7 +193,10 @@ def read_directory(
                 for key, value in item.items():
                     if key in parser:
                         try:
-                            item[key] = parser[key](value)
+                            if value is None:
+                                item[key] = None
+                            else:
+                                item[key] = parser[key](value)
                         except Exception as err:
                             raise ValueError(
                                 f"Could not parse value '{value}' for key '{key}' with parser '{parser[key]}' within File '{file}' using the pattern '{pattern}'."

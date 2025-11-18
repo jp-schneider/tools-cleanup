@@ -2322,6 +2322,11 @@ def plot_mask(image: VEC_TYPE,
         if label is not None:
             patches.append(mpatches.Patch(color=colors[i], label=label))
 
+    # If all background, make and darkening background is != 0
+    if np.all(background_mask) and darkening_background > 0:
+        # Make one pixel foreground to show the image
+        background_mask[0, 0] = 0
+
     ax.imshow(background_mask, cmap='alpha_binary',
               alpha=darkening_background, label='')
 

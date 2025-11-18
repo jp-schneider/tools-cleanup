@@ -22,7 +22,21 @@ class JsonPickleValueWrapper(JsonConvertible):
         obj = as_dict.pop('object', None)
         if obj is not None:
             # Serialize the object
-            ser = jsonpickle.dumps(obj)
+            trial = 0
+            success = False
+            while not success and trial < 3:
+                try:
+                    trial += 1
+                    ser = jsonpickle.dumps(obj)
+                    obj_dict = json.loads(ser)
+                    success = True
+                except RuntimeError as e:
+                    if "dictionary changed size during iteration" in str(e) and trial < 3:
+                        pass
+                    elif trial >= 3:
+                        raise e
+                except Exception as e:
+                    raise e
             obj_dict = json.loads(ser)
             as_dict['object'] = obj_dict
 
