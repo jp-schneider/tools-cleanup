@@ -42,6 +42,7 @@ import matplotlib.patches as mpatches
 import matplotlib.lines as mlines  # For creating proxy Line2D objects
 from matplotlib import font_manager
 from matplotlib.font_manager import FontProperties
+import matplotlib as mpl
 
 LegendArtist = Union[mpatches.Patch, mlines.Line2D]
 
@@ -517,7 +518,7 @@ def compute_ratio(ratio_or_img: Optional[Union[float, np.ndarray]] = None) -> fl
 def get_mpl_figure(
         rows: int = 1,
         cols: int = 1,
-        size: float = 5,
+        size: Optional[float] = 5,
         ratio_or_img: Optional[Union[float, np.ndarray]] = None,
         tight: bool = False,
         subplot_kw: Optional[Dict[str, Any]] = None,
@@ -533,7 +534,7 @@ def get_mpl_figure(
         Number of rows for the figure, by default 1
     cols : int, optional
         Number of columns, by default 1
-    size : float, optional
+    size : Optional[float], optional
         Size of the axes in inches, by default 5
     ratio_or_img : float | np.ndarray, optional
         Ratio of Y w.r.t X  (Height / Width) can also be an Image / np.ndarray which will compute it from the axis, by default 1.0
@@ -556,6 +557,8 @@ def get_mpl_figure(
     """
     ratio_x = 1
     ratio_y = compute_ratio(ratio_or_img)
+    if size is None:
+        size = 5
     axes = []
 
     if tight:
@@ -891,7 +894,7 @@ def plot_as_image(data: VEC_TYPE,
                   quantile_clipping_range: Tuple[float, float] = (
                       0.0005, 0.9995),
                   colorbar_hook: Optional[Callable[[
-                      Axes, int, int], None]] = None
+                      mpl.colorbar.Colorbar, Axes, int, int], None]] = None
                   ) -> AxesImage:
     """Plots a 2D (complex) image with matplotib. Supports numpy arrays and torch tensors.
 
@@ -1295,7 +1298,7 @@ def plot_as_image(data: VEC_TYPE,
                 else:
                     vmax = op_only_finite(_image, np.max)
 
-            if quantile_clipped:
+            if quantile_clipped and _title is not None:
                 def floor_wrap(n):
                     return "\lfloor " + str(n) + "\\rceil_{" + str(quantile_clipping_range[0]) + "}^{" + str(quantile_clipping_range[1]) + "}"
                 _title = floor_wrap(_title)
@@ -1399,7 +1402,7 @@ def plot_as_image(data: VEC_TYPE,
                 cbar = fig.colorbar(
                     ax.get_images()[0], cax=cax, format=_cbar_format, orientation='vertical')
                 if colorbar_hook is not None:
-                    colorbar_hook(cax, row, col)
+                    colorbar_hook(cbar, cax, row, col)
 
             if not ticks:
                 ax.get_xaxis().set_ticks([])

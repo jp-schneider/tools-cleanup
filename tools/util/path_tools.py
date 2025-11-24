@@ -7,6 +7,7 @@ import subprocess
 from typing import Any, Callable, Dict, List, Optional, Set, Union
 from tools.util.typing import _NOTSET, NOTSET, _DEFAULT, DEFAULT
 from tools.logger.logging import logger
+from tools.util.format import parsed_regex_matcher
 
 VSCODE_AVAILABLE = NOTSET
 
@@ -183,27 +184,13 @@ def read_directory(
         logger.debug(f"Non existing path: {path}")
         return res
     for file in os.listdir(path):
-        if pattern[0] == "^" and pattern[-1] == "$":
-            match = regex.fullmatch(file)
+        parsed_elements = parsed_regex_matcher(regex, file, parser)
+        if parsed_elements is None:
+            continue
         else:
-            match = regex.search(file)
-        if match:
-            item = dict(match.groupdict())
-            if parser is not None:
-                for key, value in item.items():
-                    if key in parser:
-                        try:
-                            if value is None:
-                                item[key] = None
-                            else:
-                                item[key] = parser[key](value)
-                        except Exception as err:
-                            raise ValueError(
-                                f"Could not parse value '{value}' for key '{key}' with parser '{parser[key]}' within File '{file}' using the pattern '{pattern}'."
-                            ) from err
             _p = format_os_independent(os.path.join(path, file))
-            item[path_key] = _p
-            res.append(item)
+            parsed_elements[path_key] = _p
+            res.append(parsed_elements)
     return res
 
 

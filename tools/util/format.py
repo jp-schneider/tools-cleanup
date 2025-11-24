@@ -12,7 +12,6 @@ from pandas import Series
 from tools.util.typing import VEC_TYPE
 from tools.error import ArgumentNoneError
 from tools.error.argument_none_type_suggestion_error import ArgumentNoneTypeSuggestionError
-from tools.util.path_tools import format_os_independent
 from tools.util.typing import DEFAULT, MISSING
 from tools.util.reflection import dynamic_import, get_nested_value, set_nested_value
 from traceback import FrameSummary, extract_stack
@@ -672,6 +671,7 @@ def raise_on_none(obj: Any, shadow_function_in_exception_trace: bool = True) -> 
         If the object is None and the type was type hinted.
         Can only find the type if a type hint was used and the function can be imported - this is possible if its a standalone function or constructor of a class.
     """
+    from tools.util.path_tools import format_os_independent
     ex = None
     if obj is None:
         pattern = r"raise_on_none\((obj( )+=( )+)?(?P<var_name>[A-z0-9_]+)(?P<other_args>(,( )*[A-z0-9_])+)?\)"
@@ -943,3 +943,48 @@ def consecutive_indices_string(x: VEC_TYPE, slice_sep: str = "-", item_sep: str 
                 pass
         istart += 1
     return item_sep.join(rets)
+
+
+def parsed_regex_matcher(regex: Union[re.Pattern, str], value: str, parser: Optional[Dict[str, Callable]] = None) -> Optional[Dict[str, Any]]:
+    """Matches a given string against a regex pattern and returns a dictionary with the named groups, eventually parsed with the given parser.
+
+    Parameters
+    ----------
+    regex : re.Pattern
+        The regex pattern to match against.
+
+    value : str
+        The string to match.
+
+    parser : Optional[Dict[str, callable]], optional
+        A parser dictionary which can contain keys which should correspond to named groups in the pattern,
+        the value should be a callable which is invoked by the parsed value. The result is then written to the result dictionary, by default None
+
+    Returns
+    -------
+    Optional[Dict[str, Any]]
+        A dictionary with the named groups, eventually parsed with the given parser.
+        None if no match is found.
+    """
+    if isinstance(regex, str):
+        regex = re.compile(regex)
+    if regex.pattern[0] == "^" and regex.pattern[-1] == "$":
+        match = regex.fullmatch(value)
+    else:
+        match = regex.search(value)
+    if match:
+        item = dict(match.groupdict())
+        if parser is not None:
+            for key, value in item.items():
+                if key in parser:
+                    try:
+                        if value is None:
+                            item[key] = None
+                        else:
+                            item[key] = parser[key](value)
+                    except Exception as err:
+                        raise ValueError(
+                            f"Could not parse value '{value}' for key '{key}' with parser '{parser[key]}' within File '{value}' using the pattern '{regex.pattern}'."
+                        ) from err
+        return item
+    return None
