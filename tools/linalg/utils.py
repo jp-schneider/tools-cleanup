@@ -6,7 +6,7 @@ def are_points_on_lines(
         source_points: torch.Tensor, 
         directions: torch.Tensor, 
         points: torch.Tensor, 
-        atol: float = 1e-6):
+        atol: float = 1e-6) -> torch.Tensor:
     """
     Checks if a point is on a line defined by a source point and a direction vector.
     
