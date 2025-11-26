@@ -11,11 +11,11 @@ from tools.model.module_scene_parent import ModuleSceneParent
 from tools.model.scene_node import SceneNode
 from tools.serialization.json_convertible import JsonConvertible
 from tools.model.abstract_scene_node import AbstractSceneNode
-from tools.transforms.affine.transforms3d import (assure_affine_matrix,
-                                                  assure_affine_vector,
-                                                  component_position_matrix,
-                                                  component_rotation_matrix,
-                                                  transformation_matrix)
+from tools.transforms.geometric.transforms3d import (assure_affine_matrix,
+                                                     assure_affine_vector,
+                                                     component_position_matrix,
+                                                     component_rotation_matrix,
+                                                     transformation_matrix)
 from tools.util.typing import NUMERICAL_TYPE, VEC_TYPE
 from tools.util.torch import tensorify
 from torch.nn import ModuleList

@@ -9,6 +9,8 @@ from collections.abc import Sequence
 IMPORT_CACHE = {}
 
 ALIAS_TYPE_CACHE: Dict[str, Type] = {}
+LEGACY_TYPE_CACHE: Dict[str, Type] = {}
+LEGACY_MODULE_CACHE: Dict[str, ModuleType] = {}
 TYPE_ALIAS_CACHE: Dict[Type, List[str]] = {}
 
 
@@ -18,6 +20,7 @@ class _NOALIAS:
 
 NOALIAS = _NOALIAS()
 
+WARN_ON_LEGACY_IMPORT = True
 
 def _get_alias(cls_or_obj: Union[object, Type]) -> Union[str, List[str], _NOALIAS]:
     if not isinstance(cls_or_obj, (Type, FunctionType)):
@@ -53,10 +56,51 @@ def _register_alias(cls_or_obj: Union[object, Type]) -> None:
             ALIAS_TYPE_CACHE[a] = cls_or_obj
     return alias
 
+def _register_legacy_import(legacy_import: str, current_import: str) -> None:
+    """
+    Registers a legacy import string to the current import string.
+
+    Adds an alias import string for the current import string, such that after renaming or moving a class,
+    the legacy import string can still be used to import the class.
+
+    Parameters
+    ----------
+    legacy_import : str
+        The legacy import string.
+
+    current_import : str
+        The current import string.
+    """
+    cls_or_obj = dynamic_import(current_import)
+    # Check if cls is type or module
+    if isinstance(cls_or_obj, (ModuleType)):
+        # Type is module
+        # Check if already registered
+        if legacy_import in LEGACY_MODULE_CACHE:
+            existing_module = LEGACY_MODULE_CACHE[legacy_import]
+            if existing_module != cls_or_obj:
+                raise ValueError(
+                    f"Legacy import {legacy_import} already registered for {existing_module.__name__} while trying to register {cls_or_obj.__name__}!")
+            # Already registered, do nothing
+            return
+        # Register legacy import as alias
+        LEGACY_MODULE_CACHE[legacy_import] = cls_or_obj
+    else:
+        # Type is class or function  
+        # Check if already registered
+        if legacy_import in LEGACY_TYPE_CACHE:
+            existing_cls_or_obj = LEGACY_TYPE_CACHE[legacy_import]
+            if existing_cls_or_obj != cls_or_obj:
+                raise ValueError(
+                    f"Legacy import {legacy_import} already registered for {class_name(existing_cls_or_obj)} while trying to register {class_name(cls_or_obj)}!")
+            # Already registered, do nothing
+            return
+        # Register legacy import as alias
+        LEGACY_TYPE_CACHE[legacy_import] = cls_or_obj
 
 def get_alias(cls_or_obj: Union[object, Type]) -> Optional[List[str]]:
     """Get the alias of a class or object.
-An alias is a string or a list of strings, which can be used to identify a class or object.
+    An alias is a string or a list of strings, which can be used to identify a class or object.
     The alias is used for serialization and deserialization of objects.
 
     The alias can be set by the `__type_alias__` attribute of a class or object.
@@ -87,7 +131,6 @@ An alias is a string or a list of strings, which can be used to identify a class
         return None
     return alias
 
-
 def register_type():
     """
     Register a type for serialization and deserialization.
@@ -113,8 +156,56 @@ def get_alias_type(alias: str) -> Optional[Type]:
     """
     from tools.serialization.rules.json_serialization_rule_registry import JsonSerializationRuleRegistry
     _ = JsonSerializationRuleRegistry.instance()
-    return ALIAS_TYPE_CACHE.get(alias, None)
+    val = ALIAS_TYPE_CACHE.get(alias, None)
+    # Check legacy imports
+    if val is None:
+        val = LEGACY_TYPE_CACHE.get(alias, None)
+        if val is not None:
+            global WARN_ON_LEGACY_IMPORT
+            if WARN_ON_LEGACY_IMPORT:
+                # Warn about legacy import usage
+                from tools.util.format import get_frame_summary
+                from tools.logger.logging import logger
+                frame_summary = get_frame_summary(2)
+                logger.warning(f"Legacy import string '{alias}' used in {frame_summary.filename}:{frame_summary.lineno} for type '{class_name(val, use_alias=False)}'. Please update to the new import string.")
+    return val
 
+def get_legacy_replace_module(alias: str, depth: int = 0, full_alias: Optional[str] = None) -> str:
+    """Get the module which is was regstered to repalce the given alias.
+
+    Parameters
+    ----------
+    alias : str
+        The alias to get the module for.
+
+    Returns
+    -------
+    Optional[ModuleType]
+        Module which is registered for the alias or None if not found.
+    """
+    if full_alias is None:
+        full_alias = alias
+    val = LEGACY_MODULE_CACHE.get(alias, None)
+    if val is not None:
+        global WARN_ON_LEGACY_IMPORT
+        if WARN_ON_LEGACY_IMPORT:
+            # Warn about legacy import usage
+            from tools.util.format import get_frame_summary
+            from tools.logger.logging import logger
+            frame_summary = get_frame_summary(2 + depth)
+            logger.warning(f"Legacy import string '{alias}' used in {frame_summary.filename}:{frame_summary.lineno} for module '{val.__name__}'. Please update to the new import string. Full import alias was: '{full_alias}'.")
+        alias = class_name(val, use_alias=False)
+    else:
+        pass
+    splits = alias.split('.')
+    if len(splits) > 1:
+        # Try parent modules
+        parent_alias = '.'.join(splits[:-1])
+        parent_alias = get_legacy_replace_module(parent_alias, depth + 1, full_alias=full_alias)
+        current_alias = splits[-1]
+        return f"{parent_alias}.{current_alias}"
+    else:
+        return alias
 
 def dynamic_import(class_or_method: str) -> Any:
     """
@@ -170,12 +261,38 @@ def dynamic_import(class_or_method: str) -> Any:
         module = components[:-1]
     else:
         module = components
-    try:
-        mod = importlib.import_module(".".join(module))
-    except (NameError, ModuleNotFoundError, ImportError) as err:
-        raise ImportError(f"Could not import: {class_or_method} \
-                          due to an {err.__class__.__name__} does \
-                          the Module / Type exists and is it installed?") from err
+
+    success = False
+    check_with_legacy = False
+
+    while not success or (not success and check_with_legacy):
+        try:
+            mod = importlib.import_module(".".join(module))
+            success = True
+        except (NameError, ModuleNotFoundError, ImportError) as err:
+            if check_with_legacy:
+                # Try legacy import replacement here
+                raise ImportError(f"Could not import: {class_or_method} \
+                                due to an {err.__class__.__name__} does \
+                                the Module / Type exists and is it installed?") from err
+            else:
+                check_with_legacy = True
+                legacy_module_str = get_legacy_replace_module(".".join(module) + (("." +components[-1]) if len(components) > len(module) else ""), depth=0)
+                new_components = legacy_module_str.split('.')
+                if len(new_components) > 1:
+                    new_modules = new_components[:-1]
+                else:
+                    new_modules = new_components
+                if ".".join(new_modules) == ".".join(module):
+                    # No change in legacy module, stop here
+                    raise ImportError(f"Could not import: {class_or_method} \
+                                    due to an {err.__class__.__name__} does \
+                                    the Module / Type exists and is it installed?") from err
+                else:
+                    # Try with replaced legacy module
+                    module = new_modules
+                    components = new_components
+
     if len(components) == 1:
         # Import was a module import only, return it directly
         return mod
@@ -200,6 +317,8 @@ def get_type_string(cls_or_obj: Union[object, Type]) -> str:
     """
     if isinstance(cls_or_obj, (Type, FunctionType)):  # Types and functions can be imported via their name
         return cls_or_obj.__module__ + '.' + cls_or_obj.__name__
+    elif isinstance(cls_or_obj, ModuleType):  # Modules have no class name
+        return cls_or_obj.__name__
     return cls_or_obj.__class__.__module__ + '.' + cls_or_obj.__class__.__name__
 
 

@@ -11,11 +11,11 @@ from tools.model.module_scene_node_3d import ModuleSceneNode3D
 from tools.model.visual_node_3d import VisualNode3D
 from tools.serialization.json_convertible import JsonConvertible
 from tools.model.abstract_scene_node import AbstractSceneNode
-from tools.transforms.affine.transforms3d import (assure_affine_matrix,
-                                                  assure_affine_vector,
-                                                  component_position_matrix,
-                                                  component_rotation_matrix, position_quaternion_to_affine_matrix, rotmat_to_unitquat, split_transformation_matrix,
-                                                  transformation_matrix)
+from tools.transforms.geometric.transforms3d import (assure_affine_matrix,
+                                                     assure_affine_vector,
+                                                     component_position_matrix,
+                                                     component_rotation_matrix, position_quaternion_to_affine_matrix, rotmat_to_unitquat, split_transformation_matrix,
+                                                     transformation_matrix)
 from tools.util.typing import NUMERICAL_TYPE, VEC_TYPE
 from tools.util.torch import flatten_batch_dims, tensorify, unflatten_batch_dims
 from tools.viz.matplotlib import saveable

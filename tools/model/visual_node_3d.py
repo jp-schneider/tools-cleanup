@@ -6,7 +6,7 @@ import numpy as np
 import torch
 from tools.model.abstract_scene_node import AbstractSceneNode
 from tools.model.scene_node import SceneNode
-from tools.transforms.affine.transforms3d import component_position_matrix
+from tools.transforms.geometric.transforms3d import component_position_matrix
 from tools.util.typing import REAL_TYPE
 from tools.viz.matplotlib import saveable, set_axes_equal_3d
 from mpl_toolkits.mplot3d import Axes3D

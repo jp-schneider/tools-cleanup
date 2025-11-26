@@ -7,11 +7,11 @@ import torch
 import torch.nn as nn
 from matplotlib.axes import Axes
 from tools.serialization.json_convertible import JsonConvertible
-from tools.transforms.affine.transforms3d import (assure_affine_matrix,
-                                                  assure_affine_vector,
-                                                  component_position_matrix,
-                                                  component_rotation_matrix,
-                                                  transformation_matrix)
+from tools.transforms.geometric.transforms3d import (assure_affine_matrix,
+                                                     assure_affine_vector,
+                                                     component_position_matrix,
+                                                     component_rotation_matrix,
+                                                     transformation_matrix)
 from tools.util.typing import NUMERICAL_TYPE, VEC_TYPE
 from tools.util.torch import tensorify
 from abc import abstractmethod

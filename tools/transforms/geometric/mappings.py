@@ -7,7 +7,7 @@ Various mappings between different rotation representations.
 """
 
 import torch
-from tools.transforms.affine.transforms3d import flatten_batch_dims, unflatten_batch_dims, rotmat_to_unitquat, unitquat_to_rotmat
+from tools.transforms.geometric.transforms3d import flatten_batch_dims, unflatten_batch_dims, rotmat_to_unitquat, unitquat_to_rotmat
 import numpy as np
 
 try:
@@ -315,7 +315,7 @@ def euler_to_unitquat(convention: str, angles, degrees=False, normalize=True, dt
     Warning:
         Case is important: 'xyz' and 'XYZ' denote different conventions.
     """
-    from tools.transforms.affine.quaternion import quat_composition
+    from tools.transforms.geometric.quaternion import quat_composition
     if type(angles) == torch.Tensor:
         angles = [t.squeeze(dim=-1) for t in torch.split(angles,
                                                          split_size_or_sections=1, dim=-1)]

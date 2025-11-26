@@ -10,11 +10,11 @@ from tools.model.module_scene_node import ModuleSceneNode
 from tools.model.visual_node_3d import VisualNode3D
 from tools.serialization.json_convertible import JsonConvertible
 from tools.model.abstract_scene_node import AbstractSceneNode
-from tools.transforms.affine.transforms3d import (assure_affine_matrix,
-                                                  assure_affine_vector,
-                                                  component_position_matrix,
-                                                  component_rotation_matrix, flatten_batch_dims, position_quaternion_to_affine_matrix, rotmat_to_unitquat, split_transformation_matrix,
-                                                  transformation_matrix, unflatten_batch_dims)
+from tools.transforms.geometric.transforms3d import (assure_affine_matrix,
+                                                     assure_affine_vector,
+                                                     component_position_matrix,
+                                                     component_rotation_matrix, flatten_batch_dims, position_quaternion_to_affine_matrix, rotmat_to_unitquat, split_transformation_matrix,
+                                                     transformation_matrix, unflatten_batch_dims)
 from tools.util.typing import NUMERICAL_TYPE, VEC_TYPE
 from tools.util.torch import tensorify
 from tools.viz.matplotlib import saveable
@@ -30,7 +30,8 @@ class ModuleSceneNode3D(ModuleSceneNode, VisualNode3D):
                  dtype: torch.dtype = torch.float32,
                  **kwargs
                  ):
-        super().__init__(name=name, children=children, decoding=decoding, dtype=dtype, **kwargs)
+        super().__init__(name=name, children=children,
+                         decoding=decoding, dtype=dtype, **kwargs)
 
     def get_global_position(self, **kwargs) -> torch.Tensor:
         """Return the global position of the scene object, taking into account the position of the parents.

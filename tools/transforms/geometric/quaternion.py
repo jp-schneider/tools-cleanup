@@ -2,8 +2,8 @@
 from typing import List, Union
 import torch
 
-from tools.transforms.affine.mappings import rotvec_to_unitquat, unitquat_to_rotvec
-from tools.transforms.affine.transforms3d import flatten_batch_dims, unflatten_batch_dims
+from tools.transforms.geometric.mappings import rotvec_to_unitquat, unitquat_to_rotvec
+from tools.transforms.geometric.transforms3d import flatten_batch_dims, unflatten_batch_dims
 
 
 @torch.jit.script
