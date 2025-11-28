@@ -11,8 +11,8 @@ from tools.model.module_scene_node_3d import ModuleSceneNode3D
 from tools.model.visual_node_3d import VisualNode3D
 from tools.serialization.json_convertible import JsonConvertible
 from tools.model.abstract_scene_node import AbstractSceneNode
-from tools.transforms.geometric.transforms3d import (assure_affine_matrix,
-                                                     assure_affine_vector,
+from tools.transforms.geometric.transforms3d import (assure_homogeneous_matrix,
+                                                     assure_homogeneous_vector,
                                                      component_position_matrix,
                                                      component_rotation_matrix, position_quaternion_to_affine_matrix, rotmat_to_unitquat, split_transformation_matrix,
                                                      transformation_matrix)
@@ -240,10 +240,10 @@ class DiscreteModuleSceneNode3D(ModuleSceneNode3D):
         translation_vector : VEC_TYPE
             The 3 / 4 element (x, y, z[, w]) vector to perform a position translation.
         """
-        mat = transformation_matrix(assure_affine_vector(translation_vector,
-                                                         dtype=self._translation.dtype,
-                                                         device=self._translation.device,
-                                                         requires_grad=False),
+        mat = transformation_matrix(assure_homogeneous_vector(translation_vector,
+                                                              dtype=self._translation.dtype,
+                                                              device=self._translation.device,
+                                                              requires_grad=False),
                                     dtype=self._translation.dtype,
                                     device=self._translation.device)
         self._transform(mat)
@@ -257,9 +257,9 @@ class DiscreteModuleSceneNode3D(ModuleSceneNode3D):
         rotation_matrix : torch.Tensor
             The rotation matrix.
         """
-        rot_mat = assure_affine_matrix(rotation_matrix, dtype=self._translation.dtype,
-                                       device=self._translation.device,
-                                       requires_grad=self._position.requires_grad)
+        rot_mat = assure_homogeneous_matrix(rotation_matrix, dtype=self._translation.dtype,
+                                            device=self._translation.device,
+                                            requires_grad=self._position.requires_grad)
         self._transform(rot_mat)
 
     def yaw(self, angle: Optional[NUMERICAL_TYPE] = None, mode: Literal["deg", "rad"] = 'rad') -> None:

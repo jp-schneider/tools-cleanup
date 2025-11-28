@@ -7,8 +7,8 @@ import torch
 import torch.nn as nn
 from matplotlib.axes import Axes
 from tools.serialization.json_convertible import JsonConvertible
-from tools.transforms.geometric.transforms3d import (assure_affine_matrix,
-                                                     assure_affine_vector,
+from tools.transforms.geometric.transforms3d import (assure_homogeneous_matrix,
+                                                     assure_homogeneous_vector,
                                                      component_position_matrix,
                                                      component_rotation_matrix,
                                                      transformation_matrix)

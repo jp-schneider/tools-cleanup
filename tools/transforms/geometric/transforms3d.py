@@ -9,8 +9,8 @@ import torch.nn.functional as F
 from tools.util.torch import flatten_batch_dims, unflatten_batch_dims
 
 __all__ = [
-    "assure_affine_vector",
-    "assure_affine_matrix",
+    "assure_homogeneous_vector",
+    "assure_homogeneous_matrix",
     "unit_vector",
     "component_rotation_matrix",
     "component_position_matrix",
@@ -22,11 +22,11 @@ __all__ = [
 ]
 
 
-def assure_affine_vector(_input: VEC_TYPE,
-                         dtype: Optional[torch.dtype] = None,
-                         device: Optional[torch.device] = None,
-                         requires_grad: bool = False) -> torch.Tensor:
-    """Assuring the _input vector instance is an homogeneous vector. (Need to renamne)
+def assure_homogeneous_vector(_input: VEC_TYPE,
+                              dtype: Optional[torch.dtype] = None,
+                              device: Optional[torch.device] = None,
+                              requires_grad: bool = False) -> torch.Tensor:
+    """Assuring the _input vector instance is an homogeneous vector.
     Converting it into tensor if nessesary.
     Adds 1 to the vector if its size is 3.
 
@@ -58,7 +58,7 @@ def assure_affine_vector(_input: VEC_TYPE,
         batched = True
     if _input.shape[-1] > 4 or _input.shape[-1] < 3:
         raise ValueError(
-            f"assure_affine_vector works only for tensors of length 3 or 4.")
+            f"assure_homogeneous_vector works only for tensors of length 3 or 4.")
     if _input.shape[-1] == 4:
         return _input  # Assuming it contains already affine property
     else:
@@ -73,18 +73,21 @@ def assure_affine_vector(_input: VEC_TYPE,
                                                  requires_grad=_input.requires_grad)], axis=-1)
 
 
-def assure_affine_matrix(_input: VEC_TYPE,
-                         dtype: Optional[torch.dtype] = None,
-                         device: Optional[torch.device] = None,
-                         requires_grad: bool = False) -> torch.Tensor:
-    """Assuring the _input matrix instance is an homogeneous matrix.(need rename)
+def assure_homogeneous_matrix(_input: VEC_TYPE,
+                              dtype: Optional[torch.dtype] = None,
+                              device: Optional[torch.device] = None,
+                              requires_grad: bool = False) -> torch.Tensor:
+    """
+    Assuring the _input matrix instance is an homogeneous matrix.
+
     Converting it into tensor if nessesary.
     Adds 1 to the vector if its size is 3.
 
     Parameters
     ----------
     _input : Union[torch.Tensor, np.ndarray]
-        Matrix of x / y shape 3 or 4.
+        Input matrix to convert to a homogeneous matrix.
+        Shape [...B, 3 | 4, 3 | 4]
     dtype : Optional[torch.dtype], optional
         The dtype of the tensor, by default None
     device : Optional[torch.device], optional
@@ -95,8 +98,8 @@ def assure_affine_matrix(_input: VEC_TYPE,
     Returns
     -------
     torch.Tensor
-        The homogenous tensor.
-
+        The homogenous transformation matrix.
+        Shape [...B, 4, 4]
     Raises
     ------
     ValueError
@@ -106,10 +109,10 @@ def assure_affine_matrix(_input: VEC_TYPE,
                        requires_grad=requires_grad)
     if len(_input.shape) < 2:
         raise ValueError(
-            f"assure_affine_matrix works only for dimensions (..., 3, 3) or (..., 4, 4).")
+            f"assure_homogeneous_matrix works only for dimensions (..., 3, 3) or (..., 4, 4).")
     if _input.shape[-2] > 4 or _input.shape[-2] < 3:
         raise ValueError(
-            f"assure_affine_matrix works only for tensors of length 3 or 4.")
+            f"assure_homogeneous_matrix works only for tensors of length 3 or 4.")
     if _input.shape[-2] == 4:
         pass
     else:
@@ -122,7 +125,7 @@ def assure_affine_matrix(_input: VEC_TYPE,
             axis=-2)
     if _input.shape[-1] > 4 or _input.shape[-1] < 3:
         raise ValueError(
-            f"assure_affine_matrix works only for tensors of length 3 or 4.")
+            f"assure_homogeneous_matrix works only for tensors of length 3 or 4.")
     if _input.shape[-1] == 4:
         pass
     else:
@@ -135,7 +138,24 @@ def assure_affine_matrix(_input: VEC_TYPE,
 
 
 @as_tensors()
-def affine_rotation_matrix(orientation: VEC_TYPE) -> VEC_TYPE:
+def homogeneous_rotation_matrix(orientation: VEC_TYPE) -> VEC_TYPE:
+    """
+    Converts a 3 x 3 rotation matrix into a 4 x 4 homogeneous transformation matrix.
+
+    Parameters
+    ----------
+    orientation: VEC_TYPE
+        Rotation matrix of shape [B, 3 | 4, 3 | 4]
+        If input is 4x4, right-column and bottom row are discarded.
+
+    Returns
+    --------
+    VEC_TYPE
+        The output homogeneous matrix, only containing rotation. 
+        Shape [B, 4, 4]
+        Will be numpy array if input was numpy array, tensors otherwise.
+
+    """
     affine_mat = torch.eye(4, dtype=orientation.dtype, device=orientation.device).repeat(
         *orientation.shape[:-2], 1, 1)
     affine_mat[:, :3, :3] = orientation

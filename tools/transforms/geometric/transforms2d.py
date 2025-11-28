@@ -9,8 +9,8 @@ from tools.util.torch import flatten_batch_dims, unflatten_batch_dims
 import torch
 
 __all__ = [
-    "assure_affine_vector",
-    "assure_affine_matrix",
+    "assure_homogeneous_vector",
+    "assure_homogeneous_matrix",
     "unit_vector",
     "component_rotation_matrix",
     "component_position_matrix",
@@ -22,10 +22,10 @@ __all__ = [
 ]
 
 
-def assure_affine_vector(_input: VEC_TYPE,
-                         dtype: Optional[torch.dtype] = None,
-                         device: Optional[torch.device] = None,
-                         requires_grad: bool = False) -> torch.Tensor:
+def assure_homogeneous_vector(_input: VEC_TYPE,
+                              dtype: Optional[torch.dtype] = None,
+                              device: Optional[torch.device] = None,
+                              requires_grad: bool = False) -> torch.Tensor:
     """Assuring the _input vector instance is an affine vector.
     Converting it into tensor if nessesary.
     Adds 1 to the vector if its size is 2.
@@ -56,7 +56,7 @@ def assure_affine_vector(_input: VEC_TYPE,
     _input, shp = flatten_batch_dims(_input, -2)
     if _input.shape[-1] > 3 or _input.shape[-1] < 2:
         raise ValueError(
-            f"assure_affine_vector works only for tensors of length 2 or 3.")
+            f"assure_homogeneous_vector works only for tensors of length 2 or 3.")
     if _input.shape[-1] == 3:
         # Assuming it contains already affine property
         return unflatten_batch_dims(_input, shp)
@@ -66,10 +66,10 @@ def assure_affine_vector(_input: VEC_TYPE,
         return unflatten_batch_dims(catted, shp)
 
 
-def assure_affine_matrix(_input: VEC_TYPE,
-                         dtype: Optional[torch.dtype] = None,
-                         device: Optional[torch.device] = None,
-                         requires_grad: bool = False) -> torch.Tensor:
+def assure_homogeneous_matrix(_input: VEC_TYPE,
+                              dtype: Optional[torch.dtype] = None,
+                              device: Optional[torch.device] = None,
+                              requires_grad: bool = False) -> torch.Tensor:
     """Assuring the _input matrix instance is an affine matrix.
     Converting it into tensor if nessesary.
 
@@ -97,10 +97,11 @@ def assure_affine_matrix(_input: VEC_TYPE,
     _input = tensorify(_input, dtype=dtype, device=device,
                        requires_grad=requires_grad)
     if len(_input.shape) != 2:
-        raise ValueError(f"assure_affine_matrix works only on 2 d tensors!")
+        raise ValueError(
+            f"assure_homogeneous_matrix works only on 2 d tensors!")
     if _input.shape[0] > 3 or _input.shape[0] < 2:
         raise ValueError(
-            f"assure_affine_matrix works only for tensors of length 2 or 3.")
+            f"assure_homogeneous_matrix works only for tensors of length 2 or 3.")
     if _input.shape[0] == 3:
         pass
     else:
@@ -112,7 +113,7 @@ def assure_affine_matrix(_input: VEC_TYPE,
             axis=-2)
     if _input.shape[1] > 3 or _input.shape[1] < 2:
         raise ValueError(
-            f"assure_affine_matrix works only for tensors of length 2 or 3.")
+            f"assure_homogeneous_matrix works only for tensors of length 2 or 3.")
     if _input.shape[1] == 3:
         pass
     else:

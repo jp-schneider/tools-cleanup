@@ -10,8 +10,8 @@ from tools.model.module_scene_node import ModuleSceneNode
 from tools.model.visual_node_3d import VisualNode3D
 from tools.serialization.json_convertible import JsonConvertible
 from tools.model.abstract_scene_node import AbstractSceneNode
-from tools.transforms.geometric.transforms3d import (assure_affine_matrix,
-                                                     assure_affine_vector,
+from tools.transforms.geometric.transforms3d import (assure_homogeneous_matrix,
+                                                     assure_homogeneous_vector,
                                                      component_position_matrix,
                                                      component_rotation_matrix, flatten_batch_dims, position_quaternion_to_affine_matrix, rotmat_to_unitquat, split_transformation_matrix,
                                                      transformation_matrix, unflatten_batch_dims)

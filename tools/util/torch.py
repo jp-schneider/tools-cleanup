@@ -115,6 +115,8 @@ def as_tensors(keep_output: bool = False) -> Callable[[Callable[..., Any]], Call
     -------
     Callable[[Callable[..., Any]], Callable[..., Any]]
         The decorator.
+        Retuns the same VEC_TYPE as it got as input.
+        If at least one input is a numpy tensor, returns a numpy array, otherwise a tensor.
     """
     from tools.util.numpy import numpyify
 

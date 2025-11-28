@@ -11,8 +11,8 @@ from tools.model.module_scene_parent import ModuleSceneParent
 from tools.model.scene_node import SceneNode
 from tools.serialization.json_convertible import JsonConvertible
 from tools.model.abstract_scene_node import AbstractSceneNode
-from tools.transforms.geometric.transforms3d import (assure_affine_matrix,
-                                                     assure_affine_vector,
+from tools.transforms.geometric.transforms3d import (assure_homogeneous_matrix,
+                                                     assure_homogeneous_vector,
                                                      component_position_matrix,
                                                      component_rotation_matrix,
                                                      transformation_matrix)
